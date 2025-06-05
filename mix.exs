@@ -8,7 +8,10 @@ defmodule Foundation.MixProject do
       elixir: "~> 1.15",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
+      description: description(),
+      package: package(),
       deps: deps(),
+      docs: docs(),
       aliases: aliases(),
 
       # Testing
@@ -22,13 +25,6 @@ defmodule Foundation.MixProject do
         "test.smoke": :test,
         "test.integration": :test,
         "test.contract": :test
-      ],
-
-      # Documentation
-      name: "Foundation",
-      docs: [
-        main: "Foundation",
-        extras: ["README.md", "README_DEV.md"]
       ],
 
       # Dialyzer
@@ -45,10 +41,7 @@ defmodule Foundation.MixProject do
         # Exclude test support files from analysis
         paths: ["_build/dev/lib/foundation/ebin"]
         # plt_ignore_apps: [:some_dep] # Ignore specific dependencies
-      ],
-
-      # Compilation paths
-      elixirc_paths: elixirc_paths(Mix.env())
+      ]
     ]
   end
 
@@ -58,6 +51,73 @@ defmodule Foundation.MixProject do
       mod: {Foundation.Application, []}
     ]
   end
+
+  defp description do
+    "A comprehensive Elixir infrastructure and observability library providing essential services for building robust, scalable applications."
+  end
+
+  defp package do
+    [
+      name: "foundation",
+      licenses: ["MIT"],
+      links: %{"GitHub" => "https://github.com/nshkrdotcom/foundation"},
+      maintainers: ["NSHkr"],
+      files: ~w(lib mix.exs README.md LICENSE docs)
+    ]
+  end
+
+  defp docs do
+    [
+      main: "readme",
+      name: "Foundation",
+      extras: [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/API_FULL.md"
+      ],
+      before_closing_head_tag: &before_closing_head_tag/1,
+      before_closing_body_tag: &before_closing_body_tag/1
+    ]
+  end
+
+  defp before_closing_head_tag(:html) do
+    """
+    <script defer src="https://cdn.jsdelivr.net/npm/mermaid@10.2.3/dist/mermaid.min.js"></script>
+    <script>
+      let initialized = false;
+
+      window.addEventListener("exdoc:loaded", () => {
+        if (!initialized) {
+          mermaid.initialize({
+            startOnLoad: false,
+            theme: document.body.className.includes("dark") ? "dark" : "default"
+          });
+          initialized = true;
+        }
+
+        let id = 0;
+        for (const codeEl of document.querySelectorAll("pre code.mermaid")) {
+          const preEl = codeEl.parentElement;
+          const graphDefinition = codeEl.textContent;
+          const graphEl = document.createElement("div");
+          const graphId = "mermaid-graph-" + id++;
+          mermaid.render(graphId, graphDefinition).then(({svg, bindFunctions}) => {
+            graphEl.innerHTML = svg;
+            bindFunctions?.(graphEl);
+            preEl.insertAdjacentElement("afterend", graphEl);
+            preEl.remove();
+          });
+        }
+      });
+    </script>
+    """
+  end
+
+  defp before_closing_head_tag(:epub), do: ""
+
+  defp before_closing_body_tag(:html), do: ""
+
+  defp before_closing_body_tag(:epub), do: ""
 
   defp elixirc_paths(:test) do
     filtered_lib_paths = get_filtered_lib_paths()
@@ -153,209 +213,4 @@ defmodule Foundation.MixProject do
       setup: ["deps.get", "deps.compile", "dialyzer --plt"]
     ]
   end
-
-  #   def project do
-  #     [
-  #       app: :foundation,
-  #       version: "0.0.1",
-  #       elixir: "~> 1.17",
-  #       elixirc_paths: elixirc_paths(Mix.env()),
-  #       start_permanent: Mix.env() == :dev,
-  #       description: description(),
-  #       package: package(),
-  #       deps: deps(),
-  #       docs: docs(),
-  #       aliases: aliases(),
-
-  #       # Test configuration
-  #       test_coverage: [tool: ExCoveralls],
-  #       preferred_cli_env: [
-  #         coveralls: :test,
-  #         "coveralls.detail": :test,
-  #         "coveralls.post": :test,
-  #         "coveralls.html": :test,
-  #         test: :test,
-  #         "test.trace": :test,
-  #         "test.live": :test,
-  #         "test.all": :test,
-  #         "test.fast": :test
-  #       ],
-  #       dialyzer: [
-  #         plt_file: {:no_warn, "priv/plts/dialyzer.plt"},
-  #         plt_add_apps: [:mix]
-  #       ]
-  #     ]
-  #   end
-
-  #   #defp elixirc_paths(:test), do: ["lib", "test/support"]
-  #   defp elixirc_paths(_) do
-  #     # Include all .ex files in lib, except those in excluded_dir or specific files
-  #     Path.wildcard("lib/**/*.ex")
-  #     |> Enum.reject(&String.contains?(&1, "analysis/"))
-  #     |> Enum.reject(&String.contains?(&1, "ast/"))
-  #     |> Enum.reject(&String.contains?(&1, "capture/"))
-  #     |> Enum.reject(&String.contains?(&1, "cpg/"))
-  #     |> Enum.reject(&String.contains?(&1, "debugger/"))
-
-  #     # |> Enum.reject(&String.contains?(&1, ""))
-  #     |> Enum.reject(&String.contains?(&1, "foundation/distributed/"))
-  #     |> Enum.reject(&String.contains?(&1, "lib/foundation/foundation/core"))
-  #     # |> Enum.reject(&String.contains?(&1, ""))
-
-  #     # |> Enum.reject(&(&1 == ""))
-  #     |> Enum.reject(&(&1 == "lib/foundation/layer_integration.ex"))
-  #     #|> Enum.reject(&(&1 == "lib/foundation/foundation/config.ex"))
-  #     |> Enum.reject(&(&1 == "lib/foundation/foundation/event_store.ex"))
-  #     |> Enum.reject(&(&1 == ""))
-
-  #     |> Enum.reject(&String.contains?(&1, "graph/"))
-  #     |> Enum.reject(&String.contains?(&1, "integration/"))
-  #     |> Enum.reject(&String.contains?(&1, "intelligence/"))
-  #     |> Enum.reject(&String.contains?(&1, "query/"))
-  #     |> Enum.reject(&(&1 == "lib/excluded_file.ex"))
-  #   end
-
-  #   def application do
-  #     [
-  #       extra_applications: [:logger],
-  #       mod: {Foundation.Application, []}
-  #     ]
-  #   end
-
-  #   defp description() do
-  #     "Foundation is a next-generation debugging and observability platform for Elixir applications, designed to provide an Execution Cinema experience through deep, compile-time AST instrumentation guided by AI-powered analysis."
-  #   end
-
-  #   defp package do
-  #     [
-  #       name: "foundation",
-  #       licenses: ["MIT"],
-  #       links: %{"GitHub" => "https://github.com/nshkrdotcom/Foundation"},
-  #       maintainers: ["NSHkr"],
-  #       files: ~w(lib mix.exs README.md LICENSE)
-  #     ]
-  #   end
-
-  #   defp deps do
-  #     [
-  #       # Core Dependencies
-  #       {:telemetry, "~> 1.0"},
-  #       {:plug, "~> 1.14", optional: true},
-  #       {:phoenix, "~> 1.7", optional: true},
-  #       {:phoenix_live_view, "~> 0.18", optional: true},
-
-  #       # File system watching for enhanced repository
-  #       {:file_system, "~> 0.2"},
-
-  #       # Testing & Quality
-  #       {:ex_doc, "~> 0.31", only: :dev, runtime: false},
-  #       {:excoveralls, "~> 0.18", only: :test},
-  #       {:dialyxir, "~> 1.4", only: [:dev], runtime: false},
-  #       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-
-  #       # Property-based testing for concurrency testing
-  #       {:stream_data, "~> 0.5", only: :test},
-
-  #       # Benchmarking for performance testing
-  #       {:benchee, "~> 1.1", only: :test},
-
-  #       {:mox, "~> 1.2", only: :test},
-
-  #       # JSON for configuration and serialization
-  #       {:jason, "~> 1.4"},
-
-  #       # HTTP client for LLM providers
-  #       {:httpoison, "~> 2.0"},
-
-  #       # JSON Web Token library
-  #       {:joken, "~> 2.6"}
-  #     ]
-  #   end
-
-  #   defp docs do
-  #     [
-  #       main: "readme",
-  #       extras: ["README.md", "PUBLIC_DOCS.md"],
-  #       before_closing_head_tag: &before_closing_head_tag/1,
-  #       before_closing_body_tag: &before_closing_body_tag/1
-  #     ]
-  #   end
-
-  #   defp before_closing_head_tag(:html) do
-  #     """
-  #     <script defer src="https://cdn.jsdelivr.net/npm/mermaid@10.2.3/dist/mermaid.min.js"></script>
-  #     <script>
-  #       let initialized = false;
-
-  #       window.addEventListener("exdoc:loaded", () => {
-  #         if (!initialized) {
-  #           mermaid.initialize({
-  #             startOnLoad: false,
-  #             theme: document.body.className.includes("dark") ? "dark" : "default"
-  #           });
-  #           initialized = true;
-  #         }
-
-  #         let id = 0;
-  #         for (const codeEl of document.querySelectorAll("pre code.mermaid")) {
-  #           const preEl = codeEl.parentElement;
-  #           const graphDefinition = codeEl.textContent;
-  #           const graphEl = document.createElement("div");
-  #           const graphId = "mermaid-graph-" + id++;
-  #           mermaid.render(graphId, graphDefinition).then(({svg, bindFunctions}) => {
-  #             graphEl.innerHTML = svg;
-  #             bindFunctions?.(graphEl);
-  #             preEl.insertAdjacentElement("afterend", graphEl);
-  #             preEl.remove();
-  #           });
-  #         }
-  #       });
-  #     </script>
-  #     """
-  #   end
-
-  #   defp before_closing_head_tag(:epub), do: ""
-
-  #   defp before_closing_body_tag(:html), do: ""
-
-  #   defp before_closing_body_tag(:epub), do: ""
-
-  #   defp aliases do
-  #     [
-  #       # Default test command excludes live API tests and shows full names
-  #       test: ["test --trace --exclude live_api"],
-
-  #       # Custom test aliases for better output
-  #       "test.trace": ["test --trace --exclude live_api"],
-  #       "test.live": ["test --only live_api"],
-  #       "test.all": ["test --include live_api"],
-  #       "test.fast": ["test --exclude live_api --max-cases 48"],
-
-  #       # Provider-specific test aliases
-  #       "test.gemini": ["test --trace test/foundation/ai/llm/providers/gemini_live_test.exs"],
-  #       "test.vertex": ["test --trace test/foundation/ai/llm/providers/vertex_live_test.exs"],
-  #       "test.mock": ["test --trace test/foundation/ai/llm/providers/mock_test.exs"],
-
-  #       # LLM-focused test aliases
-  #       "test.llm": ["test --trace --exclude live_api test/foundation/ai/llm/"],
-  #       "test.llm.live": ["test --trace --only live_api test/foundation/ai/llm/"]
-  #     ]
-  #   end
-
-  #   def cli do
-  #     [
-  #       preferred_envs: [
-  #         test: :test,
-  #         "test.trace": :test,
-  #         "test.live": :test,
-  #         "test.all": :test,
-  #         "test.fast": :test,
-  #         "test.gemini": :test,
-  #         "test.vertex": :test,
-  #         "test.mock": :test,
-  #         "test.llm": :test,
-  #         "test.llm.live": :test
-  #       ]
-  #     ]
-  #   end
 end

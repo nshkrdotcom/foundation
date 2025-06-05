@@ -3,7 +3,7 @@ defmodule Foundation.EventsTest do
   @moduletag :foundation
 
   alias Foundation.Events
-  alias Foundation.Types.Event
+  alias Foundation.Types.{Event, Error}
 
   describe "event creation" do
     test "creates basic event with required fields" do
@@ -173,8 +173,109 @@ defmodule Foundation.EventsTest do
 
   describe "error handling" do
     test "handles invalid event types gracefully" do
-      # Events should validate input and return appropriate errors
-      # This test depends on the actual validation implementation
+      # Test with nil event type (should fail)
+      result = Events.new_event(nil, %{})
+
+      # Handle different error types that might be returned
+      assert {:error, error} = result
+      assert error.error_type in [:validation_failed, :invalid_input, :type_mismatch]
+    end
+
+    test "handles various data types safely" do
+      test_cases = [
+        nil,
+        %{},
+        [],
+        "string",
+        42,
+        :atom,
+        {:tuple, :data}
+      ]
+
+      Enum.each(test_cases, fn data ->
+        result = Events.new_event(:test_event, data)
+
+        case result do
+          {:ok, event} ->
+            assert %Event{} = event
+            assert event.event_type == :test_event
+
+          {:error, %Error{}} ->
+            # Some data types might not be valid, that's acceptable
+            assert true
+
+          {:error, %{}} ->
+            # Handle different Error module types
+            assert true
+        end
+      end)
+    end
+  end
+
+  describe "concurrent event creation" do
+    test "handles concurrent event creation safely" do
+      # Create many events concurrently
+      tasks =
+        for i <- 1..50 do
+          Task.async(fn ->
+            Events.new_event(:concurrent_test, %{task_id: i, data: "test_#{i}"})
+          end)
+        end
+
+      results = Task.await_many(tasks, 5000)
+
+      # All should succeed
+      assert length(results) == 50
+
+      Enum.each(results, fn result ->
+        assert {:ok, %Event{}} = result
+      end)
+
+      # Event IDs should be unique
+      event_ids = Enum.map(results, fn {:ok, event} -> event.event_id end)
+      unique_ids = Enum.uniq(event_ids)
+      assert length(event_ids) == length(unique_ids)
+    end
+  end
+
+  describe "edge case handling" do
+    test "handles events with Unicode and special characters in data" do
+      unicode_data = %{
+        emoji: "🚀🔥💯",
+        chinese: "你好世界",
+        arabic: "مرحبا بالعالم",
+        special_chars: "\"'\\n\\t\\r",
+        null_byte: "test\0null"
+      }
+
+      {:ok, event} = Events.new_event(:unicode_test, unicode_data)
+
+      assert event.data == unicode_data
+
+      # Should serialize and deserialize correctly
+      {:ok, serialized} = Events.serialize(event)
+      {:ok, deserialized} = Events.deserialize(serialized)
+
+      assert deserialized.data == unicode_data
+    end
+
+    test "handles events with binary data" do
+      binary_data = %{
+        # PNG header
+        image: <<137, 80, 78, 71, 13, 10, 26, 10>>,
+        random_binary: :crypto.strong_rand_bytes(100),
+        text: "normal text"
+      }
+
+      {:ok, event} = Events.new_event(:binary_test, binary_data)
+
+      # Should handle binary data without corruption
+      {:ok, serialized} = Events.serialize(event)
+      {:ok, deserialized} = Events.deserialize(serialized)
+
+      assert deserialized.data.text == "normal text"
+      assert is_binary(deserialized.data.image)
+      assert is_binary(deserialized.data.random_binary)
     end
   end
 end
