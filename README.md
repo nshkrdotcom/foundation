@@ -226,8 +226,7 @@ Foundation follows a layered architecture with clear separation of concerns:
 ## 📚 Documentation
 
 - [Complete API Documentation](docs/API_FULL.md) - Comprehensive API reference
-- [Architecture Guide](docs/01_foundation_enhance.md) - Design patterns and architecture
-- [Migration Guide](docs/02_extract_plan.md) - Upgrade and migration information
+- [Architecture](docs/ARCHITECTURE.md) - Foundation Architecture 
 
 ## 🧪 Testing
 
