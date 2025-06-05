@@ -8,6 +8,7 @@
 erl_crash.dump
 *.ez
 *.beam
+*.tar
 /config/*.secret.exs
 .elixir_ls/
 repomix-output.xml

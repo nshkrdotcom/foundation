@@ -185,4 +185,89 @@ defmodule Foundation.ConfigTest do
     # Restart everything
     TestHelpers.ensure_config_available()
   end
+
+  describe "concurrent access patterns" do
+    test "handles concurrent configuration reads safely" do
+      # Create multiple concurrent readers
+      tasks =
+        for i <- 1..10 do
+          Task.async(fn ->
+            case rem(i, 3) do
+              0 -> ConfigAPI.get()
+              1 -> ConfigAPI.get([:ai, :provider])
+              2 -> ConfigAPI.get([:dev, :debug_mode])
+            end
+          end)
+        end
+
+      # Wait for all tasks
+      results = Task.await_many(tasks, 5000)
+
+      # All should succeed or fail gracefully
+      Enum.each(results, fn result ->
+        assert match?({:ok, _}, result) or match?({:error, %Error{}}, result)
+      end)
+    end
+
+    test "serializes concurrent configuration updates" do
+      # Initialize a test value
+      :ok = ConfigAPI.update([:dev, :verbose_logging], false)
+
+      # Create concurrent update tasks
+      tasks =
+        for i <- 1..5 do
+          Task.async(fn ->
+            # Alternate between true and false
+            new_value = rem(i, 2) == 0
+            ConfigAPI.update([:dev, :verbose_logging], new_value)
+          end)
+        end
+
+      # Wait for all updates
+      results = Task.await_many(tasks, 5000)
+
+      # All should complete without crashing
+      Enum.each(results, fn result ->
+        assert result == :ok or match?({:error, %Error{}}, result)
+      end)
+
+      # Final state should be valid
+      {:ok, final_value} = ConfigAPI.get([:dev, :verbose_logging])
+      assert is_boolean(final_value)
+    end
+  end
+
+  describe "error handling and recovery" do
+    test "recovers from transient validation errors" do
+      # Try an invalid update
+      result1 = ConfigAPI.update([:ai, :planning, :sampling_rate], 2.0)
+      assert {:error, %Error{error_type: :range_error}} = result1
+
+      # System should still be functional for valid updates
+      result2 = ConfigAPI.update([:ai, :planning, :sampling_rate], 0.5)
+      assert result2 == :ok
+
+      # Verify the valid update was applied
+      {:ok, current_value} = ConfigAPI.get([:ai, :planning, :sampling_rate])
+      assert current_value == 0.5
+    end
+
+    test "maintains service health after validation failures" do
+      # Generate multiple validation failures
+      invalid_updates = [
+        {[:ai, :planning, :sampling_rate], 5.0},
+        {[:ai, :provider], :nonexistent_provider}
+      ]
+
+      Enum.each(invalid_updates, fn {path, value} ->
+        result = ConfigAPI.update(path, value)
+        assert match?({:error, %Error{}}, result)
+      end)
+
+      # Service should still be healthy
+      assert ConfigAPI.available?()
+      {:ok, config} = ConfigAPI.get()
+      assert %Config{} = config
+    end
+  end
 end

@@ -12,30 +12,12 @@ ExUnit.configure(
     :slow,
     # Exclude end-to-end tests in unit test runs
     :end_to_end,
-    # Exclude AI tests (may require API keys)
-    :ai,
-    # Exclude capture tests (may require instrumentation)
-    :capture,
-    # Exclude Phoenix tests (may require Phoenix setup)
-    :phoenix,
     # Exclude distributed tests (require multiple nodes)
     :distributed,
-    # Exclude real-world tests (require external projects)
-    :real_world,
     # Exclude benchmarks in regular test runs
     :benchmark,
     # Exclude stress tests
-    :stress,
-    # Exclude memory tests
-    :memory,
-    # Exclude scalability tests
-    :scalability,
-    # Exclude regression tests
-    :regression,
-    # Exclude scenario tests
-    :scenario,
-    # Exclude external HTTP tests (use mock implementation)
-    :external_http
+    :stress
   ],
   # 30 seconds timeout
   timeout: 30_000,
@@ -59,12 +41,7 @@ defmodule Foundation.TestCase do
 
   using do
     quote do
-      alias Foundation.Test.Fixtures
-      alias Foundation.Test.Mocks
-
-      import Foundation.Test.Support.Assertions.CPGAssertions
-      import Foundation.Test.Support.Assertions.GraphAssertions
-      import Foundation.Test.Support.Assertions.PerformanceAssertions
+      # Add any common aliases or imports here when needed
     end
   end
 
@@ -82,5 +59,4 @@ defmodule Foundation.TestCase do
 end
 
 # Configure test environment
-Application.put_env(:foundation, :ai_providers, [:mock])
-Application.put_env(:foundation, :capture_mode, :test)
+Application.put_env(:foundation, :test_mode, true)

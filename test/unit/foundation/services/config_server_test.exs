@@ -4,14 +4,13 @@ defmodule Foundation.Services.ConfigServerTest do
   alias Foundation.Services.ConfigServer
   # , Error}
   alias Foundation.Types.{Config}
-  alias FoundationTestHelper
 
   setup do
     # Use our modern test helper instead of TestProcessManager
-    FoundationTestHelper.setup_foundation_test()
+    Foundation.TestHelpers.setup_foundation_test()
 
     # Wait for services to be ready (should be quick)
-    case FoundationTestHelper.wait_for_services(2000) do
+    case Foundation.TestHelpers.wait_for_services(2000) do
       :ok ->
         :ok
 
@@ -20,7 +19,7 @@ defmodule Foundation.Services.ConfigServerTest do
     end
 
     on_exit(fn ->
-      FoundationTestHelper.cleanup_foundation_test()
+      Foundation.TestHelpers.cleanup_foundation_test()
     end)
 
     :ok
