@@ -1,19 +1,19 @@
-# ElixirScope Foundation Layer - Complete Public API Documentation
+# Foundation Library - Complete Public API Documentation
 
 ## Table of Contents
 
 1.  [Overview](#overview)
 2.  [Getting Started](#getting-started)
-3.  [Core Foundation API (`ElixirScope.Foundation`)](#core-foundation-api)
-4.  [Configuration API (`ElixirScope.Foundation.Config`)](#configuration-api)
-5.  [Events API (`ElixirScope.Foundation.Events`)](#events-api)
-6.  [Telemetry API (`ElixirScope.Foundation.Telemetry`)](#telemetry-api)
-7.  [Utilities API (`ElixirScope.Foundation.Utils`)](#utilities-api)
-8.  [Service Registry API (`ElixirScope.Foundation.ServiceRegistry`)](#service-registry-api)
-9.  [Process Registry API (`ElixirScope.Foundation.ProcessRegistry`)](#process-registry-api)
-10. [Infrastructure Protection API (`ElixirScope.Foundation.Infrastructure`)](#infrastructure-protection-api)
-11. [Error Context API (`ElixirScope.Foundation.ErrorContext`)](#error-context-api)
-12. [Error Handling & Types (`ElixirScope.Foundation.Error`, `ElixirScope.Foundation.Types.Error`)](#error-handling--types)
+3.  [Core Foundation API (`Foundation`)](#core-foundation-api)
+4.  [Configuration API (`Foundation.Config`)](#configuration-api)
+5.  [Events API (`Foundation.Events`)](#events-api)
+6.  [Telemetry API (`Foundation.Telemetry`)](#telemetry-api)
+7.  [Utilities API (`Foundation.Utils`)](#utilities-api)
+8.  [Service Registry API (`Foundation.ServiceRegistry`)](#service-registry-api)
+9.  [Process Registry API (`Foundation.ProcessRegistry`)](#process-registry-api)
+10. [Infrastructure Protection API (`Foundation.Infrastructure`)](#infrastructure-protection-api)
+11. [Error Context API (`Foundation.ErrorContext`)](#error-context-api)
+12. [Error Handling & Types (`Foundation.Error`, `Foundation.Types.Error`)](#error-handling--types)
 13. [Performance Considerations](#performance-considerations)
 14. [Best Practices](#best-practices)
 15. [Complete Examples](#complete-examples)
@@ -22,7 +22,7 @@
 
 ## Overview
 
-The ElixirScope Foundation Layer provides core utilities, configuration management, event handling, telemetry, service registration, infrastructure protection patterns, and robust error handling for the ElixirScope platform. It offers a clean, well-documented API designed for both ease of use and enterprise-grade performance.
+The Foundation Library provides core utilities, configuration management, event handling, telemetry, service registration, infrastructure protection patterns, and robust error handling for Elixir applications. It offers a clean, well-documented API designed for both ease of use and enterprise-grade performance.
 
 ### Key Features
 
@@ -39,8 +39,8 @@ The ElixirScope Foundation Layer provides core utilities, configuration manageme
 ### System Requirements
 
 - Elixir 1.15+ and OTP 26+
-- Memory: Variable, base usage ~10MB + resources per service/event
-- CPU: Optimized for multi-core systems with automatic partitioning
+- Memory: Variable, base usage ~5MB + resources per service/event
+- CPU: Optimized for multi-core systems
 
 ### Performance Characteristics
 
@@ -61,12 +61,12 @@ The ElixirScope Foundation Layer provides core utilities, configuration manageme
 
 ### Installation
 
-Add ElixirScope to your `mix.exs`:
+Add Foundation to your `mix.exs`:
 
 ```elixir
 def deps do
   [
-    {:elixir_scope, "~> 0.2.0"} # Or the latest version
+    {:foundation, "~> 0.1.0"} # Or the latest version
   ]
 end
 ```
@@ -75,13 +75,13 @@ end
 
 ```elixir
 def start(_type, _args) do
-  # Start ElixirScope's core supervisor, which includes the Foundation layer
+  # Start Foundation's supervision tree
   children = [
-    ElixirScope.Application # Or just ElixirScope if it provides a child_spec
+    Foundation.Application # Starts all Foundation services
   ]
 
-  # Alternatively, if you need to initialize Foundation manually (less common for library users):
-  # {:ok, _} = ElixirScope.Foundation.initialize()
+  # Alternatively, if you need to initialize Foundation manually:
+  # {:ok, _} = Foundation.initialize()
 
   # ... your application's children
   opts = [strategy: :one_for_one, name: MyApp.Supervisor]
@@ -92,28 +92,28 @@ end
 ### Quick Example
 
 ```elixir
-# Ensure Foundation is initialized (typically done by ElixirScope.Application)
-# ElixirScope.Foundation.initialize()
+# Ensure Foundation is initialized (typically done by Foundation.Application)
+# Foundation.initialize()
 
-# Configure a setting
-:ok = ElixirScope.Foundation.Config.update([:dev, :debug_mode], true)
+# Configure a setting  
+:ok = Foundation.Config.update([:ai, :planning, :sampling_rate], 0.8)
 
 # Create and store an event
-correlation_id = ElixirScope.Foundation.Utils.generate_correlation_id()
-{:ok, event} = ElixirScope.Foundation.Events.new_event(:user_action, %{action: "login"}, correlation_id: correlation_id)
-{:ok, event_id} = ElixirScope.Foundation.Events.store(event)
+correlation_id = Foundation.Utils.generate_correlation_id()
+{:ok, event} = Foundation.Events.new_event(:user_action, %{action: "login"}, correlation_id: correlation_id)
+{:ok, event_id} = Foundation.Events.store(event)
 
 # Emit telemetry
-:ok = ElixirScope.Foundation.Telemetry.emit_counter([:myapp, :user, :login_attempts], %{user_id: 123})
+:ok = Foundation.Telemetry.emit_counter([:myapp, :user, :login_attempts], %{user_id: 123})
 
 # Use a utility
-unique_op_id = ElixirScope.Foundation.Utils.generate_id()
+unique_op_id = Foundation.Utils.generate_id()
 
 # Register a service
-:ok = ElixirScope.Foundation.ServiceRegistry.register(:production, :my_service, self())
+:ok = Foundation.ServiceRegistry.register(:production, :my_service, self())
 
 # Use infrastructure protection
-result = ElixirScope.Foundation.Infrastructure.execute_protected(
+result = Foundation.Infrastructure.execute_protected(
   :external_api_call,
   [circuit_breaker: :api_fuse, rate_limiter: {:api_user_rate, "user_123"}],
   fn -> ExternalAPI.call() end
@@ -122,13 +122,13 @@ result = ElixirScope.Foundation.Infrastructure.execute_protected(
 
 ---
 
-## Core Foundation API (`ElixirScope.Foundation`)
+## Core Foundation API (`Foundation`)
 
-The `ElixirScope.Foundation` module is the main entry point for managing the Foundation layer itself.
+The `Foundation` module is the main entry point for managing the Foundation layer itself.
 
 ### initialize/1
 
-Initialize the entire Foundation layer. This typically ensures `Config`, `Events`, and `Telemetry` services are started. Often called by `ElixirScope.Application`.
+Initialize the entire Foundation layer. This typically ensures `Config`, `Events`, and `Telemetry` services are started. Often called by `Foundation.Application`.
 
 ```elixir
 @spec initialize(opts :: keyword()) :: :ok | {:error, Error.t()}
@@ -138,9 +138,9 @@ Initialize the entire Foundation layer. This typically ensures `Config`, `Events
 
 **Example:**
 ```elixir
-:ok = ElixirScope.Foundation.initialize(config: [debug_mode: true])
+:ok = Foundation.initialize(config: [debug_mode: true])
 # To initialize with defaults:
-:ok = ElixirScope.Foundation.initialize()
+:ok = Foundation.initialize()
 ```
 
 ### status/0
@@ -155,7 +155,7 @@ Get comprehensive status of all core Foundation services (`Config`, `Events`, `T
 
 **Example:**
 ```elixir
-{:ok, status} = ElixirScope.Foundation.status()
+{:ok, status} = Foundation.status()
 # status might be:
 # %{
 #   config: %{status: :running, uptime_ms: 3600000},
@@ -173,7 +173,7 @@ Check if all core Foundation services (`Config`, `Events`, `Telemetry`) are avai
 ```
 **Example:**
 ```elixir
-if ElixirScope.Foundation.available?() do
+if Foundation.available?() do
   IO.puts("Foundation layer is ready.")
 end
 ```
@@ -190,21 +190,21 @@ Get detailed health information for monitoring, including service status, Elixir
 
 **Example:**
 ```elixir
-{:ok, health_info} = ElixirScope.Foundation.health()
+{:ok, health_info} = Foundation.health()
 IO.inspect(health_info.status) # :healthy
 ```
 
 ### version/0
 
-Get the version string of the ElixirScope application.
+Get the version string of the Foundation library.
 
 ```elixir
 @spec version() :: String.t()
 ```
 **Example:**
 ```elixir
-version_string = ElixirScope.Foundation.version()
-# "0.2.0"
+version_string = Foundation.version()
+# "0.1.0"
 ```
 
 ### shutdown/0
@@ -217,13 +217,13 @@ Gracefully shut down the Foundation layer and its services. This is typically ma
 
 ---
 
-## Configuration API (`ElixirScope.Foundation.Config`)
+## Configuration API (`Foundation.Config`)
 
 The Configuration API provides centralized configuration management with runtime updates, validation, and subscriber notifications.
 
 ### initialize/0, initialize/1
 
-Initialize the configuration service. Usually called by `ElixirScope.Foundation.initialize/1`.
+Initialize the configuration service. Usually called by `Foundation.initialize/1`.
 
 ```elixir
 @spec initialize() :: :ok | {:error, Error.t()}
@@ -240,10 +240,10 @@ Initialize the configuration service. Usually called by `ElixirScope.Foundation.
 **Example:**
 ```elixir
 # Initialize with defaults
-:ok = ElixirScope.Foundation.Config.initialize()
+:ok = Foundation.Config.initialize()
 
 # Initialize with custom options
-:ok = ElixirScope.Foundation.Config.initialize(cache_size: 1000)
+:ok = Foundation.Config.initialize(cache_size: 1000)
 ```
 
 ### status/0
@@ -256,7 +256,7 @@ Get the status of the configuration service.
 
 **Example:**
 ```elixir
-{:ok, status} = ElixirScope.Foundation.Config.status()
+{:ok, status} = Foundation.Config.status()
 # Returns: {:ok, %{
 #   status: :running,
 #   uptime_ms: 3600000,
@@ -270,7 +270,7 @@ Get the status of the configuration service.
 Retrieve the entire configuration or a specific value by path.
 
 ```elixir
-@spec get() :: {:ok, ElixirScope.Foundation.Types.Config.t()} | {:error, Error.t()}
+@spec get() :: {:ok, Foundation.Types.Config.t()} | {:error, Error.t()}
 @spec get(path :: [atom()]) :: {:ok, term()} | {:error, Error.t()}
 ```
 
@@ -284,18 +284,18 @@ Retrieve the entire configuration or a specific value by path.
 **Examples:**
 ```elixir
 # Get complete configuration
-{:ok, config} = ElixirScope.Foundation.Config.get()
+{:ok, config} = Foundation.Config.get()
 
 # Get specific value
-{:ok, provider} = ElixirScope.Foundation.Config.get([:ai, :provider])
+{:ok, provider} = Foundation.Config.get([:ai, :provider])
 # Returns: {:ok, :mock}
 
 # Get nested value
-{:ok, timeout} = ElixirScope.Foundation.Config.get([:interface, :query_timeout])
+{:ok, timeout} = Foundation.Config.get([:interface, :query_timeout])
 # Returns: {:ok, 10000}
 
 # Handle missing path
-{:error, error} = ElixirScope.Foundation.Config.get([:nonexistent, :path])
+{:error, error} = Foundation.Config.get([:nonexistent, :path])
 # Returns: {:error, %Error{error_type: :config_path_not_found}}
 ```
 
@@ -309,7 +309,7 @@ Retrieve a configuration value, returning a default if the path is not found.
 
 **Example:**
 ```elixir
-timeout = ElixirScope.Foundation.Config.get_with_default([:my_feature, :timeout_ms], 5000)
+timeout = Foundation.Config.get_with_default([:my_feature, :timeout_ms], 5000)
 ```
 
 ### update/2
@@ -331,13 +331,13 @@ Update a configuration value at runtime. Only affects paths listed by `updatable
 **Examples:**
 ```elixir
 # Update sampling rate
-:ok = ElixirScope.Foundation.Config.update([:ai, :planning, :sampling_rate], 0.8)
+:ok = Foundation.Config.update([:ai, :planning, :sampling_rate], 0.8)
 
 # Update debug mode
-:ok = ElixirScope.Foundation.Config.update([:dev, :debug_mode], true)
+:ok = Foundation.Config.update([:dev, :debug_mode], true)
 
 # Try to update forbidden path
-{:error, error} = ElixirScope.Foundation.Config.update([:ai, :api_key], "secret")
+{:error, error} = Foundation.Config.update([:ai, :api_key], "secret")
 # Returns: {:error, %Error{error_type: :config_update_forbidden}}
 ```
 
@@ -362,7 +362,7 @@ Get a list of configuration paths that can be updated at runtime.
 
 **Example:**
 ```elixir
-paths = ElixirScope.Foundation.Config.updatable_paths()
+paths = Foundation.Config.updatable_paths()
 # Returns: [
 #   [:ai, :planning, :sampling_rate],
 #   [:ai, :planning, :performance_target],
@@ -390,13 +390,13 @@ Messages are received as `{:config_notification, {:config_updated, path, new_val
 **Example:**
 ```elixir
 # Subscribe to config changes
-:ok = ElixirScope.Foundation.Config.subscribe()
+:ok = Foundation.Config.subscribe()
 
 # You'll receive messages like:
 # {:config_notification, {:config_updated, [:dev, :debug_mode], true}}
 
 # Unsubscribe
-:ok = ElixirScope.Foundation.Config.unsubscribe()
+:ok = Foundation.Config.unsubscribe()
 ```
 
 ### available?/0
@@ -409,7 +409,7 @@ Check if the configuration service is available.
 
 **Example:**
 ```elixir
-true = ElixirScope.Foundation.Config.available?()
+true = Foundation.Config.available?()
 ```
 
 ### reset/0
@@ -422,7 +422,7 @@ Reset configuration to its default values.
 
 ---
 
-## Events API (`ElixirScope.Foundation.Events`)
+## Events API (`Foundation.Events`)
 
 The Events API provides structured event creation, storage, querying, and serialization capabilities.
 
@@ -438,10 +438,10 @@ Initialize/get status of the event store service.
 **Examples:**
 ```elixir
 # Initialize events system
-:ok = ElixirScope.Foundation.Events.initialize()
+:ok = Foundation.Events.initialize()
 
 # Get status
-{:ok, status} = ElixirScope.Foundation.Events.status()
+{:ok, status} = Foundation.Events.status()
 # Returns: {:ok, %{status: :running, event_count: 1500, next_id: 1501}}
 ```
 
@@ -466,22 +466,22 @@ Create a new structured event. The 2-arity version uses default options. The 3-a
 **Examples:**
 ```elixir
 # Simple event
-{:ok, event} = ElixirScope.Foundation.Events.new_event(:user_login, %{user_id: 123})
+{:ok, event} = Foundation.Events.new_event(:user_login, %{user_id: 123})
 
 # Event with correlation ID
-{:ok, event} = ElixirScope.Foundation.Events.new_event(
+{:ok, event} = Foundation.Events.new_event(
   :payment_processed,
   %{amount: 100.0, currency: "USD"},
   correlation_id: "req-abc-123"
 )
 
 # Event with parent relationship
-{:ok, parent_event} = ElixirScope.Foundation.Events.new_event(
+{:ok, parent_event} = Foundation.Events.new_event(
   :request_start,
   %{path: "/api/users"},
   correlation_id: "req-abc-123"
 )
-{:ok, child_event} = ElixirScope.Foundation.Events.new_event(
+{:ok, child_event} = Foundation.Events.new_event(
   :validation_step,
   %{step: "auth"},
   correlation_id: "req-abc-123",
@@ -509,12 +509,12 @@ Store events in the event store.
 **Examples:**
 ```elixir
 # Store single event
-{:ok, event} = ElixirScope.Foundation.Events.new_event(:user_action, %{action: "click"})
-{:ok, event_id} = ElixirScope.Foundation.Events.store(event)
+{:ok, event} = Foundation.Events.new_event(:user_action, %{action: "click"})
+{:ok, event_id} = Foundation.Events.store(event)
 
 # Store multiple events atomically
 {:ok, events} = create_multiple_events()
-{:ok, event_ids} = ElixirScope.Foundation.Events.store_batch(events)
+{:ok, event_ids} = Foundation.Events.store_batch(events)
 ```
 
 ### get/1
@@ -527,7 +527,7 @@ Retrieve a stored event by its ID.
 
 **Example:**
 ```elixir
-{:ok, event} = ElixirScope.Foundation.Events.get(12345)
+{:ok, event} = Foundation.Events.get(12345)
 ```
 
 ### query/1
@@ -548,7 +548,7 @@ Query stored events.
 **Examples:**
 ```elixir
 # Query by event type
-{:ok, events} = ElixirScope.Foundation.Events.query(%{
+{:ok, events} = Foundation.Events.query(%{
   event_type: :user_login,
   limit: 100
 })
@@ -556,13 +556,13 @@ Query stored events.
 # Query with time range
 start_time = System.monotonic_time() - 3600_000_000_000  # 1 hour ago in nanoseconds
 end_time = System.monotonic_time()
-{:ok, events} = ElixirScope.Foundation.Events.query(%{
+{:ok, events} = Foundation.Events.query(%{
   time_range: {start_time, end_time},
   limit: 500
 })
 
 # Query recent events
-{:ok, recent_events} = ElixirScope.Foundation.Events.query(%{
+{:ok, recent_events} = Foundation.Events.query(%{
   limit: 50,
   order_by: :timestamp
 })
@@ -578,7 +578,7 @@ Retrieve all events matching a correlation ID, sorted by timestamp.
 
 **Example:**
 ```elixir
-{:ok, related_events} = ElixirScope.Foundation.Events.get_by_correlation("req-abc-123")
+{:ok, related_events} = Foundation.Events.get_by_correlation("req-abc-123")
 # Returns all events that share the correlation ID, sorted by timestamp
 ```
 
@@ -608,17 +608,17 @@ Creates a `:state_change` event.
 **Examples:**
 ```elixir
 # Create function entry event
-{:ok, entry_event} = ElixirScope.Foundation.Events.function_entry(
+{:ok, entry_event} = Foundation.Events.function_entry(
   MyModule, :my_function, 2, [arg1, arg2]
 )
 
 # Create function exit event
-{:ok, exit_event} = ElixirScope.Foundation.Events.function_exit(
+{:ok, exit_event} = Foundation.Events.function_exit(
   MyModule, :my_function, 2, call_id, result, duration_ns, :normal
 )
 
 # Create state change event
-{:ok, state_event} = ElixirScope.Foundation.Events.state_change(
+{:ok, state_event} = Foundation.Events.state_change(
   server_pid, :handle_call, old_state, new_state
 )
 ```
@@ -649,13 +649,13 @@ Retrieves the most recent N events.
 **Examples:**
 ```elixir
 # Get correlation chain
-{:ok, chain} = ElixirScope.Foundation.Events.get_correlation_chain("req-abc-123")
+{:ok, chain} = Foundation.Events.get_correlation_chain("req-abc-123")
 
 # Get events in time range
-{:ok, events} = ElixirScope.Foundation.Events.get_time_range(start_time, end_time)
+{:ok, events} = Foundation.Events.get_time_range(start_time, end_time)
 
 # Get recent events
-{:ok, recent} = ElixirScope.Foundation.Events.get_recent(100)
+{:ok, recent} = Foundation.Events.get_recent(100)
 ```
 
 ### Serialization
@@ -684,14 +684,14 @@ Calculates the size of a serialized event.
 **Examples:**
 ```elixir
 # Serialize event to binary
-{:ok, event} = ElixirScope.Foundation.Events.new_event(:test, %{data: "example"})
-{:ok, binary} = ElixirScope.Foundation.Events.serialize(event)
+{:ok, event} = Foundation.Events.new_event(:test, %{data: "example"})
+{:ok, binary} = Foundation.Events.serialize(event)
 
 # Deserialize binary to event
-{:ok, restored_event} = ElixirScope.Foundation.Events.deserialize(binary)
+{:ok, restored_event} = Foundation.Events.deserialize(binary)
 
 # Calculate serialized size
-{:ok, size_bytes} = ElixirScope.Foundation.Events.serialized_size(event)
+{:ok, size_bytes} = Foundation.Events.serialized_size(event)
 ```
 
 ### Storage Management
@@ -713,7 +713,7 @@ Prune events older than a monotonic timestamp.
 **Examples:**
 ```elixir
 # Get storage statistics
-{:ok, stats} = ElixirScope.Foundation.Events.stats()
+{:ok, stats} = Foundation.Events.stats()
 # Returns: {:ok, %{
 #   current_event_count: 15000,
 #   events_stored: 50000,
@@ -724,7 +724,7 @@ Prune events older than a monotonic timestamp.
 
 # Prune old events
 cutoff_time = System.monotonic_time() - 86400_000_000_000  # 24 hours ago in nanoseconds
-{:ok, pruned_count} = ElixirScope.Foundation.Events.prune_before(cutoff_time)
+{:ok, pruned_count} = Foundation.Events.prune_before(cutoff_time)
 ```
 
 ### available?/0
@@ -737,7 +737,7 @@ Check if the event store service is available.
 
 ---
 
-## Telemetry API (`ElixirScope.Foundation.Telemetry`)
+## Telemetry API (`Foundation.Telemetry`)
 
 Provides metrics collection, event measurement, and monitoring integration.
 
@@ -753,10 +753,10 @@ Initialize/get status of the telemetry service.
 **Examples:**
 ```elixir
 # Initialize telemetry system
-:ok = ElixirScope.Foundation.Telemetry.initialize()
+:ok = Foundation.Telemetry.initialize()
 
 # Get status
-{:ok, status} = ElixirScope.Foundation.Telemetry.status()
+{:ok, status} = Foundation.Telemetry.status()
 # Returns: {:ok, %{status: :running, metrics_count: 50, handlers_count: 5}}
 ```
 
@@ -775,7 +775,7 @@ Execute a telemetry event with measurements and metadata. This is the core emiss
 
 **Example:**
 ```elixir
-ElixirScope.Foundation.Telemetry.execute(
+Foundation.Telemetry.execute(
   [:myapp, :request, :duration],
   %{value: 120, unit: :milliseconds},
   %{path: "/users", method: "GET", status: 200}
@@ -792,7 +792,7 @@ Measure the execution time of a function and emit a telemetry event.
 
 **Example:**
 ```elixir
-result = ElixirScope.Foundation.Telemetry.measure(
+result = Foundation.Telemetry.measure(
   [:myapp, :db_query],
   %{table: "users", operation: "select"},
   fn -> Repo.all(User) end
@@ -810,7 +810,7 @@ Emit a counter metric (increments by 1).
 
 **Example:**
 ```elixir
-:ok = ElixirScope.Foundation.Telemetry.emit_counter(
+:ok = Foundation.Telemetry.emit_counter(
   [:myapp, :user, :login_attempts],
   %{user_id: 123, ip: "192.168.1.1"}
 )
@@ -826,7 +826,7 @@ Emit a gauge metric (absolute value).
 
 **Example:**
 ```elixir
-:ok = ElixirScope.Foundation.Telemetry.emit_gauge(
+:ok = Foundation.Telemetry.emit_gauge(
   [:myapp, :database, :connection_pool_size],
   25,
   %{pool: "main"}
@@ -843,7 +843,7 @@ Retrieve all collected metrics.
 
 **Example:**
 ```elixir
-{:ok, metrics} = ElixirScope.Foundation.Telemetry.get_metrics()
+{:ok, metrics} = Foundation.Telemetry.get_metrics()
 # Returns a map of all collected metrics with their values and metadata
 ```
 
@@ -859,13 +859,13 @@ Attach/detach custom handlers for specific telemetry event names. Primarily for 
 **Example:**
 ```elixir
 # Attach custom handlers
-:ok = ElixirScope.Foundation.Telemetry.attach_handlers([
+:ok = Foundation.Telemetry.attach_handlers([
   [:myapp, :request, :duration],
   [:myapp, :database, :query]
 ])
 
 # Detach handlers
-:ok = ElixirScope.Foundation.Telemetry.detach_handlers([
+:ok = Foundation.Telemetry.detach_handlers([
   [:myapp, :request, :duration]
 ])
 ```
@@ -881,16 +881,16 @@ Measures execution of `fun`, names event based on `module`/`function`.
 
 **Example:**
 ```elixir
-result = ElixirScope.Foundation.Telemetry.time_function(
+result = Foundation.Telemetry.time_function(
   MyModule,
   :expensive_operation,
   fn -> MyModule.expensive_operation() end
 )
-# Emits timing under [:elixir_scope, :function_timing, MyModule, :expensive_operation]
+# Emits timing under [:foundation, :function_timing, MyModule, :expensive_operation]
 ```
 
 #### emit_performance/3
-Emits a gauge under `[:elixir_scope, :performance, metric_name]`.
+Emits a gauge under `[:foundation, :performance, metric_name]`.
 
 ```elixir
 @spec emit_performance(metric_name :: atom(), value :: number(), metadata :: map()) :: :ok
@@ -898,7 +898,7 @@ Emits a gauge under `[:elixir_scope, :performance, metric_name]`.
 
 **Example:**
 ```elixir
-:ok = ElixirScope.Foundation.Telemetry.emit_performance(
+:ok = Foundation.Telemetry.emit_performance(
   :memory_usage,
   1024 * 1024 * 50,  # 50MB
   %{component: "event_store"}
@@ -906,7 +906,7 @@ Emits a gauge under `[:elixir_scope, :performance, metric_name]`.
 ```
 
 #### emit_system_event/2
-Emits a counter under `[:elixir_scope, :system, event_type]`.
+Emits a counter under `[:foundation, :system, event_type]`.
 
 ```elixir
 @spec emit_system_event(event_type :: atom(), metadata :: map()) :: :ok
@@ -914,7 +914,7 @@ Emits a counter under `[:elixir_scope, :system, event_type]`.
 
 **Example:**
 ```elixir
-:ok = ElixirScope.Foundation.Telemetry.emit_system_event(
+:ok = Foundation.Telemetry.emit_system_event(
   :service_started,
   %{service: "config_server", pid: self()}
 )
@@ -929,7 +929,7 @@ Retrieves metrics matching a specific prefix pattern.
 
 **Example:**
 ```elixir
-{:ok, app_metrics} = ElixirScope.Foundation.Telemetry.get_metrics_for([:myapp])
+{:ok, app_metrics} = Foundation.Telemetry.get_metrics_for([:myapp])
 # Returns only metrics that start with [:myapp]
 ```
 
@@ -943,9 +943,9 @@ Check if the telemetry service is available.
 
 ---
 
-## Utilities API (`ElixirScope.Foundation.Utils`)
+## Utilities API (`Foundation.Utils`)
 
-Provides general-purpose helper functions used within the Foundation layer and potentially useful for applications integrating with ElixirScope.
+Provides general-purpose helper functions used within the Foundation layer and potentially useful for applications integrating with Foundation.
 
 ### generate_id/0
 
@@ -957,7 +957,7 @@ Generates a unique positive integer ID, typically for events or operations.
 
 **Example:**
 ```elixir
-unique_id = ElixirScope.Foundation.Utils.generate_id()
+unique_id = Foundation.Utils.generate_id()
 # Returns: 123456789
 ```
 
@@ -971,9 +971,9 @@ Returns the current monotonic time in nanoseconds. Suitable for duration calcula
 
 **Example:**
 ```elixir
-start_time = ElixirScope.Foundation.Utils.monotonic_timestamp()
+start_time = Foundation.Utils.monotonic_timestamp()
 # ... do work ...
-end_time = ElixirScope.Foundation.Utils.monotonic_timestamp()
+end_time = Foundation.Utils.monotonic_timestamp()
 duration_ns = end_time - start_time
 ```
 
@@ -995,7 +995,7 @@ Generates a UUID v4 string, suitable for correlating events across operations or
 
 **Example:**
 ```elixir
-correlation_id = ElixirScope.Foundation.Utils.generate_correlation_id()
+correlation_id = Foundation.Utils.generate_correlation_id()
 # Returns: "550e8400-e29b-41d4-a716-446655440000"
 ```
 
@@ -1011,10 +1011,10 @@ Truncates a term if its serialized size exceeds a limit (default 10KB). Returns 
 **Examples:**
 ```elixir
 # Use default limit (10KB)
-result = ElixirScope.Foundation.Utils.truncate_if_large(large_data)
+result = Foundation.Utils.truncate_if_large(large_data)
 
 # Use custom limit
-result = ElixirScope.Foundation.Utils.truncate_if_large(large_data, 5000)
+result = Foundation.Utils.truncate_if_large(large_data, 5000)
 # If truncated, returns: %{truncated: true, original_size: 15000, truncated_size: 5000}
 ```
 
@@ -1028,7 +1028,7 @@ Inspects a term, limiting recursion and printable length to prevent overly long 
 
 **Example:**
 ```elixir
-safe_string = ElixirScope.Foundation.Utils.safe_inspect(complex_data)
+safe_string = Foundation.Utils.safe_inspect(complex_data)
 # Safely converts any term to a readable string
 ```
 
@@ -1042,7 +1042,7 @@ Recursively merges two maps.
 
 **Example:**
 ```elixir
-merged = ElixirScope.Foundation.Utils.deep_merge(
+merged = Foundation.Utils.deep_merge(
   %{a: %{b: 1, c: 2}},
   %{a: %{c: 3, d: 4}}
 )
@@ -1059,7 +1059,7 @@ Formats a duration (in nanoseconds) into a human-readable string.
 
 **Example:**
 ```elixir
-formatted = ElixirScope.Foundation.Utils.format_duration(1_500_000_000)
+formatted = Foundation.Utils.format_duration(1_500_000_000)
 # Returns: "1.5s"
 ```
 
@@ -1073,7 +1073,7 @@ Formats a byte size into a human-readable string.
 
 **Example:**
 ```elixir
-formatted = ElixirScope.Foundation.Utils.format_bytes(1536)
+formatted = Foundation.Utils.format_bytes(1536)
 # Returns: "1.5 KB"
 ```
 
@@ -1087,7 +1087,7 @@ Measures the execution time of a function.
 
 **Example:**
 ```elixir
-{result, duration_us} = ElixirScope.Foundation.Utils.measure(fn ->
+{result, duration_us} = Foundation.Utils.measure(fn ->
   :timer.sleep(100)
   :completed
 end)
@@ -1112,7 +1112,7 @@ Returns a map of current system statistics (process count, memory, schedulers).
 
 **Example:**
 ```elixir
-stats = ElixirScope.Foundation.Utils.system_stats()
+stats = Foundation.Utils.system_stats()
 # Returns: %{
 #   process_count: 1234,
 #   memory_total: 104857600,
@@ -1123,7 +1123,7 @@ stats = ElixirScope.Foundation.Utils.system_stats()
 
 ---
 
-## Service Registry API (`ElixirScope.Foundation.ServiceRegistry`)
+## Service Registry API (`Foundation.ServiceRegistry`)
 
 High-level API for service registration and discovery, built upon `ProcessRegistry`.
 
@@ -1142,7 +1142,7 @@ Registers a service PID under a specific name within a namespace.
 
 **Example:**
 ```elixir
-:ok = ElixirScope.Foundation.ServiceRegistry.register(:production, :my_service, self())
+:ok = Foundation.ServiceRegistry.register(:production, :my_service, self())
 ```
 
 ### lookup/2
@@ -1155,7 +1155,7 @@ Looks up a registered service PID.
 
 **Example:**
 ```elixir
-{:ok, pid} = ElixirScope.Foundation.ServiceRegistry.lookup(:production, :my_service)
+{:ok, pid} = Foundation.ServiceRegistry.lookup(:production, :my_service)
 ```
 
 ### unregister/2
@@ -1176,7 +1176,7 @@ Lists all service names registered in a namespace.
 
 **Example:**
 ```elixir
-services = ElixirScope.Foundation.ServiceRegistry.list_services(:production)
+services = Foundation.ServiceRegistry.list_services(:production)
 # Returns: [:config_server, :event_store, :telemetry_service]
 ```
 
@@ -1194,7 +1194,7 @@ Checks if a service is registered, alive, and optionally passes a custom health 
 
 **Example:**
 ```elixir
-{:ok, pid} = ElixirScope.Foundation.ServiceRegistry.health_check(
+{:ok, pid} = Foundation.ServiceRegistry.health_check(
   :production,
   :my_service,
   health_check: fn pid -> GenServer.call(pid, :health) end,
@@ -1220,7 +1220,7 @@ Generates a `{:via, Registry, ...}` tuple for GenServer registration with the un
 
 **Example:**
 ```elixir
-via_tuple = ElixirScope.Foundation.ServiceRegistry.via_tuple(:production, :my_service)
+via_tuple = Foundation.ServiceRegistry.via_tuple(:production, :my_service)
 GenServer.start_link(MyService, [], name: via_tuple)
 ```
 
@@ -1242,7 +1242,7 @@ Specifically for testing: terminates and unregisters all services within a `{:te
 
 ---
 
-## Process Registry API (`ElixirScope.Foundation.ProcessRegistry`)
+## Process Registry API (`Foundation.ProcessRegistry`)
 
 Lower-level, ETS-based process registry providing namespaced registration. Generally, `ServiceRegistry` is preferred for direct use.
 
@@ -1272,7 +1272,7 @@ Generates a `{:via, Registry, ...}` tuple for `GenServer.start_link` using this 
 
 ---
 
-## Infrastructure Protection API (`ElixirScope.Foundation.Infrastructure`)
+## Infrastructure Protection API (`Foundation.Infrastructure`)
 
 Unified facade for applying protection patterns like circuit breakers, rate limiting, and connection pooling.
 
@@ -1299,7 +1299,7 @@ Executes a function with specified protection layers.
 
 **Example:**
 ```elixir
-result = ElixirScope.Foundation.Infrastructure.execute_protected(
+result = Foundation.Infrastructure.execute_protected(
   :external_api_call,
   [circuit_breaker: :api_fuse, rate_limiter: {:api_user_rate, "user_123"}],
   fn -> HTTPoison.get("https://api.example.com/data") end
@@ -1323,7 +1323,7 @@ Configures protection rules for a given key (e.g., circuit breaker thresholds, r
 
 **Config Example:**
 ```elixir
-:ok = ElixirScope.Foundation.Infrastructure.configure_protection(
+:ok = Foundation.Infrastructure.configure_protection(
   :external_api_call,
   %{
     circuit_breaker: %{failure_threshold: 3, recovery_time: 15_000},
@@ -1342,7 +1342,7 @@ Retrieves the current protection configuration for a key.
 
 ---
 
-## Error Context API (`ElixirScope.Foundation.ErrorContext`)
+## Error Context API (`Foundation.ErrorContext`)
 
 Provides a way to build up contextual information for operations, which can then be used to enrich errors.
 
@@ -1358,7 +1358,7 @@ Creates a new error context for an operation.
 
 **Example:**
 ```elixir
-context = ElixirScope.Foundation.ErrorContext.new(
+context = Foundation.ErrorContext.new(
   MyModule,
   :complex_operation,
   correlation_id: "req-123",
@@ -1400,10 +1400,10 @@ Executes a function, automatically capturing exceptions and enhancing them with 
 
 **Example:**
 ```elixir
-context = ElixirScope.Foundation.ErrorContext.new(MyModule, :complex_op)
-result = ElixirScope.Foundation.ErrorContext.with_context(context, fn ->
+context = Foundation.ErrorContext.new(MyModule, :complex_op)
+result = Foundation.ErrorContext.with_context(context, fn ->
   # ... operations that might fail ...
-  context = ElixirScope.Foundation.ErrorContext.add_breadcrumb(
+  context = Foundation.ErrorContext.add_breadcrumb(
     context, MyModule, :validation_step, %{step: 1}
   )
   
@@ -1435,16 +1435,16 @@ Adds the operational context from `ErrorContext.t()` to an existing `Error.t()`.
 
 ---
 
-## Error Handling & Types (`ElixirScope.Foundation.Error`, `ElixirScope.Foundation.Types.Error`)
+## Error Handling & Types (`Foundation.Error`, `Foundation.Types.Error`)
 
 The Foundation layer uses a structured error system for consistent error handling across all components.
 
-### `ElixirScope.Foundation.Types.Error` (Struct)
+### `Foundation.Types.Error` (Struct)
 
 This is the data structure for all errors in the Foundation layer.
 
 ```elixir
-%ElixirScope.Foundation.Types.Error{
+%Foundation.Types.Error{
   code: pos_integer(),                # Hierarchical error code
   error_type: atom(),                 # Specific error identifier (e.g., :config_path_not_found)
   message: String.t(),
@@ -1471,7 +1471,7 @@ This is the data structure for all errors in the Foundation layer.
 | Security | 5000-5999 | Authentication, authorization |
 | Validation | 6000-6999 | Input validation, type errors |
 
-### `ElixirScope.Foundation.Error` (Module)
+### `Foundation.Error` (Module)
 
 Provides functions for working with `Types.Error` structs.
 
@@ -1487,7 +1487,7 @@ Creates a new `Error.t()` struct based on a predefined error type or a custom de
 
 **Example:**
 ```elixir
-error = ElixirScope.Foundation.Error.new(
+error = Foundation.Error.new(
   :config_path_not_found,
   "Configuration path [:ai, :provider] not found",
   context: %{path: [:ai, :provider]},
@@ -1514,7 +1514,7 @@ Wraps an existing error result (either `{:error, Error.t()}` or `{:error, reason
 **Example:**
 ```elixir
 result = some_operation()
-wrapped = ElixirScope.Foundation.Error.wrap_error(
+wrapped = Foundation.Error.wrap_error(
   result,
   :operation_failed,
   "Failed to complete operation",
@@ -1582,7 +1582,7 @@ config = %{
 }
 
 # Subscribe to configuration changes for dynamic updates
-:ok = ElixirScope.Foundation.Config.subscribe()
+:ok = Foundation.Config.subscribe()
 ```
 
 **Configuration Best Practices:**
@@ -1602,7 +1602,7 @@ config = %{
 
 ```elixir
 # Good: Well-structured event
-{:ok, event} = ElixirScope.Foundation.Events.new_event(
+{:ok, event} = Foundation.Events.new_event(
   :user_authentication,
   %{
     user_id: 12345,
@@ -1635,13 +1635,13 @@ config = %{
 
 ```elixir
 # Business metrics
-:ok = ElixirScope.Foundation.Telemetry.emit_counter(
+:ok = Foundation.Telemetry.emit_counter(
   [:myapp, :orders, :completed], 
   %{payment_method: "credit_card", amount_usd: 99.99}
 )
 
 # Technical metrics
-:ok = ElixirScope.Foundation.Telemetry.emit_gauge(
+:ok = Foundation.Telemetry.emit_gauge(
   [:myapp, :database, :connection_pool_size],
   pool_size,
   %{database: "primary", environment: "production"}
@@ -1664,7 +1664,7 @@ config = %{
 
 ```elixir
 # Protected external API call
-result = ElixirScope.Foundation.Infrastructure.execute_protected(
+result = Foundation.Infrastructure.execute_protected(
   :payment_api_call,
   [
     circuit_breaker: :payment_service_breaker,
@@ -1727,7 +1727,7 @@ end
 
 ```elixir
 # Good error handling with context
-case ElixirScope.Foundation.Error.try(
+case Foundation.Error.try(
   fn -> ExternalService.risky_operation(data) end,
   log: true
 ) do
@@ -1735,7 +1735,7 @@ case ElixirScope.Foundation.Error.try(
     process_result(result)
   {:error, error} ->
     # Add operational context
-    enhanced_error = ElixirScope.Foundation.ErrorContext.add_context(error, %{
+    enhanced_error = Foundation.ErrorContext.add_context(error, %{
       operation: "external_service_call",
       user_id: user_id,
       attempt_number: retry_count
@@ -1798,24 +1798,24 @@ end
 
 ```elixir
 # Ensure Foundation is initialized
-:ok = ElixirScope.Foundation.initialize()
+:ok = Foundation.initialize()
 
 # Configure the application
-:ok = ElixirScope.Foundation.Config.update([:dev, :debug_mode], true)
+:ok = Foundation.Config.update([:dev, :debug_mode], true)
 
 # Create and store an event
-correlation_id = ElixirScope.Foundation.Utils.generate_correlation_id()
-{:ok, event} = ElixirScope.Foundation.Events.new_event(:user_action, %{action: "login"}, correlation_id: correlation_id)
-{:ok, event_id} = ElixirScope.Foundation.Events.store(event)
+correlation_id = Foundation.Utils.generate_correlation_id()
+{:ok, event} = Foundation.Events.new_event(:user_action, %{action: "login"}, correlation_id: correlation_id)
+{:ok, event_id} = Foundation.Events.store(event)
 
 # Emit a telemetry metric
-:ok = ElixirScope.Foundation.Telemetry.emit_counter([:myapp, :user, :login_attempts], %{user_id: 123})
+:ok = Foundation.Telemetry.emit_counter([:myapp, :user, :login_attempts], %{user_id: 123})
 
 # Register a service
-:ok = ElixirScope.Foundation.ServiceRegistry.register(:production, :my_service, self())
+:ok = Foundation.ServiceRegistry.register(:production, :my_service, self())
 
 # Use infrastructure protection to call an external API
-result = ElixirScope.Foundation.Infrastructure.execute_protected(
+result = Foundation.Infrastructure.execute_protected(
   :external_api_call,
   [circuit_breaker: :api_fuse, rate_limiter: {:api_user_rate, "user_123"}],
   fn -> ExternalAPI.call() end
@@ -1826,32 +1826,32 @@ result = ElixirScope.Foundation.Infrastructure.execute_protected(
 
 ```elixir
 # Ensure Foundation is initialized
-:ok = ElixirScope.Foundation.initialize()
+:ok = Foundation.initialize()
 
 # Subscribe to configuration changes
-:ok = ElixirScope.Foundation.Config.subscribe()
+:ok = Foundation.Config.subscribe()
 
 # Update a configuration value
-:ok = ElixirScope.Foundation.Config.update([:ai, :planning, :sampling_rate], 0.8)
+:ok = Foundation.Config.update([:ai, :planning, :sampling_rate], 0.8)
 
 # The subscriber process will receive a notification:
 # {:config_notification, {:config_updated, [:ai, :planning, :sampling_rate], 0.8}}
 
 # Unsubscribe from configuration changes
-:ok = ElixirScope.Foundation.Config.unsubscribe()
+:ok = Foundation.Config.unsubscribe()
 ```
 
 ### Example 3: Error Handling with Context
 
 ```elixir
 # Ensure Foundation is initialized
-:ok = ElixirScope.Foundation.initialize()
+:ok = Foundation.initialize()
 
 # Set the user context for error reporting
-:ok = ElixirScope.Foundation.ErrorContext.set_user_context(123)
+:ok = Foundation.ErrorContext.set_user_context(123)
 
 # Try a risky operation
-result = ElixirScope.Foundation.Error.try(
+result = Foundation.Error.try(
   fn -> ExternalAPI.call() end,
   log: true
 )
@@ -1862,45 +1862,48 @@ case result do
     # Process the data
   {:error, error} ->
     # Log and handle the error
-    :ok = ElixirScope.Foundation.ErrorContext.log_error(error)
+    :ok = Foundation.ErrorContext.log_error(error)
 end
 
 # Clear the user context
-:ok = ElixirScope.Foundation.ErrorContext.clear_user_context()
+:ok = Foundation.ErrorContext.clear_user_context()
 ```
 
 ---
 
 ## Migration Guide
 
-### From 0.1.x to 0.2.0
+### Using Foundation Library
 
-- The application name in `mix.exs` should be updated to `:elixir_scope`.
-- Configuration keys under `:elixir_scope` are now namespaced; update your config files accordingly.
-- The event system now requires explicit initialization; call `ElixirScope.Foundation.Events.initialize/0` in your application start.
-- Telemetry metrics are now emitted under the `:elixir_scope` namespace; update your monitoring configurations.
-- The service registry API has been simplified; use `ElixirScope.Foundation.ServiceRegistry` directly.
-- Process registry functions are now under `ElixirScope.Foundation.ProcessRegistry`.
-- Infrastructure protection features are now under `ElixirScope.Foundation.Infrastructure`.
-- Error context functions are now under `ElixirScope.Foundation.ErrorContext`.
-- The `ElixirScope.Foundation` module now exports all public functions; use this module as the main entry point.
+Foundation is a standalone library that can be added to any Elixir application:
 
-### From 0.2.0 to 0.2.1
+1. Add `{:foundation, "~> 0.1.0"}` to your `mix.exs` dependencies
+2. Start `Foundation.Application` in your supervision tree
+3. Use Foundation modules directly (e.g., `Foundation.Config`, `Foundation.Events`)
 
-- Fixed a bug where configuration updates would not propagate to subscribers.
-- Improved error messages for missing configuration paths.
-- Telemetry events now include additional metadata for better context.
-- Event storage performance improvements, especially for high-frequency events.
-- Service registry lookup now supports partial matches for service names.
-- Process registry now includes the option to list processes by namespace.
-- Infrastructure protection circuit breakers now support custom timeout values.
-- Error context metadata can now be merged with existing metadata.
+### Configuration Structure
+
+The Foundation library uses a structured configuration with the following top-level sections:
+- `:ai` - AI provider and analysis settings
+- `:capture` - Event capture and buffering configuration
+- `:storage` - Storage and retention policies
+- `:interface` - Query and API interface settings
+- `:dev` - Development and debugging options
+
+### Service Architecture
+
+Foundation provides three core services:
+- `Foundation.Services.ConfigServer` - Configuration management
+- `Foundation.Services.EventStore` - Event storage and querying
+- `Foundation.Services.TelemetryService` - Metrics collection
+
+These services are automatically started by `Foundation.Application` and can be accessed through the high-level APIs.
 
 ---
 
 ## Support and Resources
 
-- **GitHub Repository**: [https://github.com/elixir-scope/elixir_scope](https://github.com/elixir-scope/elixir_scope)
-- **Issue Tracker**: [https://github.com/elixir-scope/elixir_scope/issues](https://github.com/elixir-scope/elixir_scope/issues)
-- **Documentation**: [https://hexdocs.pm/elixir_scope](https://hexdocs.pm/elixir_scope)
-- **Elixir Forum**: [https://elixirforum.com/c/elixir-scope](https://elixirforum.com/c/elixir-scope)
+- **GitHub Repository**: [https://github.com/nshkrdotcom/foundation](https://github.com/nshkrdotcom/foundation)
+- **Issue Tracker**: [https://github.com/nshkrdotcom/foundation/issues](https://github.com/nshkrdotcom/foundation/issues)
+- **Documentation**: [https://hexdocs.pm/foundation](https://hexdocs.pm/foundation)
+- **Local Documentation**: Run `mix docs` to generate local documentation
