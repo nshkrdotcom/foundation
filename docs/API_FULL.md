@@ -13,7 +13,7 @@
 9.  [Process Registry API (`Foundation.ProcessRegistry`)](#process-registry-api-foundation-processregistry)
 10. [Infrastructure Protection API (`Foundation.Infrastructure`)](#infrastructure-protection-api-foundation-infrastructure)
 11. [Error Context API (`Foundation.ErrorContext`)](#error-context-api-foundation-errorcontext)
-12. [Error Handling & Types (`Foundation.Error`, `Foundation.Types.Error`)](#error-handling--types-foundation-error-foundation-types-error)
+12. [Error Handling & Types (`Foundation.Error`, `Foundation.Types.Error`)](#error-handling--types-foundation-rror-foundationtypeserror)
 13. [Performance Considerations](#performance-considerations)
 14. [Best Practices](#best-practices)
 15. [Complete Examples](#complete-examples)
