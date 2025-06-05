@@ -4,16 +4,16 @@
 
 1.  [Overview](#overview)
 2.  [Getting Started](#getting-started)
-3.  [Core Foundation API (`Foundation`)](#core-foundation-api)
-4.  [Configuration API (`Foundation.Config`)](#configuration-api)
-5.  [Events API (`Foundation.Events`)](#events-api)
-6.  [Telemetry API (`Foundation.Telemetry`)](#telemetry-api)
-7.  [Utilities API (`Foundation.Utils`)](#utilities-api)
-8.  [Service Registry API (`Foundation.ServiceRegistry`)](#service-registry-api)
-9.  [Process Registry API (`Foundation.ProcessRegistry`)](#process-registry-api)
-10. [Infrastructure Protection API (`Foundation.Infrastructure`)](#infrastructure-protection-api)
-11. [Error Context API (`Foundation.ErrorContext`)](#error-context-api)
-12. [Error Handling & Types (`Foundation.Error`, `Foundation.Types.Error`)](#error-handling--types)
+3.  [Core Foundation API (`Foundation`)](#core-foundation-api-foundation)
+4.  [Configuration API (`Foundation.Config`)](#configuration-api-foundation-config)
+5.  [Events API (`Foundation.Events`)](#events-api-foundation-events)
+6.  [Telemetry API (`Foundation.Telemetry`)](#telemetry-api-foundation-telemetry)
+7.  [Utilities API (`Foundation.Utils`)](#utilities-api-foundation-utils)
+8.  [Service Registry API (`Foundation.ServiceRegistry`)](#service-registry-api-foundation-serviceregistry)
+9.  [Process Registry API (`Foundation.ProcessRegistry`)](#process-registry-api-foundation-processregistry)
+10. [Infrastructure Protection API (`Foundation.Infrastructure`)](#infrastructure-protection-api-foundation-infrastructure)
+11. [Error Context API (`Foundation.ErrorContext`)](#error-context-api-foundation-errorcontext)
+12. [Error Handling & Types (`Foundation.Error`, `Foundation.Types.Error`)](#error-handling--types-foundation-error-foundation-types-error)
 13. [Performance Considerations](#performance-considerations)
 14. [Best Practices](#best-practices)
 15. [Complete Examples](#complete-examples)
@@ -1884,11 +1884,14 @@ Foundation is a standalone library that can be added to any Elixir application:
 ### Configuration Structure
 
 The Foundation library uses a structured configuration with the following top-level sections:
-- `:ai` - AI provider and analysis settings
+- `:ai` - AI provider and analysis settings (for applications that use AI features)
 - `:capture` - Event capture and buffering configuration
-- `:storage` - Storage and retention policies
+- `:storage` - Storage and retention policies for events and data
 - `:interface` - Query and API interface settings
 - `:dev` - Development and debugging options
+- `:infrastructure` - Rate limiting, circuit breakers, and connection pooling
+
+**Note:** Foundation provides a complete configuration structure that applications can use as needed. Not all sections are required - applications can use only the parts relevant to their use case.
 
 ### Service Architecture
 
