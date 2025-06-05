@@ -1,0 +1,13 @@
+/_build
+/cover
+/deps
+/doc
+/docs_local
+/.fetch
+/priv
+erl_crash.dump
+*.ez
+*.beam
+/config/*.secret.exs
+.elixir_ls/
+repomix-output.xml
