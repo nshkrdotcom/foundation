@@ -72,6 +72,7 @@ defmodule Foundation.MixProject do
       name: "Foundation",
       extras: [
         "README.md",
+        "LICENSE",
         "docs/ARCHITECTURE.md",
         "docs/API_FULL.md"
       ],
