@@ -75,7 +75,7 @@ defmodule Foundation.MixProject do
         "LICENSE",
         "docs/API_FULL.md",
         "docs/ARCHITECTURE.md",
-        "docs/DIAGS.md",
+        "docs/ARCH_DIAGS.md",
         "docs/INFRA_FUSE.md",
         "docs/INFRA_POOL.md",
         "docs/INFRA_RATE_LIMITER.md"

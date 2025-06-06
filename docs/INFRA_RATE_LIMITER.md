@@ -1,5 +1,20 @@
 # Infrastructure - Rate Limiter
 
+This document provides a detailed breakdown of how the `foundation` library integrates the `Hammer` rate limiting library. It explains the design choices, the abstraction layers, and how developers can use the feature effectively.
+
+## Overview
+
+The standard `Hammer` integration pattern involves installing the `Hammer` backend and making direct calls to its API for rate limiting operations. The `foundation` library abstracts this process within the **`RateLimiter`** module to provide validation, observability, and a more user-friendly configuration format.
+
+The `foundation` library adheres to this pattern but provides a robust abstraction layer through its `Infrastructure` and `RateLimiter` modules. This abstraction offers several advantages:
+
+- **Centralized Control:** Simplifies management of rate limiting across the application.
+- **Entity-Based Limiting:** Provides independent rate limiting buckets per entity and operation.
+- **Standardized Errors:** Converts `Hammer`'s responses into the `Foundation.Error` struct for consistent error handling.
+- **Observability:** Automatically emits telemetry events for rate limiting decisions and exceptions.
+
+## The Integration in Detail
+
 ### 1. Rate Limiter Architectural Context
 
 This diagram shows how the `RateLimiter` module fits within the overall Foundation architecture. It illustrates its role as a wrapper around the `Hammer` library and its interactions with the `Infrastructure` facade, the `HammerBackend` (which uses ETS), and the `TelemetryService`.
@@ -85,7 +100,7 @@ flowchart TD
     style EndError fill:#f5c6cb,stroke:#333,stroke-width:2px,color:#000
 ```
 
-### 3. Concurrent Rate Limiting Sequence Diagram
+## End-to-End Workflow
 
 This sequence diagram demonstrates how the rate limiter handles concurrent requests from two different entities (`user_A` and `user_B`). It clearly shows that each entity has its own independent rate-limiting bucket within the shared ETS backend, preventing one user's activity from affecting another's.
 
@@ -137,3 +152,16 @@ sequenceDiagram
     HB-->>-RL: {:allow, 2}
     RL-->>-user_B: :ok
 ```
+
+## Comparison Summary
+
+This table summarizes how `foundation` implements the standard `Hammer` patterns.
+
+| `Hammer` Documentation Pattern | `foundation` Library Implementation |
+| :------------------------------ | :---------------------------------- |
+| Direct calls to `Hammer` backend functions. | Rate limiting operations are abstracted through the **`RateLimiter.check_rate/5`** function. |
+| Manual error handling for rate limit violations. | Standardized error handling with **`Foundation.Error`** structs for consistent responses. |
+| Manual telemetry implementation for observability. | Automatic telemetry emission for `:request_allowed`, `:request_denied`, and `:rate_limiter_exception` events. |
+| Entity-specific rate key management. | Automatic rate key generation using **`build_rate_key/2`** with entity and operation context. |
+
+By using these abstractions, `foundation` provides a more integrated, observable, and developer-friendly way to leverage the power of `Hammer`'s rate limiting capabilities.
