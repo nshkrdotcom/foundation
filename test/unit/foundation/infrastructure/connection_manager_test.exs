@@ -617,7 +617,7 @@ defmodule Foundation.Infrastructure.ConnectionManagerTest do
       %{manager: manager_pid}
     end
 
-    test "handles worker crashes gracefully" do
+    test "handles worker that returns error then crashes" do
       pool_name = unique_pool_name()
 
       pool_config = [
@@ -629,14 +629,45 @@ defmodule Foundation.Infrastructure.ConnectionManagerTest do
 
       {:ok, _} = ConnectionManager.start_pool(pool_name, pool_config)
 
-      # Cause a worker to crash
+      # Worker returns error then crashes asynchronously
       result =
         ConnectionManager.with_connection(pool_name, fn worker ->
           GenServer.call(worker, :simulate_error)
         end)
 
-      # Should handle the error - MockWorker returns :error before stopping
+      # Should get the error response before worker crashes
       assert {:ok, :error} = result
+
+      # Pool should recover and be usable
+      assert {:ok, :pong} =
+               ConnectionManager.with_connection(pool_name, fn worker ->
+                 GenServer.call(worker, :ping)
+               end)
+
+      # Cleanup
+      ConnectionManager.stop_pool(pool_name)
+    end
+
+    test "handles worker that crashes during call" do
+      pool_name = unique_pool_name()
+
+      pool_config = [
+        size: 2,
+        max_overflow: 1,
+        worker_module: @mock_worker_module,
+        worker_args: []
+      ]
+
+      {:ok, _} = ConnectionManager.start_pool(pool_name, pool_config)
+
+      # Worker crashes immediately during the call
+      result =
+        ConnectionManager.with_connection(pool_name, fn worker ->
+          GenServer.call(worker, :simulate_immediate_crash)
+        end)
+
+      # Should catch the exit and return error
+      assert {:error, _reason} = result
 
       # Pool should recover and be usable
       assert {:ok, :pong} =

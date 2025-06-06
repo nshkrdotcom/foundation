@@ -34,6 +34,11 @@ defmodule MockWorker do
     {:reply, :error, state}
   end
 
+  def handle_call(:simulate_immediate_crash, _from, _state) do
+    # Crash immediately during the call without sending a reply
+    exit(:simulated_error)
+  end
+
   def handle_info(:stop, state) do
     {:stop, :simulated_error, state}
   end
