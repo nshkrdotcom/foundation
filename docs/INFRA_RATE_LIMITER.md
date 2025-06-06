@@ -1,3 +1,5 @@
+# Infrastructure - Rate Limiter
+
 ### 1. Rate Limiter Architectural Context
 
 This diagram shows how the `RateLimiter` module fits within the overall Foundation architecture. It illustrates its role as a wrapper around the `Hammer` library and its interactions with the `Infrastructure` facade, the `HammerBackend` (which uses ETS), and the `TelemetryService`.
