@@ -495,6 +495,12 @@ defmodule Foundation.Services.ConfigServer do
   end
 
   @impl GenServer
+  def handle_call(request, _from, state) do
+    Logger.warning("Unauthorized or invalid request to ConfigServer: #{inspect(request)}")
+    {:reply, {:error, :unauthorized_access}, state}
+  end
+
+  @impl GenServer
   @spec handle_info(term(), server_state()) :: {:noreply, server_state()}
   def handle_info(
         {:DOWN, ref, :process, pid, _reason},
