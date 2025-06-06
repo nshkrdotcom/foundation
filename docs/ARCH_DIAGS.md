@@ -480,8 +480,6 @@ This state diagram visualizes the behavior of the `CircuitBreaker` wrapper aroun
 
 ```mermaid
 stateDiagram-v2
-    direction TD
-    
     ClosedHealthy : Closed (Healthy)
     OpenTripped : Open (Tripped)
     HalfOpenRecovering : Half-Open (Recovering)

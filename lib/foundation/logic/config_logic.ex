@@ -52,6 +52,31 @@ defmodule Foundation.Logic.ConfigLogic do
           {:ok, Config.t()} | {:error, Error.t()}
   def update_config(%Config{} = config, path, value) when is_list(path) do
     cond do
+      not validate_path_security(path) ->
+        {:error,
+         Error.new(
+           code: 1000,
+           error_type: :security_violation,
+           message:
+             "Configuration path contains potentially malicious components: #{inspect(path)}",
+           context: %{path: path, reason: :malicious_path},
+           category: :config,
+           subcategory: :security,
+           severity: :high
+         )}
+
+      not validate_value_security(value) ->
+        {:error,
+         Error.new(
+           code: 1005,
+           error_type: :security_violation,
+           message: "Configuration value contains potentially dangerous content",
+           context: %{value_type: get_value_type(value), reason: :dangerous_value},
+           category: :config,
+           subcategory: :security,
+           severity: :high
+         )}
+
       not updatable_path?(path) ->
         create_error(
           :config_update_forbidden,
@@ -74,38 +99,52 @@ defmodule Foundation.Logic.ConfigLogic do
   """
   @spec get_config_value(Config.t(), config_path()) :: {:ok, config_value()} | {:error, Error.t()}
   def get_config_value(config, path) when is_list(path) do
-    try do
-      # We need to check if the path exists, not just if the value is nil
-      case get_nested_value(config, path) do
-        {:ok, value} ->
-          {:ok, value}
+    # First validate path security
+    if not validate_path_security(path) do
+      {:error,
+       Error.new(
+         code: 1000,
+         error_type: :security_violation,
+         message: "Configuration path contains potentially malicious components: #{inspect(path)}",
+         context: %{path: path, reason: :malicious_path},
+         category: :config,
+         subcategory: :security,
+         severity: :high
+       )}
+    else
+      try do
+        # We need to check if the path exists, not just if the value is nil
+        case get_nested_value(config, path) do
+          {:ok, value} ->
+            {:ok, value}
 
-        {:error, :path_not_found} ->
+          {:error, :path_not_found} ->
+            {:error,
+             Error.new(
+               error_type: :config_path_not_found,
+               message: "Configuration path not found: #{inspect(path)}",
+               context: %{path: path},
+               category: :config,
+               subcategory: :access,
+               severity: :medium
+             )}
+        end
+      rescue
+        error ->
+          Logger.warning(
+            "Failed to get config value for path #{inspect(path)}: #{Exception.message(error)}"
+          )
+
           {:error,
            Error.new(
-             error_type: :config_path_not_found,
-             message: "Configuration path not found: #{inspect(path)}",
-             context: %{path: path},
+             error_type: :config_path_invalid,
+             message: "Invalid configuration path: #{Exception.message(error)}",
+             context: %{path: path, error: Exception.message(error)},
              category: :config,
              subcategory: :access,
              severity: :medium
            )}
       end
-    rescue
-      error ->
-        Logger.warning(
-          "Failed to get config value for path #{inspect(path)}: #{Exception.message(error)}"
-        )
-
-        {:error,
-         Error.new(
-           error_type: :config_path_invalid,
-           message: "Invalid configuration path: #{Exception.message(error)}",
-           context: %{path: path, error: Exception.message(error)},
-           category: :config,
-           subcategory: :access,
-           severity: :medium
-         )}
     end
   end
 
@@ -265,5 +304,126 @@ defmodule Foundation.Logic.ConfigLogic do
       )
 
     {:error, error}
+  end
+
+  # Security validation functions
+
+  # Validate that a configuration path is secure and doesn't contain malicious components.
+  defp validate_path_security(path) when is_list(path) do
+    # Check path length (prevent DoS via deep nesting)
+    if length(path) > 50 do
+      false
+    else
+      # Check each component of the path
+      Enum.all?(path, &validate_path_component/1)
+    end
+  end
+
+  defp validate_path_component(component) when is_atom(component) do
+    component_str = Atom.to_string(component)
+
+    # Reject dangerous atom names
+    dangerous_patterns = [
+      "Elixir.System",
+      "Elixir.File",
+      "Elixir.Code",
+      "Elixir.Process",
+      "Elixir.Node",
+      "Elixir.Kernel",
+      "__struct__",
+      "__info__"
+    ]
+
+    not Enum.any?(dangerous_patterns, fn pattern ->
+      String.contains?(component_str, pattern)
+    end)
+  end
+
+  defp validate_path_component(component) when is_binary(component) do
+    # Allow reasonable string components, reject obvious injection attempts
+    dangerous_patterns = [
+      "../",
+      "etc/passwd",
+      "DROP TABLE",
+      "<script>",
+      "eval_string"
+    ]
+
+    not Enum.any?(dangerous_patterns, fn pattern ->
+      String.contains?(String.downcase(component), String.downcase(pattern))
+    end)
+  end
+
+  defp validate_path_component(_other) do
+    # Reject non-atom, non-string components
+    false
+  end
+
+  # Validate that a configuration value is secure and doesn't contain dangerous content.
+  defp validate_value_security(value) do
+    cond do
+      is_function(value) ->
+        # Reject function values (potential code execution)
+        false
+
+      is_binary(value) and byte_size(value) > 1_000_000 ->
+        # Reject extremely large strings (>1MB)
+        false
+
+      is_map(value) and Map.has_key?(value, :__struct__) ->
+        # Reject structs referencing system modules
+        struct_module = Map.get(value, :__struct__)
+
+        case struct_module do
+          System -> false
+          File -> false
+          Code -> false
+          Process -> false
+          _ -> validate_nested_value_security(value)
+        end
+
+      is_map(value) or is_list(value) ->
+        # Recursively validate nested structures
+        validate_nested_value_security(value)
+
+      true ->
+        # Allow primitive types
+        true
+    end
+  end
+
+  defp validate_nested_value_security(value, depth \\ 0) do
+    # Prevent deep nesting DoS
+    if depth > 20 do
+      false
+    else
+      cond do
+        is_map(value) ->
+          Enum.all?(value, fn {k, v} ->
+            validate_value_security(k) and validate_nested_value_security(v, depth + 1)
+          end)
+
+        is_list(value) ->
+          Enum.all?(value, fn v ->
+            validate_nested_value_security(v, depth + 1)
+          end)
+
+        true ->
+          validate_value_security(value)
+      end
+    end
+  end
+
+  defp get_value_type(value) do
+    cond do
+      is_function(value) -> :function
+      is_map(value) and Map.has_key?(value, :__struct__) -> :struct
+      is_map(value) -> :map
+      is_list(value) -> :list
+      is_binary(value) -> :binary
+      is_atom(value) -> :atom
+      is_number(value) -> :number
+      true -> :unknown
+    end
   end
 end

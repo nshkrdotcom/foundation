@@ -133,11 +133,33 @@ defmodule Foundation.TestHelpers do
   """
   @spec wait_for_all_services_available(non_neg_integer()) :: :ok | :timeout
   def wait_for_all_services_available(timeout_ms \\ 5000) do
+    # First ensure the Foundation application is running
+    unless Application.started_applications()
+           |> Enum.any?(fn {app, _, _} -> app == :foundation end) do
+      {:ok, _} = Application.ensure_all_started(:foundation)
+      Process.sleep(100)
+    end
+
     wait_for(
       fn ->
-        Foundation.Config.available?() and
-          Foundation.Events.available?() and
-          Foundation.Telemetry.available?()
+        try do
+          Foundation.Config.available?() and
+            Foundation.Events.available?() and
+            Foundation.Telemetry.available?()
+        rescue
+          # If there's an ArgumentError about unknown registry, restart Foundation
+          error in ArgumentError ->
+            if String.contains?(Exception.message(error), "unknown registry:") do
+              Application.stop(:foundation)
+              {:ok, _} = Application.ensure_all_started(:foundation)
+              Process.sleep(100)
+            end
+
+            false
+
+          _ ->
+            false
+        end
       end,
       timeout_ms
     )

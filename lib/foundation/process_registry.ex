@@ -503,8 +503,8 @@ defmodule Foundation.ProcessRegistry do
     # Log cleanup summary
     require Logger
 
-    # Only log if there were actually services to clean up
-    if cleanup_count > 0 do
+    # Only log if there were actually services to clean up AND debug mode is enabled
+    if cleanup_count > 0 and Application.get_env(:foundation, :debug_registry, false) do
       Logger.debug("Cleaned up #{cleanup_count} services from test namespace #{inspect(test_ref)}")
     end
 
