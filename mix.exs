@@ -73,8 +73,12 @@ defmodule Foundation.MixProject do
       extras: [
         "README.md",
         "LICENSE",
+        "docs/API_FULL.md",
         "docs/ARCHITECTURE.md",
-        "docs/API_FULL.md"
+        "docs/DIAGS.md",
+        "docs/INFRA_FUSE.md",
+        "docs/INFRA_POOL.md",
+        "docs/INFRA_RATE_LIMITER.md"
       ],
       before_closing_head_tag: &before_closing_head_tag/1,
       before_closing_body_tag: &before_closing_body_tag/1

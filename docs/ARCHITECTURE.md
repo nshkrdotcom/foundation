@@ -1,4 +1,4 @@
-# Foundation Architecture
+# Architecture
 
 This document describes the architecture of the Foundation library.
 

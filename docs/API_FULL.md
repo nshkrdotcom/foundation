@@ -1,4 +1,4 @@
-# Foundation Library - Complete Public API Documentation
+# Public API Documentation
 
 ## Table of Contents
 

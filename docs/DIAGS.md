@@ -1,3 +1,5 @@
+# Architectural Diagrams
+
 ### 1. High-Level Architecture
 
 This diagram illustrates the layered architecture of the Foundation library, showing the separation of concerns from the Public API down to the Infrastructure layer.

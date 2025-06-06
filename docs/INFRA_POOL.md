@@ -1,4 +1,6 @@
-Excellent request. Here is a similar deep dive into how the `foundation` library integrates `poolboy` for connection pooling, contrasting the direct `poolboy` pattern with the abstractions provided by the `ConnectionManager`.
+# Infrastructure - Poolboy Integration
+
+Here is a deep dive into how the `foundation` library integrates `poolboy` for connection pooling, contrasting the direct `poolboy` pattern with the abstractions provided by the `ConnectionManager`.
 
 ### 1. Starting a Pool: `poolboy:start_link`
 
@@ -159,6 +161,12 @@ This diagram visualizes the end-to-end flow, from starting a pool to using it vi
 
 ```mermaid
 sequenceDiagram
+    %% Define styles for participants
+    style App fill:#e9ecef,stroke:#333,stroke-width:1px,color:#000
+    style CM fill:#cce5ff,stroke:#333,stroke-width:2px,color:#000
+    style Poolboy fill:#d1ecf1,stroke:#333,stroke-width:1px,color:#000
+    style Worker fill:#d4edda,stroke:#333,stroke-width:1px,color:#000
+
     participant App as "Application Code"
     participant CM as "ConnectionManager"
     participant Poolboy as ":poolboy"
@@ -182,11 +190,6 @@ sequenceDiagram
     Note right of CM: Emits :checkin telemetry
     Poolboy-->>-CM: :ok
     CM-->>-App: {:ok, result}
-
-    style App fill:#e9ecef,stroke:#333,stroke-width:1px,color:#000
-    style CM fill:#cce5ff,stroke:#333,stroke-width:2px,color:#000
-    style Poolboy fill:#d1ecf1,stroke:#333,stroke-width:1px,color:#000
-    style Worker fill:#d4edda,stroke:#333,stroke-width:1px,color:#000
 ```
 
 ---
