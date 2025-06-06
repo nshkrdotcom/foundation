@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2025-06-06
+
+### Added
+- Enhanced ProcessRegistry error handling for better test isolation and system resilience
+- Comprehensive security validation for configuration paths and values
+- Improved chaos resilience testing with proper failure handling and recovery verification
+- Debug logging and monitoring capabilities for test execution
+
+### Fixed
+- **Test Configuration**: Modified test configuration to include security tests by default (only excluding `:slow` tests)
+- **ProcessRegistry Stability**: Enhanced ProcessRegistry availability detection and automatic restart mechanisms
+- **Chaos Resilience Test**: Fixed stress test to properly handle expected failures during service disruption, including:
+  - Proper handling of ProcessRegistry being unavailable during chaos testing
+  - Graceful chaos monkey operation when services are down
+  - Realistic recovery procedures after catastrophic failures
+  - Improved recovery metrics verification to handle complete system disruption
+- **Test Isolation**: Enhanced test helpers to ensure Foundation application is properly restarted between tests
+- **EventStore Security**: Added proper error handling for unauthorized operations (delete, update, clear_all)
+- **Security Validation**: Enhanced path and value validation to block malicious configuration attempts
+- **Data Consistency Test**: Fixed event correlation ID filtering to prevent test interference
+
+### Improved
+- Test stability across integration, security, and stress test suites
+- Error handling during service failures and recovery scenarios
+- Test helper functions for better Foundation application lifecycle management
+- Security test assertions to handle expected security blocks gracefully
+- Recovery verification to distinguish between system failures and expected chaos disruption
+
+### Security
+- Enhanced configuration path validation to prevent injection attacks
+- Improved value sanitization for oversized data and malicious structures
+- Added security error responses for unsupported EventStore operations
+- Strengthened privilege escalation prevention in security tests
+
 ## [0.1.0] - 2025-06-05
 
 ### Added
@@ -36,4 +70,5 @@ Initial release of Foundation - A comprehensive Elixir infrastructure and observ
 - Infrastructure component guides
 - Usage examples and best practices
 
+[0.1.1]: https://github.com/nshkrdotcom/foundation/releases/tag/v0.1.1
 [0.1.0]: https://github.com/nshkrdotcom/foundation/releases/tag/v0.1.0
