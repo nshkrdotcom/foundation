@@ -51,10 +51,11 @@ defmodule Foundation.Stress.ChaosResilienceTest do
         run_chaos_monkey(chaos_end_time, chaos_interval)
       end)
 
-    # Monitor recovery metrics
+    # Monitor recovery metrics beyond load duration to capture actual recovery
+    recovery_end_time = start_time + load_duration + cooldown_period + 10_000
     recovery_monitor =
       Task.async(fn ->
-        monitor_recovery_metrics(start_time, load_end_time)
+        monitor_recovery_metrics(start_time, recovery_end_time)
       end)
 
     # Wait for load workers to complete
@@ -72,7 +73,6 @@ defmodule Foundation.Stress.ChaosResilienceTest do
 
     # Wait for chaos to complete
     chaos_events = Task.await(chaos_task, 10_000)
-    recovery_metrics = Task.await(recovery_monitor, 10_000)
 
     Logger.info("Chaos phase completed. #{length(chaos_events)} services killed")
 
@@ -89,6 +89,9 @@ defmodule Foundation.Stress.ChaosResilienceTest do
     Logger.info("Attempting system recovery after chaos")
     Foundation.TestHelpers.ensure_foundation_running()
     Foundation.TestHelpers.wait_for_all_services_available(10_000)
+
+    # Now wait for recovery monitoring to complete (after system restart)
+    recovery_metrics = Task.await(recovery_monitor, 20_000)
 
     # Verify system has recovered
     assert Foundation.available?(), "System should be available after chaos test and recovery"
