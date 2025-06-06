@@ -63,25 +63,25 @@ graph LR
     C2 --> B4
     C2 --> A3
 
-    style A1 fill:#cce5ff,stroke:#333,stroke-width:2px,color:#000
-    style A2 fill:#cce5ff,stroke:#333,stroke-width:2px,color:#000
-    style A3 fill:#cce5ff,stroke:#333,stroke-width:2px,color:#000
-    style A4 fill:#cce5ff,stroke:#333,stroke-width:2px,color:#000
-    style A5 fill:#cce5ff,stroke:#333,stroke-width:2px,color:#000
+    style A1 fill:#cce5ff,stroke:#333,stroke-width:2,color:#000
+    style A2 fill:#cce5ff,stroke:#333,stroke-width:2,color:#000
+    style A3 fill:#cce5ff,stroke:#333,stroke-width:2,color:#000
+    style A4 fill:#cce5ff,stroke:#333,stroke-width:2,color:#000
+    style A5 fill:#cce5ff,stroke:#333,stroke-width:2,color:#000
 
-    style B1 fill:#d4edda,stroke:#333,stroke-width:2px,color:#000
-    style B2 fill:#d4edda,stroke:#333,stroke-width:2px,color:#000
-    style B3 fill:#d4edda,stroke:#333,stroke-width:2px,color:#000
-    style B4 fill:#d4edda,stroke:#333,stroke-width:2px,color:#000
+    style B1 fill:#d4edda,stroke:#333,stroke-width:2,color:#000
+    style B2 fill:#d4edda,stroke:#333,stroke-width:2,color:#000
+    style B3 fill:#d4edda,stroke:#333,stroke-width:2,color:#000
+    style B4 fill:#d4edda,stroke:#333,stroke-width:2,color:#000
 
-    style C1 fill:#f8d7da,stroke:#333,stroke-width:2px,color:#000
-    style C2 fill:#f8d7da,stroke:#333,stroke-width:2px,color:#000
-    style C3 fill:#f8d7da,stroke:#333,stroke-width:2px,color:#000
+    style C1 fill:#f8d7da,stroke:#333,stroke-width:2,color:#000
+    style C2 fill:#f8d7da,stroke:#333,stroke-width:2,color:#000
+    style C3 fill:#f8d7da,stroke:#333,stroke-width:2,color:#000
 
-    style D1 fill:#fff3cd,stroke:#333,stroke-width:2px,color:#000
-    style D2 fill:#fff3cd,stroke:#333,stroke-width:2px,color:#000
-    style D3 fill:#fff3cd,stroke:#333,stroke-width:2px,color:#000
-    style D4 fill:#fff3cd,stroke:#333,stroke-width:2px,color:#000
+    style D1 fill:#fff3cd,stroke:#333,stroke-width:2,color:#000
+    style D2 fill:#fff3cd,stroke:#333,stroke-width:2,color:#000
+    style D3 fill:#fff3cd,stroke:#333,stroke-width:2,color:#000
+    style D4 fill:#fff3cd,stroke:#333,stroke-width:2,color:#000
 ```
 
 ## Application Supervision Tree
@@ -117,15 +117,15 @@ graph LR
     Supervisor --> TaskSup
     Supervisor --> TestSup
 
-    style Supervisor fill:#b3d1ff,stroke:#333,stroke-width:2px,color:#000
-    style Reg fill:#d4edda,stroke:#333,stroke-width:1px,color:#000
-    style CfgSrv fill:#d4edda,stroke:#333,stroke-width:1px,color:#000
-    style EvtStore fill:#d4edda,stroke:#333,stroke-width:1px,color:#000
-    style TelSrv fill:#d4edda,stroke:#333,stroke-width:1px,color:#000
-    style ConnMgr fill:#d4edda,stroke:#333,stroke-width:1px,color:#000
-    style Hammer fill:#d4edda,stroke:#333,stroke-width:1px,color:#000
-    style TaskSup fill:#d4edda,stroke:#333,stroke-width:1px,color:#000
-    style TestSup fill:#f8d7da,stroke:#333,stroke-width:1px,stroke-dasharray: 5 5,color:#000
+    style Supervisor fill:#b3d1ff,stroke:#333,stroke-width:2,color:#000
+    style Reg fill:#d4edda,stroke:#333,stroke-width:2,color:#000
+    style CfgSrv fill:#d4edda,stroke:#333,stroke-width:2,color:#000
+    style EvtStore fill:#d4edda,stroke:#333,stroke-width:2,color:#000
+    style TelSrv fill:#d4edda,stroke:#333,stroke-width:2,color:#000
+    style ConnMgr fill:#d4edda,stroke:#333,stroke-width:2,color:#000
+    style Hammer fill:#d4edda,stroke:#333,stroke-width:2,color:#000
+    style TaskSup fill:#d4edda,stroke:#333,stroke-width:2,color:#000
+    style TestSup fill:#f8d7da,stroke:#333,stroke-width:2,stroke-dasharray: 5 5,color:#000
 ```
 
 ## Configuration Update Flow
@@ -159,17 +159,17 @@ graph TD
     F_ConfigServer -- "Error" --> F_Config
     F_Config -- "Failure" --> Client
 
-    style Client fill:#e9ecef,stroke:#333,stroke-width:1px,color:#000
-    style F_Config fill:#cce5ff,stroke:#333,stroke-width:2px,color:#000
-    style F_ConfigServer fill:#f8d7da,stroke:#333,stroke-width:2px,color:#000
-    style F_EventStore fill:#f8d7da,stroke:#333,stroke-width:1px,color:#000
-    style F_Telemetry fill:#f8d7da,stroke:#333,stroke-width:1px,color:#000
-    style A fill:#fff3cd,stroke:#333,stroke-width:1px,color:#000
-    style B fill:#fff3cd,stroke:#333,stroke-width:1px,color:#000
-    style C fill:#fff3cd,stroke:#333,stroke-width:1px,color:#000
-    style D fill:#fff3cd,stroke:#333,stroke-width:1px,color:#000
-    style E fill:#d4edda,stroke:#333,stroke-width:1px,color:#000
-    style F fill:#f5c6cb,stroke:#333,stroke-width:1px,color:#000
+    style Client fill:#e9ecef,stroke:#333,stroke-width:2,color:#000
+    style F_Config fill:#cce5ff,stroke:#333,stroke-width:2,color:#000
+    style F_ConfigServer fill:#f8d7da,stroke:#333,stroke-width:2,color:#000
+    style F_EventStore fill:#f8d7da,stroke:#333,stroke-width:2,color:#000
+    style F_Telemetry fill:#f8d7da,stroke:#333,stroke-width:2,color:#000
+    style A fill:#fff3cd,stroke:#333,stroke-width:2,color:#000
+    style B fill:#fff3cd,stroke:#333,stroke-width:2,color:#000
+    style C fill:#fff3cd,stroke:#333,stroke-width:2,color:#000
+    style D fill:#fff3cd,stroke:#333,stroke-width:2,color:#000
+    style E fill:#d4edda,stroke:#333,stroke-width:2,color:#000
+    style F fill:#f5c6cb,stroke:#333,stroke-width:2,color:#000
 ```
 
 ## Protected Operation Flow
@@ -206,17 +206,17 @@ graph TD
     Operation -- "Failure (Exception)" --> OpFails
     Checkin --> Stop
 
-    style Start fill:#d4edda,stroke:#333,stroke-width:2px,color:#000
-    style Stop fill:#d4edda,stroke:#333,stroke-width:2px,color:#000
-    style RateLimited fill:#f8d7da,stroke:#333,stroke-width:2px,color:#000
-    style CircuitOpen fill:#f8d7da,stroke:#333,stroke-width:2px,color:#000
-    style PoolTimeout fill:#f8d7da,stroke:#333,stroke-width:2px,color:#000
-    style OpFails fill:#f8d7da,stroke:#333,stroke-width:2px,color:#000
-    style RateLimiter fill:#fff3cd,stroke:#333,stroke-width:1px,color:#000
-    style CircuitBreaker fill:#fff3cd,stroke:#333,stroke-width:1px,color:#000
-    style ConnectionPool fill:#fff3cd,stroke:#333,stroke-width:1px,color:#000
-    style Operation fill:#cce5ff,stroke:#333,stroke-width:1px,color:#000
-    style Checkin fill:#d1ecf1,stroke:#333,stroke-width:1px,color:#000
+    style Start fill:#d4edda,stroke:#333,stroke-width:2,color:#000
+    style Stop fill:#d4edda,stroke:#333,stroke-width:2,color:#000
+    style RateLimited fill:#f8d7da,stroke:#333,stroke-width:2,color:#000
+    style CircuitOpen fill:#f8d7da,stroke:#333,stroke-width:2,color:#000
+    style PoolTimeout fill:#f8d7da,stroke:#333,stroke-width:2,color:#000
+    style OpFails fill:#f8d7da,stroke:#333,stroke-width:2,color:#000
+    style RateLimiter fill:#fff3cd,stroke:#333,stroke-width:2,color:#000
+    style CircuitBreaker fill:#fff3cd,stroke:#333,stroke-width:2,color:#000
+    style ConnectionPool fill:#fff3cd,stroke:#333,stroke-width:2,color:#000
+    style Operation fill:#cce5ff,stroke:#333,stroke-width:2,color:#000
+    style Checkin fill:#d1ecf1,stroke:#333,stroke-width:2,color:#000
 ```
 
 ## Service Registration & Lookup Architecture
@@ -244,16 +244,16 @@ graph TD
         J -- "Returns final result" --> I
     end
 
-    style A fill:#e9ecef,stroke:#333,stroke-width:1px,color:#000
-    style E fill:#e9ecef,stroke:#333,stroke-width:1px,color:#000
-    style I fill:#e9ecef,stroke:#333,stroke-width:1px,color:#000
-    style B fill:#cce5ff,stroke:#333,stroke-width:2px,color:#000
-    style F fill:#cce5ff,stroke:#333,stroke-width:2px,color:#000
-    style J fill:#cce5ff,stroke:#333,stroke-width:2px,color:#000
-    style C fill:#d4edda,stroke:#333,stroke-width:1px,color:#000
-    style G fill:#d4edda,stroke:#333,stroke-width:1px,color:#000
-    style D fill:#d1ecf1,stroke:#333,stroke-width:1px,color:#000
-    style H fill:#d1ecf1,stroke:#333,stroke-width:1px,color:#000
+    style A fill:#e9ecef,stroke:#333,stroke-width:2,color:#000
+    style E fill:#e9ecef,stroke:#333,stroke-width:2,color:#000
+    style I fill:#e9ecef,stroke:#333,stroke-width:2,color:#000
+    style B fill:#cce5ff,stroke:#333,stroke-width:2,color:#000
+    style F fill:#cce5ff,stroke:#333,stroke-width:2,color:#000
+    style J fill:#cce5ff,stroke:#333,stroke-width:2,color:#000
+    style C fill:#d4edda,stroke:#333,stroke-width:2,color:#000
+    style G fill:#d4edda,stroke:#333,stroke-width:2,color:#000
+    style D fill:#d1ecf1,stroke:#333,stroke-width:2,color:#000
+    style H fill:#d1ecf1,stroke:#333,stroke-width:2,color:#000
 ```
 
 ## Error Context & Handling Flow
@@ -291,17 +291,17 @@ graph TD
     EmitTelemetry --> ErrorResult
     ErrorResult --> DeleteContext
 
-    style Start fill:#d4edda,stroke:#333,stroke-width:2px,color:#000
-    style Success fill:#d4edda,stroke:#333,stroke-width:2px,color:#000
-    style CatchException fill:#f8d7da,stroke:#333,stroke-width:2px,color:#000
-    style ErrorResult fill:#f8d7da,stroke:#333,stroke-width:2px,color:#000
-    style CreateContext fill:#fff3cd,stroke:#333,stroke-width:1px,color:#000
-    style WithContext fill:#fff3cd,stroke:#333,stroke-width:1px,color:#000
-    style PutContext fill:#fff3cd,stroke:#333,stroke-width:1px,color:#000
-    style ExecuteFun fill:#cce5ff,stroke:#333,stroke-width:1px,color:#000
-    style DeleteContext fill:#d1ecf1,stroke:#333,stroke-width:1px,color:#000
-    style EnhanceError fill:#f5c6cb,stroke:#333,stroke-width:1px,color:#000
-    style EmitTelemetry fill:#f5c6cb,stroke:#333,stroke-width:1px,color:#000
+    style Start fill:#d4edda,stroke:#333,stroke-width:2,color:#000
+    style Success fill:#d4edda,stroke:#333,stroke-width:2,color:#000
+    style CatchException fill:#f8d7da,stroke:#333,stroke-width:2,color:#000
+    style ErrorResult fill:#f8d7da,stroke:#333,stroke-width:2,color:#000
+    style CreateContext fill:#fff3cd,stroke:#333,stroke-width:2,color:#000
+    style WithContext fill:#fff3cd,stroke:#333,stroke-width:2,color:#000
+    style PutContext fill:#fff3cd,stroke:#333,stroke-width:2,color:#000
+    style ExecuteFun fill:#cce5ff,stroke:#333,stroke-width:2,color:#000
+    style DeleteContext fill:#d1ecf1,stroke:#333,stroke-width:2,color:#000
+    style EnhanceError fill:#f5c6cb,stroke:#333,stroke-width:2,color:#000
+    style EmitTelemetry fill:#f5c6cb,stroke:#333,stroke-width:2,color:#000
 ```
 
 ## Test Isolation Architecture
@@ -344,13 +344,13 @@ graph TD
     H -- "Cleans up Supervisor children" --> I
     H -- "Cleans up Registry entries" --> J
 
-    style A fill:#cce5ff,stroke:#333,stroke-width:2px,color:#000
-    style B fill:#d4edda,stroke:#333,stroke-width:1px,color:#000
-    style H fill:#f8d7da,stroke:#333,stroke-width:1px,color:#000
-    style C fill:#fff3cd,stroke:#333,stroke-width:1px,color:#000
-    style G fill:#fff3cd,stroke:#333,stroke-width:1px,color:#000
-    style I fill:#f5c6cb,stroke:#333,stroke-width:1px,color:#000
-    style J fill:#f5c6cb,stroke:#333,stroke-width:1px,color:#000
+    style A fill:#cce5ff,stroke:#333,stroke-width:2,color:#000
+    style B fill:#d4edda,stroke:#333,stroke-width:2,color:#000
+    style H fill:#f8d7da,stroke:#333,stroke-width:2,color:#000
+    style C fill:#fff3cd,stroke:#333,stroke-width:2,color:#000
+    style G fill:#fff3cd,stroke:#333,stroke-width:2,color:#000
+    style I fill:#f5c6cb,stroke:#333,stroke-width:2,color:#000
+    style J fill:#f5c6cb,stroke:#333,stroke-width:2,color:#000
 ```
 
 ## Core Data Model
@@ -425,13 +425,13 @@ classDiagram
     EventValidator ..> Event : validates
     EventValidator ..> Error : creates
     
-    style Config fill:#d4edda,stroke:#333,stroke-width:2px,color:#000
-    style Event fill:#d4edda,stroke:#333,stroke-width:2px,color:#000
-    style Error fill:#d4edda,stroke:#333,stroke-width:2px,color:#000
-    style ConfigLogic fill:#cce5ff,stroke:#333,stroke-width:1px,color:#000
-    style EventLogic fill:#cce5ff,stroke:#333,stroke-width:1px,color:#000
-    style ConfigValidator fill:#fff3cd,stroke:#333,stroke-width:1px,color:#000
-    style EventValidator fill:#fff3cd,stroke:#333,stroke-width:1px,color:#000
+    style Config fill:#d4edda,stroke:#333,stroke-width:2,color:#000
+    style Event fill:#d4edda,stroke:#333,stroke-width:2,color:#000
+    style Error fill:#d4edda,stroke:#333,stroke-width:2,color:#000
+    style ConfigLogic fill:#cce5ff,stroke:#333,stroke-width:1,color:#000
+    style EventLogic fill:#cce5ff,stroke:#333,stroke-width:1,color:#000
+    style ConfigValidator fill:#fff3cd,stroke:#333,stroke-width:1,color:#000
+    style EventValidator fill:#fff3cd,stroke:#333,stroke-width:1,color:#000
 ```
 
 ## Connection Pool Flow (`with_connection`)
@@ -531,10 +531,10 @@ stateDiagram-v2
     ClosedHealthy --> ManualReset: CircuitBreaker.reset()
     ManualReset --> ClosedHealthy
     
-    style ClosedHealthy fill:#d4edda,stroke:#333,stroke-width:2px,color:#000
-    style OpenTripped fill:#f8d7da,stroke:#333,stroke-width:2px,color:#000
-    style HalfOpenRecovering fill:#fff3cd,stroke:#333,stroke-width:2px,color:#000
-    style ManualReset fill:#d1ecf1,stroke:#333,stroke-width:1px,color:#000
+    style ClosedHealthy fill:#d4edda,stroke:#333,stroke-width:2,color:#000
+    style OpenTripped fill:#f8d7da,stroke:#333,stroke-width:2,color:#000
+    style HalfOpenRecovering fill:#fff3cd,stroke:#333,stroke-width:2,color:#000
+    style ManualReset fill:#d1ecf1,stroke:#333,stroke-width:1,color:#000
 ```
 
 ## Config Graceful Degradation Flow
@@ -558,16 +558,16 @@ flowchart TD
     
     E -- "No" --> I
 
-    style Start fill:#cce5ff,stroke:#333,stroke-width:2px,color:#000
-    style A fill:#fff3cd,stroke:#333,stroke-width:1px,color:#000
-    style E fill:#fff3cd,stroke:#333,stroke-width:1px,color:#000
-    style F fill:#fff3cd,stroke:#333,stroke-width:1px,color:#000
-    style B fill:#d1ecf1,stroke:#333,stroke-width:1px,color:#000
-    style D fill:#d1ecf1,stroke:#333,stroke-width:1px,color:#000
-    style H fill:#f8d7da,stroke:#333,stroke-width:1px,color:#000
-    style C fill:#d4edda,stroke:#333,stroke-width:2px,color:#000
-    style G fill:#d4edda,stroke:#333,stroke-width:2px,color:#000
-    style I fill:#f5c6cb,stroke:#333,stroke-width:2px,color:#000
+    style Start fill:#cce5ff,stroke:#333,stroke-width:2,color:#000
+    style A fill:#fff3cd,stroke:#333,stroke-width:2,color:#000
+    style E fill:#fff3cd,stroke:#333,stroke-width:2,color:#000
+    style F fill:#fff3cd,stroke:#333,stroke-width:2,color:#000
+    style B fill:#d1ecf1,stroke:#333,stroke-width:2,color:#000
+    style D fill:#d1ecf1,stroke:#333,stroke-width:2,color:#000
+    style H fill:#f8d7da,stroke:#333,stroke-width:2,color:#000
+    style C fill:#d4edda,stroke:#333,stroke-width:2,color:#000
+    style G fill:#d4edda,stroke:#333,stroke-width:2,color:#000
+    style I fill:#f5c6cb,stroke:#333,stroke-width:2,color:#000
 ```
 
 ## Summary
