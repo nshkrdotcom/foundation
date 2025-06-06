@@ -50,12 +50,7 @@ defmodule Foundation.Events do
       true
   """
   @spec available?() :: boolean()
-  def available?() do
-    case GenServer.whereis(EventStore) do
-      pid when is_pid(pid) -> true
-      nil -> false
-    end
-  end
+  defdelegate available?(), to: EventStore
 
   @doc """
   Create a new event with the given type and data.

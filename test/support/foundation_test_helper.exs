@@ -133,15 +133,11 @@ defmodule Foundation.TestHelpers do
   """
   @spec wait_for_all_services_available(non_neg_integer()) :: :ok | :timeout
   def wait_for_all_services_available(timeout_ms \\ 5000) do
-    services = [
-      Foundation.Services.ConfigServer,
-      Foundation.Services.EventStore,
-      Foundation.Services.TelemetryService
-    ]
-
     wait_for(
       fn ->
-        Enum.all?(services, fn service -> GenServer.whereis(service) != nil end)
+        Foundation.Config.available?() and
+          Foundation.Events.available?() and
+          Foundation.Telemetry.available?()
       end,
       timeout_ms
     )
