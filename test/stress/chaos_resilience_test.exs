@@ -325,6 +325,10 @@ defmodule Foundation.Stress.ChaosResilienceTest do
 
           _error ->
             :unhealthy
+        catch
+          # Handle EXIT signals from dead processes during chaos
+          :exit, _reason ->
+            :chaos_disrupted
         end
 
       service_statuses = check_service_availability_safely()
