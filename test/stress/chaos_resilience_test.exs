@@ -53,6 +53,7 @@ defmodule Foundation.Stress.ChaosResilienceTest do
 
     # Monitor recovery metrics beyond load duration to capture actual recovery
     recovery_end_time = start_time + load_duration + cooldown_period + 10_000
+
     recovery_monitor =
       Task.async(fn ->
         monitor_recovery_metrics(start_time, recovery_end_time)
