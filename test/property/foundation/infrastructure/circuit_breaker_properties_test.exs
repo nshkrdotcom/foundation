@@ -14,6 +14,12 @@ defmodule Foundation.Infrastructure.CircuitBreakerPropertiesTest do
 
   import StreamData
 
+  setup do
+    # Ensure Foundation is running for circuit breaker tests
+    Foundation.TestHelpers.ensure_foundation_running()
+    :ok
+  end
+
   # Property test generators
   defp circuit_name_generator do
     map(string(:printable, min_length: 1, max_length: 30), fn str ->

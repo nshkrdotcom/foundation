@@ -9,14 +9,15 @@ defmodule Foundation.Integration.EndToEndDataFlowTest do
   use ExUnit.Case, async: false
 
   alias Foundation.{Config, Events, Telemetry}
-  alias Foundation.Services.{EventStore, TelemetryService}
+  alias Foundation.Services.EventStore
   alias Foundation.TestHelpers
 
   setup do
-    # Ensure all services are available
-    :ok = TestHelpers.ensure_config_available()
-    :ok = EventStore.initialize()
-    :ok = TelemetryService.initialize()
+    # Ensure Foundation application and all services are available
+    :ok = TestHelpers.ensure_foundation_running()
+
+    # Wait for all services to be ready
+    :ok = TestHelpers.wait_for_all_services_available(3000)
 
     # Store original config for restoration
     {:ok, original_config} = Config.get()

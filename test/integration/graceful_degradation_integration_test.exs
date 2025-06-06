@@ -15,8 +15,17 @@ defmodule Foundation.Integration.GracefulDegradationIntegrationTest do
   @moduletag :integration
 
   setup do
+    # Ensure Foundation is running before each test
+    Foundation.TestHelpers.ensure_foundation_running()
+
     # Ensure all services are available at start
     Foundation.TestHelpers.wait_for_all_services_available(5000)
+
+    on_exit(fn ->
+      # Ensure Foundation is restarted after potentially destructive tests
+      Foundation.TestHelpers.ensure_foundation_running()
+    end)
+
     :ok
   end
 
