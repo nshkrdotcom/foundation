@@ -1,6 +1,19 @@
 # Infrastructure - Poolboy Integration
 
-Here is a deep dive into how the `foundation` library integrates `poolboy` for connection pooling, contrasting the direct `poolboy` pattern with the abstractions provided by the `ConnectionManager`.
+This document provides a detailed breakdown of how the `foundation` library integrates `poolboy` for connection pooling, contrasting the direct `poolboy` pattern with the abstractions provided by the `ConnectionManager`.
+
+## Overview
+
+The standard `poolboy` integration pattern involves directly calling `:poolboy.start_link/2` with a specific configuration keyword list. The `foundation` library abstracts this process within the **`ConnectionManager`** module to provide validation, logging, and a more user-friendly configuration format.
+
+The `foundation` library adheres to this pattern but provides a robust abstraction layer through its `Infrastructure` and `ConnectionManager` modules. This abstraction offers several advantages:
+
+- **Centralized Control:** Simplifies management of multiple connection pools.
+- **Configuration Translation:** Converts simple config formats into the specific keyword lists that `:poolboy.start_link` expects.
+- **Safety:** Wraps the checkout/checkin lifecycle in safe functions that prevent resource leakage.
+- **Observability:** Automatically emits telemetry events for pool operations and performance metrics.
+
+## The Integration in Detail
 
 ### 1. Starting a Pool: `poolboy:start_link`
 
@@ -155,18 +168,12 @@ end
 
 ---
 
-### 4. The Complete `foundation` Poolboy Flow
+## End-to-End Workflow
 
 This diagram visualizes the end-to-end flow, from starting a pool to using it via the `ConnectionManager`.
 
 ```mermaid
 sequenceDiagram
-    %% Define styles for participants
-    style App fill:#e9ecef,stroke:#333,stroke-width:1px,color:#000
-    style CM fill:#cce5ff,stroke:#333,stroke-width:2px,color:#000
-    style Poolboy fill:#d1ecf1,stroke:#333,stroke-width:1px,color:#000
-    style Worker fill:#d4edda,stroke:#333,stroke-width:1px,color:#000
-
     participant App as "Application Code"
     participant CM as "ConnectionManager"
     participant Poolboy as ":poolboy"
@@ -194,7 +201,9 @@ sequenceDiagram
 
 ---
 
-### 5. Summary: Comparison with `poolboy` Documentation
+## Comparison Summary
+
+This table summarizes how `foundation` implements the standard `poolboy` patterns.
 
 | `poolboy` Documentation Pattern | `foundation` Library Implementation |
 | :--- | :--- |
@@ -204,4 +213,4 @@ sequenceDiagram
 | Implement telemetry and logging for pool events manually. | Telemetry for checkouts, check-ins, and timeouts is **built into** the `ConnectionManager` wrapper. |
 | Manage multiple pools manually. | `ConnectionManager` is a **centralized GenServer** that manages the state and configuration of all active pools. |
 
-In essence, the `foundation` library provides a robust, safe, and observable "management layer" on top of `poolboy`, simplifying its use and integrating it tightly with the rest of the Foundation ecosystem.
+By using these abstractions, `foundation` provides a more integrated, observable, and developer-friendly way to leverage the power of `poolboy`'s connection pooling capabilities.
