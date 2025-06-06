@@ -14,7 +14,7 @@ rescue
   _ -> Process.sleep(100)
 end
 
-# Configure ExUnit
+# Configure ExUnit with callback to ensure Foundation is available before each test
 ExUnit.configure(
   exclude: [
     # Only exclude slow tests by default
@@ -29,6 +29,26 @@ ExUnit.configure(
   # Capture log output during tests
   capture_log: true
 )
+
+# Add a callback to ensure Foundation is running before each test
+ExUnit.after_suite(fn _results ->
+  try do
+    Application.stop(:foundation)
+  rescue
+    _ -> :ok
+  end
+end)
+
+# Hook to ensure Foundation is available before each test
+defmodule FoundationTestSetup do
+  use ExUnit.CaseTemplate
+
+  setup do
+    # Ensure Foundation is running before each test
+    Foundation.TestHelpers.ensure_foundation_running()
+    :ok
+  end
+end
 
 Code.require_file("support/foundation_test_helper.exs", __DIR__)
 Code.require_file("support/contract_test_helpers.exs", __DIR__)

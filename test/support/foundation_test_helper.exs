@@ -134,11 +134,7 @@ defmodule Foundation.TestHelpers do
   @spec wait_for_all_services_available(non_neg_integer()) :: :ok | :timeout
   def wait_for_all_services_available(timeout_ms \\ 5000) do
     # First ensure the Foundation application is running
-    unless Application.started_applications()
-           |> Enum.any?(fn {app, _, _} -> app == :foundation end) do
-      {:ok, _} = Application.ensure_all_started(:foundation)
-      Process.sleep(100)
-    end
+    ensure_foundation_running()
 
     wait_for(
       fn ->
@@ -150,9 +146,7 @@ defmodule Foundation.TestHelpers do
           # If there's an ArgumentError about unknown registry, restart Foundation
           error in ArgumentError ->
             if String.contains?(Exception.message(error), "unknown registry:") do
-              Application.stop(:foundation)
-              {:ok, _} = Application.ensure_all_started(:foundation)
-              Process.sleep(100)
+              ensure_foundation_running()
             end
 
             false
@@ -163,6 +157,32 @@ defmodule Foundation.TestHelpers do
       end,
       timeout_ms
     )
+  end
+
+  @doc """
+  Ensures the Foundation application is running and services are available.
+  """
+  @spec ensure_foundation_running() :: :ok
+  def ensure_foundation_running() do
+    unless Application.started_applications()
+           |> Enum.any?(fn {app, _, _} -> app == :foundation end) do
+      # Start the Foundation application
+      {:ok, _} = Application.ensure_all_started(:foundation)
+      Process.sleep(200)
+    else
+      # Application is running, but ProcessRegistry might be down
+      try do
+        Foundation.ProcessRegistry.stats()
+      rescue
+        _error in ArgumentError ->
+          # ProcessRegistry is down, restart Foundation
+          Application.stop(:foundation)
+          {:ok, _} = Application.ensure_all_started(:foundation)
+          Process.sleep(200)
+      end
+    end
+
+    :ok
   end
 
   # Event Creation
