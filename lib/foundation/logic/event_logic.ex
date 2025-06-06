@@ -26,7 +26,7 @@ defmodule Foundation.Logic.EventLogic do
         wall_time: Keyword.get(opts, :wall_time, DateTime.utc_now()),
         node: Keyword.get(opts, :node, Node.self()),
         pid: Keyword.get(opts, :pid, self()),
-        correlation_id: Keyword.get(opts, :correlation_id),
+        correlation_id: Keyword.get(opts, :correlation_id, Utils.generate_correlation_id()),
         parent_id: Keyword.get(opts, :parent_id),
         data: data
       )

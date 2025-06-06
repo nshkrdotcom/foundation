@@ -342,6 +342,34 @@ defmodule Foundation.Services.EventStore do
     {:reply, :ok, new_state}
   end
 
+  # Catch-all for unsupported operations (security protection)
+  @impl GenServer
+  def handle_call(unsupported_operation, _from, state) do
+    Logger.warning("Attempted unsupported EventStore operation: #{inspect(unsupported_operation)}")
+
+    operation_name =
+      case unsupported_operation do
+        {op, _} -> op
+        {op, _, _} -> op
+        op when is_atom(op) -> op
+        _ -> :unknown
+      end
+
+    error =
+      Error.new(
+        code: 4001,
+        error_type: :operation_not_supported,
+        message:
+          "EventStore operation not supported for security reasons: #{inspect(operation_name)}",
+        severity: :medium,
+        context: %{operation: operation_name},
+        category: :security,
+        subcategory: :access_control
+      )
+
+    {:reply, {:error, error}, state}
+  end
+
   @impl GenServer
   def handle_info(msg, state) do
     Logger.warning("Unexpected message in EventStore: #{inspect(msg)}")

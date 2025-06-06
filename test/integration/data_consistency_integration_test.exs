@@ -592,7 +592,16 @@ defmodule Foundation.Integration.DataConsistencyIntegrationTest do
         {:ok, _event_id} = Events.store(event)
       end
 
-      {:ok, verification_events} = Events.query(%{event_type: :recovery_verification, limit: 5})
+      # Query verification events by correlation ID to ensure isolation
+      {:ok, all_correlated_events} = Events.get_by_correlation(new_correlation_id)
+
+      # Filter to only recovery_verification events
+      verification_events =
+        Enum.filter(all_correlated_events, fn event ->
+          event.event_type == :recovery_verification
+        end)
+
+      # Should have exactly 3 events with our specific correlation ID
       assert length(verification_events) == 3
 
       # Telemetry should continue working

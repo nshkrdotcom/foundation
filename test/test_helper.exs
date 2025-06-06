@@ -2,34 +2,23 @@
 
 ExUnit.start()
 
-# The ProcessRegistry is already started by Foundation.Application
-# Just ensure test mode is configured for proper service behavior
+# Start the Foundation application explicitly for tests
+# This ensures all components including ProcessRegistry are available
+{:ok, _} = Application.ensure_all_started(:foundation)
+
+# Wait for critical services to be available
+try do
+  Foundation.ProcessRegistry.stats()
+  Process.sleep(50)
+rescue
+  _ -> Process.sleep(100)
+end
 
 # Configure ExUnit
 ExUnit.configure(
   exclude: [
-    # Exclude slow tests by default
-    :slow,
-    # Exclude end-to-end tests in unit test runs
-    :end_to_end,
-    # Exclude distributed tests (require multiple nodes)
-    :distributed,
-    # Exclude benchmarks in regular test runs
-    :benchmark,
-    # Exclude stress tests
-    :stress,
-    # Exclude security tests (can be resource intensive)
-    :security,
-    # Exclude performance tests (can be slow)
-    :performance,
-    # Exclude architecture tests (can be slow)
-    :architecture,
-    # Exclude observability tests (can be complex)
-    :observability,
-    # Exclude edge case tests (can be unpredictable)
-    :edge_cases,
-    # Exclude deployment tests (environment specific)
-    :deployment
+    # Only exclude slow tests by default
+    :slow
   ],
   # 30 seconds timeout
   timeout: 30_000,
@@ -59,15 +48,52 @@ defmodule Foundation.TestCase do
   end
 
   setup do
-    # Global test setup
-    # TODO: Add any global setup needed
+    # Ensure Foundation app is running before each test
+    case Foundation.available?() do
+      true ->
+        :ok
+
+      false ->
+        # Application is not available, restart it
+        Application.stop(:foundation)
+        {:ok, _} = Application.ensure_all_started(:foundation)
+
+        # Wait for ProcessRegistry to be available
+        retries = 10
+        wait_for_registry(retries)
+    end
 
     on_exit(fn ->
-      # Global test cleanup
-      :ok
+      # Ensure services are cleaned up but app stays running
+      try do
+        if Foundation.available?() do
+          # Clean up any test-specific state
+          :ok
+        else
+          # If Foundation is not available, restart it for the next test
+          Application.stop(:foundation)
+          {:ok, _} = Application.ensure_all_started(:foundation)
+          wait_for_registry(5)
+        end
+      rescue
+        _ -> :ok
+      end
     end)
 
     :ok
+  end
+
+  defp wait_for_registry(0), do: :ok
+
+  defp wait_for_registry(retries) do
+    try do
+      Foundation.ProcessRegistry.stats()
+      :ok
+    rescue
+      _ ->
+        Process.sleep(50)
+        wait_for_registry(retries - 1)
+    end
   end
 end
 
