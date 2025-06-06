@@ -17,7 +17,19 @@ ExUnit.configure(
     # Exclude benchmarks in regular test runs
     :benchmark,
     # Exclude stress tests
-    :stress
+    :stress,
+    # Exclude security tests (can be resource intensive)
+    :security,
+    # Exclude performance tests (can be slow)
+    :performance,
+    # Exclude architecture tests (can be slow)
+    :architecture,
+    # Exclude observability tests (can be complex)
+    :observability,
+    # Exclude edge case tests (can be unpredictable)
+    :edge_cases,
+    # Exclude deployment tests (environment specific)
+    :deployment
   ],
   # 30 seconds timeout
   timeout: 30_000,
@@ -30,6 +42,7 @@ ExUnit.configure(
 )
 
 Code.require_file("support/foundation_test_helper.exs", __DIR__)
+Code.require_file("support/contract_test_helpers.exs", __DIR__)
 
 # Global test setup
 defmodule Foundation.TestCase do

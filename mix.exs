@@ -184,7 +184,13 @@ defmodule Foundation.MixProject do
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:excoveralls, "~> 0.18", only: :test},
-      {:mix_test_watch, "~> 1.1", only: [:dev, :test], runtime: false}
+      {:mix_test_watch, "~> 1.1", only: [:dev, :test], runtime: false},
+
+      # Enhanced testing dependencies
+      {:benchee, "~> 1.2", only: [:dev, :test], runtime: false},
+      {:benchee_html, "~> 1.0", only: [:dev, :test], runtime: false},
+      {:ex_unit_notifier, "~> 1.3", only: [:dev, :test], runtime: false},
+      {:mix_test_interactive, "~> 2.0", only: [:dev, :test], runtime: false}
     ]
   end
 
@@ -196,6 +202,19 @@ defmodule Foundation.MixProject do
       "test.contract": ["test test/contract/"],
       "test.integration": ["test test/integration/"],
       "test.all": ["test"],
+
+      # Enhanced testing aliases
+      "test.stress": ["test test/stress/ --include stress"],
+      "test.security": ["test test/security/ --include security"],
+      "test.performance": ["test test/performance/ --include performance"],
+      "test.architecture": ["test test/architecture/ --include architecture"],
+      "test.observability": ["test test/observability/ --include observability"],
+      "test.edge_cases": ["test test/edge_cases/ --include edge_cases"],
+      "test.deployment": ["test test/deployment/ --include deployment"],
+      "test.benchmark": ["test test/benchmark/ --include benchmark"],
+      "test.comprehensive": [
+        "test --include stress --include security --include performance --include architecture --include observability --include edge_cases --include deployment"
+      ],
 
       # Quality assurance
       "qa.format": ["format --check-formatted"],
