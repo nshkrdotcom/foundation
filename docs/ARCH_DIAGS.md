@@ -424,14 +424,6 @@ classDiagram
     EventLogic ..> Error : creates
     EventValidator ..> Event : validates
     EventValidator ..> Error : creates
-    
-    style Config fill:#d4edda,stroke:#333,stroke-width:2,color:#000
-    style Event fill:#d4edda,stroke:#333,stroke-width:2,color:#000
-    style Error fill:#d4edda,stroke:#333,stroke-width:2,color:#000
-    style ConfigLogic fill:#cce5ff,stroke:#333,stroke-width:1,color:#000
-    style EventLogic fill:#cce5ff,stroke:#333,stroke-width:1,color:#000
-    style ConfigValidator fill:#fff3cd,stroke:#333,stroke-width:1,color:#000
-    style EventValidator fill:#fff3cd,stroke:#333,stroke-width:1,color:#000
 ```
 
 ## Connection Pool Flow (`with_connection`)
@@ -530,11 +522,6 @@ stateDiagram-v2
     OpenTripped --> ManualReset: CircuitBreaker.reset()
     ClosedHealthy --> ManualReset: CircuitBreaker.reset()
     ManualReset --> ClosedHealthy
-    
-    style ClosedHealthy fill:#d4edda,stroke:#333,stroke-width:2,color:#000
-    style OpenTripped fill:#f8d7da,stroke:#333,stroke-width:2,color:#000
-    style HalfOpenRecovering fill:#fff3cd,stroke:#333,stroke-width:2,color:#000
-    style ManualReset fill:#d1ecf1,stroke:#333,stroke-width:1,color:#000
 ```
 
 ## Config Graceful Degradation Flow
