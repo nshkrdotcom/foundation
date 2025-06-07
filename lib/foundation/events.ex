@@ -187,14 +187,19 @@ defmodule Foundation.Events do
   @doc """
   Store a single event.
 
+  Accepts both Event structs and {:ok, Event} tuples for pipe-friendly usage.
+
   ## Examples
 
       iex> {:ok, event} = Event.new(event_type: :test, data: %{key: "value"})
       iex> Foundation.Events.store(event)
       {:ok, 12345}
+
+      iex> Foundation.Events.new_event(:test, %{key: "value"}) |> Foundation.Events.store()
+      {:ok, 12345}
   """
-  @spec store(Event.t()) :: {:ok, event_id()} | {:error, Error.t()}
-  defdelegate store(event), to: EventStore
+  @spec store(Event.t() | {:ok, Event.t()}) :: {:ok, event_id()} | {:error, Error.t()}
+  defdelegate store(event_or_tuple), to: EventStore
 
   @doc """
   Store multiple events atomically.
