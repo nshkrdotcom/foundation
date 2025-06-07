@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2025-06-07
+
+### Added
+- **Circuit Breaker Initialization**: Added missing `Foundation.Infrastructure.initialize_circuit_breaker/1` and `initialize_circuit_breaker/2` functions for proper circuit breaker setup
+- **Telemetry Histogram API**: Implemented complete histogram metrics API with `Foundation.Telemetry.emit_histogram/2` and `emit_histogram/3` functions
+- **Comprehensive Documentation**: Added detailed `@doc` annotations with examples for all new public APIs
+- **Input Validation**: Added robust validation for circuit breaker configurations and telemetry event names
+- **Test Coverage**: Implemented comprehensive test suites using Test-Driven Development (TDD) approach
+
+### Fixed
+- **Type Specifications**: Corrected Dialyzer type specifications for non-empty event name lists (`[atom(), ...]`)
+- **Behaviour Compliance**: Updated `Foundation.Contracts.Telemetry` behaviour to include histogram callback definitions
+- **Error Handling**: Enhanced error messages with proper `Foundation.Types.Error` structures and context information
+- **Test Isolation**: Fixed circuit breaker test conflicts by using unique identifiers for test instances
+
+### Improved
+- **Code Quality**: All implementations now fully comply with Foundation's code quality standards including proper module documentation, type specifications, and error handling patterns
+- **API Consistency**: Histogram API follows the same patterns as existing counter and gauge functions
+- **Validation Strictness**: Enhanced input validation with clear error messages for invalid event names, configuration values, and parameter types
+
+### Developer Experience
+- **Complete API Coverage**: Foundation now provides a fully functional infrastructure and telemetry API without gaps
+- **Better Error Messages**: Detailed validation errors help developers quickly identify and fix configuration issues
+- **Comprehensive Examples**: All public functions include practical usage examples in their documentation
+
 ## [0.1.1] - 2025-06-06
 
 ### Added
@@ -70,5 +95,6 @@ Initial release of Foundation - A comprehensive Elixir infrastructure and observ
 - Infrastructure component guides
 - Usage examples and best practices
 
+[0.1.2]: https://github.com/nshkrdotcom/foundation/releases/tag/v0.1.2
 [0.1.1]: https://github.com/nshkrdotcom/foundation/releases/tag/v0.1.1
 [0.1.0]: https://github.com/nshkrdotcom/foundation/releases/tag/v0.1.0
