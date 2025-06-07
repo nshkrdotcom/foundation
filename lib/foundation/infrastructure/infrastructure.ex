@@ -284,6 +284,113 @@ defmodule Foundation.Infrastructure do
     end
   end
 
+  @doc """
+  Initialize a circuit breaker with the given configuration.
+
+  Creates and configures a circuit breaker that can be used with execute_protected.
+  The circuit breaker will use the :fuse library for the actual circuit breaking logic.
+
+  ## Parameters
+  - `name` - Atom identifier for the circuit breaker
+  - `config` - Configuration map with required keys
+
+  ## Configuration Keys
+  - `:failure_threshold` - Number of failures before opening circuit (required)
+  - `:recovery_time` - Time in milliseconds before attempting recovery (required)
+
+  ## Examples
+
+      # Initialize with custom configuration
+      :ok = Infrastructure.initialize_circuit_breaker(:api_breaker, %{
+        failure_threshold: 5,
+        recovery_time: 30_000
+      })
+
+      # Use in execute_protected
+      Infrastructure.execute_protected(:api, [circuit_breaker: :api_breaker], fn ->
+        # Your operation here
+      end)
+
+  ## Returns
+  - `:ok` - Circuit breaker initialized successfully
+  - `{:error, reason}` - Initialization failed
+  """
+  @spec initialize_circuit_breaker(atom(), map()) :: :ok | {:error, Error.t()}
+  def initialize_circuit_breaker(name, config) when is_atom(name) and is_map(config) do
+    with :ok <- validate_circuit_breaker_name(name),
+         :ok <- validate_circuit_breaker_init_config(config),
+         :ok <- ensure_circuit_breaker_not_exists(name) do
+      # Convert Foundation config to Fuse format
+      fuse_config = [
+        strategy: :standard,
+        tolerance: config.failure_threshold,
+        refresh: config.recovery_time
+      ]
+
+      case CircuitBreaker.start_fuse_instance(name, fuse_config) do
+        :ok ->
+          Logger.info("Initialized circuit breaker #{inspect(name)} with config #{inspect(config)}")
+          :ok
+
+        {:error, reason} ->
+          {:error,
+           Error.new(
+             error_type: :circuit_breaker_init_failed,
+             message: "Failed to initialize circuit breaker #{inspect(name)}: #{inspect(reason)}",
+             context: %{name: name, config: config, fuse_reason: reason}
+           )}
+      end
+    end
+  end
+
+  def initialize_circuit_breaker(name, config) do
+    {:error,
+     Error.new(
+       error_type: :invalid_arguments,
+       message: "Circuit breaker name must be an atom and config must be a map",
+       context: %{name: name, config: config}
+     )}
+  end
+
+  @doc """
+  Initialize a circuit breaker with default configuration.
+
+  Uses sensible defaults for failure threshold and recovery time.
+
+  ## Parameters
+  - `name` - Atom identifier for the circuit breaker
+
+  ## Default Configuration
+  - `:failure_threshold` - 5 failures
+  - `:recovery_time` - 30,000 milliseconds (30 seconds)
+
+  ## Examples
+
+      :ok = Infrastructure.initialize_circuit_breaker(:default_breaker)
+
+  ## Returns
+  - `:ok` - Circuit breaker initialized successfully
+  - `{:error, reason}` - Initialization failed
+  """
+  @spec initialize_circuit_breaker(atom()) :: :ok | {:error, Error.t()}
+  def initialize_circuit_breaker(name) when is_atom(name) do
+    default_config = %{
+      failure_threshold: 5,
+      recovery_time: 30_000
+    }
+
+    initialize_circuit_breaker(name, default_config)
+  end
+
+  def initialize_circuit_breaker(name) do
+    {:error,
+     Error.new(
+       error_type: :invalid_name,
+       message: "Circuit breaker name must be an atom",
+       context: %{name: name}
+     )}
+  end
+
   ## Private Functions
 
   @spec ensure_config_agent_started() :: :ok | {:error, term()}
@@ -511,6 +618,139 @@ defmodule Foundation.Infrastructure do
     rescue
       exception ->
         {:error, {:infrastructure_init_failed, exception}}
+    end
+  end
+
+  # Helper functions for circuit breaker initialization
+
+  @spec validate_circuit_breaker_name(term()) :: :ok | {:error, Error.t()}
+  defp validate_circuit_breaker_name(name) when is_atom(name) and not is_nil(name) do
+    case Atom.to_string(name) do
+      "" ->
+        {:error,
+         Error.new(
+           error_type: :invalid_name,
+           message: "Circuit breaker name cannot be an empty atom",
+           context: %{name: name}
+         )}
+
+      _valid_name ->
+        :ok
+    end
+  end
+
+  defp validate_circuit_breaker_name(name) do
+    {:error,
+     Error.new(
+       error_type: :invalid_name,
+       message: "Circuit breaker name must be a non-nil atom",
+       context: %{name: name, type: get_type(name)}
+     )}
+  end
+
+  @spec validate_circuit_breaker_init_config(term()) :: :ok | {:error, Error.t()}
+  defp validate_circuit_breaker_init_config(config) when is_map(config) do
+    with :ok <- validate_failure_threshold(config),
+         :ok <- validate_recovery_time(config) do
+      :ok
+    end
+  end
+
+  defp validate_circuit_breaker_init_config(config) do
+    {:error,
+     Error.new(
+       error_type: :invalid_configuration,
+       message: "Circuit breaker configuration must be a map",
+       context: %{config: config, type: get_type(config)}
+     )}
+  end
+
+  @spec validate_failure_threshold(map()) :: :ok | {:error, Error.t()}
+  defp validate_failure_threshold(%{failure_threshold: threshold})
+       when is_integer(threshold) and threshold > 0 do
+    :ok
+  end
+
+  defp validate_failure_threshold(%{failure_threshold: threshold}) do
+    {:error,
+     Error.new(
+       error_type: :invalid_configuration,
+       message: "failure_threshold must be a positive integer",
+       context: %{failure_threshold: threshold, type: get_type(threshold)}
+     )}
+  end
+
+  defp validate_failure_threshold(_config) do
+    {:error,
+     Error.new(
+       error_type: :invalid_configuration,
+       message: "failure_threshold is required",
+       context: %{missing_key: :failure_threshold}
+     )}
+  end
+
+  @spec validate_recovery_time(map()) :: :ok | {:error, Error.t()}
+  defp validate_recovery_time(%{recovery_time: time})
+       when is_integer(time) and time > 0 do
+    :ok
+  end
+
+  defp validate_recovery_time(%{recovery_time: time}) do
+    {:error,
+     Error.new(
+       error_type: :invalid_configuration,
+       message: "recovery_time must be a positive integer (milliseconds)",
+       context: %{recovery_time: time, type: get_type(time)}
+     )}
+  end
+
+  defp validate_recovery_time(_config) do
+    {:error,
+     Error.new(
+       error_type: :invalid_configuration,
+       message: "recovery_time is required",
+       context: %{missing_key: :recovery_time}
+     )}
+  end
+
+  @spec ensure_circuit_breaker_not_exists(atom()) :: :ok | {:error, Error.t()}
+  defp ensure_circuit_breaker_not_exists(name) do
+    case Foundation.Infrastructure.CircuitBreaker.get_status(name) do
+      :ok ->
+        {:error,
+         Error.new(
+           error_type: :already_exists,
+           message: "Circuit breaker #{inspect(name)} already exists",
+           context: %{name: name}
+         )}
+
+      {:error, _} ->
+        # Circuit breaker doesn't exist, which is what we want
+        :ok
+
+      :blown ->
+        {:error,
+         Error.new(
+           error_type: :already_exists,
+           message: "Circuit breaker #{inspect(name)} already exists (currently blown)",
+           context: %{name: name, status: :blown}
+         )}
+    end
+  end
+
+  @spec get_type(term()) :: atom()
+  defp get_type(value) do
+    cond do
+      is_atom(value) -> :atom
+      is_binary(value) -> :string
+      is_integer(value) -> :integer
+      is_float(value) -> :float
+      is_list(value) -> :list
+      is_map(value) -> :map
+      is_tuple(value) -> :tuple
+      is_pid(value) -> :pid
+      is_function(value) -> :function
+      true -> :unknown
     end
   end
 end

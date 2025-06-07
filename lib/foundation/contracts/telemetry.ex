@@ -8,7 +8,7 @@ defmodule Foundation.Contracts.Telemetry do
 
   alias Foundation.Types.Error
 
-  @type event_name :: [atom()]
+  @type event_name :: [atom(), ...]
   @type measurements :: map()
   @type metadata :: map()
   @type metric_value :: number()
@@ -32,6 +32,24 @@ defmodule Foundation.Contracts.Telemetry do
   Emit a gauge metric.
   """
   @callback emit_gauge(event_name(), metric_value(), metadata()) :: :ok
+
+  @doc """
+  Emit a histogram metric for distribution analysis.
+
+  Histograms track the distribution of values over time and are useful for
+  measuring latencies, response sizes, and other continuous metrics.
+
+  ## Parameters
+  - `event_name` - List of atoms representing the telemetry event path
+  - `value` - Numeric value to record in the histogram
+  - `metadata` - Optional map containing additional context (defaults to empty map)
+
+  ## Examples
+      emit_histogram([:api, :request_duration], 150, %{endpoint: "/users"})
+      emit_histogram([:database, :query_time], 45.5)
+  """
+  @callback emit_histogram(event_name(), metric_value(), metadata()) :: :ok
+  @callback emit_histogram(event_name(), metric_value()) :: :ok
 
   @doc """
   Get collected metrics.
