@@ -15,8 +15,10 @@ defmodule Foundation.Contracts.EventStore do
 
   @doc """
   Store a single event.
+
+  Accepts both Event structs and {:ok, Event} tuples for pipe-friendly usage.
   """
-  @callback store(Event.t()) :: {:ok, event_id()} | {:error, Error.t()}
+  @callback store(Event.t() | {:ok, Event.t()}) :: {:ok, event_id()} | {:error, Error.t()}
 
   @doc """
   Store multiple events atomically.

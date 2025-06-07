@@ -24,11 +24,36 @@ defmodule Foundation.Services.EventStore do
   ## Public API (EventStore Behaviour Implementation)
 
   @impl EventStoreContract
-  @spec store(Event.t()) :: {:ok, non_neg_integer()} | {:error, Error.t()}
-  def store(event) do
-    case Foundation.ServiceRegistry.lookup(:production, :event_store) do
-      {:ok, pid} -> GenServer.call(pid, {:store_event, event})
-      {:error, _} -> create_service_error("Event store not available")
+  @spec store(Event.t() | {:ok, Event.t()}) :: {:ok, non_neg_integer()} | {:error, Error.t()}
+  def store(event_or_tuple) do
+    # Handle both direct Event.t() and {:ok, Event.t()} for pipe-friendly API
+    case event_or_tuple do
+      {:ok, %Event{} = event} ->
+        case Foundation.ServiceRegistry.lookup(:production, :event_store) do
+          {:ok, pid} -> GenServer.call(pid, {:store_event, event})
+          {:error, _} -> create_service_error("Event store not available")
+        end
+
+      %Event{} = event ->
+        case Foundation.ServiceRegistry.lookup(:production, :event_store) do
+          {:ok, pid} -> GenServer.call(pid, {:store_event, event})
+          {:error, _} -> create_service_error("Event store not available")
+        end
+
+      {:error, _} = error ->
+        error
+
+      _ ->
+        {:error,
+         Error.new(
+           code: 2005,
+           error_type: :invalid_argument,
+           message: "Expected Event struct or {:ok, Event} tuple",
+           severity: :high,
+           context: %{received: event_or_tuple},
+           category: :data,
+           subcategory: :validation
+         )}
     end
   end
 

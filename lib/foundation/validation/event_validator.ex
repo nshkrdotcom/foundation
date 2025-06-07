@@ -171,6 +171,7 @@ defmodule Foundation.Validation.EventValidator do
       :test1,
       :test2,
       :test3,
+      :test_event,
       :default,
       :type_a,
       :type_b

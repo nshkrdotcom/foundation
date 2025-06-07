@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] - 2025-06-07
+
+### Fixed
+- **Events API Pipe Chain Support**: Fixed critical bug where `Foundation.Events.new_event(...) |> Foundation.Events.store()` pattern crashed with `FunctionClauseError`
+- **Event Store Contract**: Updated `Foundation.Services.EventStore.store/1` to accept both `Event.t()` and `{:ok, Event.t()}` for pipe-friendly usage
+- **API Documentation Compliance**: The documented pipe chain pattern now works as advertised in all API examples
+- **Event Type Validation**: Added `:test_event` to allowed event types for better test coverage
+
+### Improved
+- **Developer Experience**: Foundation Events API now supports both traditional and pipe chain usage patterns without breaking existing code
+- **Backward Compatibility**: All existing code using `{:ok, event} = new_event(...); store(event)` pattern continues to work unchanged
+- **Error Handling**: Enhanced `store/1` function with proper validation for invalid input types
+- **API Consistency**: Foundation now delivers on its documented promise of pipe-friendly Elixir APIs
+
+### Developer Impact
+- **No Breaking Changes**: Existing code continues to work exactly as before
+- **Enhanced Usability**: Users can now use the more natural pipe chain pattern as documented
+- **Better Test Coverage**: Fixed gap where documentation examples weren't being tested in practice
+
 ## [0.1.2] - 2025-06-07
 
 ### Added
@@ -95,6 +114,7 @@ Initial release of Foundation - A comprehensive Elixir infrastructure and observ
 - Infrastructure component guides
 - Usage examples and best practices
 
+[0.1.3]: https://github.com/nshkrdotcom/foundation/releases/tag/v0.1.3
 [0.1.2]: https://github.com/nshkrdotcom/foundation/releases/tag/v0.1.2
 [0.1.1]: https://github.com/nshkrdotcom/foundation/releases/tag/v0.1.1
 [0.1.0]: https://github.com/nshkrdotcom/foundation/releases/tag/v0.1.0
