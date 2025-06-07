@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2025-01-28
+
+### Fixed
+- **ConnectionManager Test Stability**: Fixed race condition in ConnectionManager test suite where worker crashes during pool transactions caused timing-dependent test failures
+- **MockWorker Error Simulation**: Improved MockWorker's `:simulate_error` behavior to use GenServer continue callbacks for deterministic reply-then-crash semantics
+- **Pool Recovery Testing**: Enhanced error scenario tests to accept both valid outcomes when workers crash during pool transactions (either worker response or ConnectionManager error handling)
+- **Test Robustness**: Added appropriate delays for pool recovery verification to ensure Poolboy has time to restart crashed workers
+
+### Improved
+- **Test Reliability**: ConnectionManager tests now pass consistently without relying on fragile timing assumptions
+- **Error Handling Coverage**: Tests now properly validate both immediate worker responses and ConnectionManager's protective error handling
+- **Code Quality**: Eliminated compiler warnings for function clause ordering in test support modules
+
+### Technical Details
+- Enhanced MockWorker to use `{:reply, :error, state, {:continue, :shutdown}}` pattern for reliable reply-before-crash behavior
+- Updated test assertions to accept both `{:ok, :error}` (worker response) and `{:error, reason}` (ConnectionManager protection) as valid outcomes
+- Added minimal recovery delays only where necessary for infrastructure-level testing (pool supervisor restart detection)
+
 ## [0.1.3] - 2025-06-07
 
 ### Fixed
@@ -114,6 +132,7 @@ Initial release of Foundation - A comprehensive Elixir infrastructure and observ
 - Infrastructure component guides
 - Usage examples and best practices
 
+[0.1.4]: https://github.com/nshkrdotcom/foundation/releases/tag/v0.1.4
 [0.1.3]: https://github.com/nshkrdotcom/foundation/releases/tag/v0.1.3
 [0.1.2]: https://github.com/nshkrdotcom/foundation/releases/tag/v0.1.2
 [0.1.1]: https://github.com/nshkrdotcom/foundation/releases/tag/v0.1.1
