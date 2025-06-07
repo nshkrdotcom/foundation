@@ -29,9 +29,8 @@ defmodule MockWorker do
   end
 
   def handle_call(:simulate_error, _from, state) do
-    # Return error first, then schedule stop to happen after reply
-    Process.send_after(self(), :stop, 0)
-    {:reply, :error, state}
+    # Reply with error, then continue to shutdown after reply is sent
+    {:reply, :error, state, {:continue, :shutdown}}
   end
 
   def handle_call(:simulate_immediate_crash, _from, _state) do
@@ -39,7 +38,8 @@ defmodule MockWorker do
     exit(:simulated_error)
   end
 
-  def handle_info(:stop, state) do
+  def handle_continue(:shutdown, state) do
+    # This runs after the reply has been sent
     {:stop, :simulated_error, state}
   end
 end
