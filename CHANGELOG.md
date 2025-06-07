@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.4] - 2025-01-28
+## [0.1.4] - 2025-06-06
 
 ### Fixed
 - **ConnectionManager Test Stability**: Fixed race condition in ConnectionManager test suite where worker crashes during pool transactions caused timing-dependent test failures
@@ -42,7 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Enhanced Usability**: Users can now use the more natural pipe chain pattern as documented
 - **Better Test Coverage**: Fixed gap where documentation examples weren't being tested in practice
 
-## [0.1.2] - 2025-06-07
+## [0.1.2] - 2025-06-06
 
 ### Added
 - **Circuit Breaker Initialization**: Added missing `Foundation.Infrastructure.initialize_circuit_breaker/1` and `initialize_circuit_breaker/2` functions for proper circuit breaker setup
