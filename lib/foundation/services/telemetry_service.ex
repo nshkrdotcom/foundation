@@ -90,6 +90,131 @@ defmodule Foundation.Services.TelemetryService do
     execute(event_name, measurements, metadata)
   end
 
+  @doc """
+  Emit a histogram metric for distribution analysis.
+
+  Histograms track the distribution of values over time and are useful for
+  measuring latencies, sizes, and other continuous metrics.
+
+  ## Parameters
+  - `event_name` - List of atoms representing the telemetry event path
+  - `value` - Numeric value to record in the histogram
+  - `metadata` - Map containing additional context for the measurement
+
+  ## Examples
+
+      iex> emit_histogram([:api, :request_duration], 150, %{endpoint: "/users"})
+      :ok
+
+      iex> emit_histogram([:database, :query_time], 45.5, %{table: "users"})
+      :ok
+
+  ## Returns
+  - `:ok` - Metric emitted successfully
+
+  ## Raises
+  - `ArgumentError` - If event_name is not a list of atoms, value is not numeric,
+    or metadata is not a map
+  """
+  @impl Telemetry
+  @spec emit_histogram([atom(), ...], number(), map()) :: :ok
+  def emit_histogram(event_name, value, metadata)
+      when is_list(event_name) and is_number(value) and is_map(metadata) do
+    # Validate event name contains only atoms and is not empty
+    cond do
+      event_name == [] ->
+        raise ArgumentError, "Event name cannot be empty"
+
+      not Enum.all?(event_name, &is_atom/1) ->
+        raise ArgumentError, "Event name must be a list of atoms, got: #{inspect(event_name)}"
+
+      true ->
+        measurements = %{histogram: value}
+        execute(event_name, measurements, metadata)
+    end
+  end
+
+  def emit_histogram(event_name, value, metadata) do
+    cond do
+      not is_list(event_name) ->
+        raise ArgumentError, "Event name must be a list of atoms, got: #{inspect(event_name)}"
+
+      event_name == [] ->
+        raise ArgumentError, "Event name cannot be empty"
+
+      not Enum.all?(event_name, &is_atom/1) ->
+        raise ArgumentError, "Event name must be a list of atoms, got: #{inspect(event_name)}"
+
+      not is_number(value) ->
+        raise ArgumentError, "Value must be a number, got: #{inspect(value)}"
+
+      not is_map(metadata) ->
+        raise ArgumentError, "Metadata must be a map, got: #{inspect(metadata)}"
+
+      true ->
+        raise ArgumentError, "Invalid arguments for emit_histogram/3"
+    end
+  end
+
+  @doc """
+  Emit a histogram metric with default empty metadata.
+
+  Convenience function for emitting histogram metrics when no additional
+  context is needed.
+
+  ## Parameters
+  - `event_name` - List of atoms representing the telemetry event path
+  - `value` - Numeric value to record in the histogram
+
+  ## Examples
+
+      iex> emit_histogram([:response, :size], 1024)
+      :ok
+
+      iex> emit_histogram([:processing, :duration], 250.5)
+      :ok
+
+  ## Returns
+  - `:ok` - Metric emitted successfully
+
+  ## Raises
+  - `ArgumentError` - If event_name is not a list of atoms or value is not numeric
+  """
+  @impl Telemetry
+  @spec emit_histogram([atom(), ...], number()) :: :ok
+  def emit_histogram(event_name, value) when is_list(event_name) and is_number(value) do
+    # Validate event name contains only atoms and is not empty
+    cond do
+      event_name == [] ->
+        raise ArgumentError, "Event name cannot be empty"
+
+      not Enum.all?(event_name, &is_atom/1) ->
+        raise ArgumentError, "Event name must be a list of atoms, got: #{inspect(event_name)}"
+
+      true ->
+        emit_histogram(event_name, value, %{})
+    end
+  end
+
+  def emit_histogram(event_name, value) do
+    cond do
+      not is_list(event_name) ->
+        raise ArgumentError, "Event name must be a list of atoms, got: #{inspect(event_name)}"
+
+      event_name == [] ->
+        raise ArgumentError, "Event name cannot be empty"
+
+      not Enum.all?(event_name, &is_atom/1) ->
+        raise ArgumentError, "Event name must be a list of atoms, got: #{inspect(event_name)}"
+
+      not is_number(value) ->
+        raise ArgumentError, "Value must be a number, got: #{inspect(value)}"
+
+      true ->
+        raise ArgumentError, "Invalid arguments for emit_histogram/2"
+    end
+  end
+
   @impl Telemetry
   @spec get_metrics() :: {:ok, map()} | {:error, Error.t()}
   def get_metrics do

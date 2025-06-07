@@ -100,6 +100,41 @@ defmodule Foundation.Telemetry do
   defdelegate emit_gauge(event_name, value, metadata), to: TelemetryService
 
   @doc """
+  Emit a histogram metric for distribution analysis.
+
+  Histograms are used to track the distribution of values over time,
+  useful for measuring latencies, sizes, and other continuous metrics.
+
+  ## Examples
+
+      iex> Foundation.Telemetry.emit_histogram(
+      ...>   [:api, :request_duration],
+      ...>   150,
+      ...>   %{endpoint: "/users"}
+      ...> )
+      :ok
+
+      iex> Foundation.Telemetry.emit_histogram(
+      ...>   [:database, :query_time],
+      ...>   23.5
+      ...> )
+      :ok
+  """
+  @spec emit_histogram([atom(), ...], number(), map()) :: :ok
+  defdelegate emit_histogram(event_name, value, metadata), to: TelemetryService
+
+  @doc """
+  Emit a histogram metric with default empty metadata.
+
+  ## Examples
+
+      iex> Foundation.Telemetry.emit_histogram([:response, :size], 1024)
+      :ok
+  """
+  @spec emit_histogram([atom(), ...], number()) :: :ok
+  defdelegate emit_histogram(event_name, value), to: TelemetryService
+
+  @doc """
   Get collected metrics.
 
   ## Examples
