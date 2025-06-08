@@ -38,7 +38,7 @@ defmodule Foundation.Application do
       # {Foundation.AI.Orchestrator, []},
     ]
 
-    children = base_children ++ test_children()
+    children = base_children ++ test_children() ++ tidewave_children()
 
     opts = [strategy: :one_for_one, name: Foundation.Supervisor]
 
@@ -67,4 +67,14 @@ defmodule Foundation.Application do
       []
     end
   end
+
+  # Private function to add Tidewave in development
+  defp tidewave_children do
+    if Mix.env() == :dev and Code.ensure_loaded?(Tidewave) do
+      [Foundation.TidewaveEndpoint]
+    else
+      []
+    end
+  end
+
 end
