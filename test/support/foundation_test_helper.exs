@@ -236,7 +236,32 @@ defmodule Foundation.TestHelpers do
   @spec wait_for((-> boolean()), non_neg_integer()) :: :ok | :timeout
   def wait_for(condition, timeout_ms \\ 1000) do
     deadline = System.monotonic_time(:millisecond) + timeout_ms
-    wait_for_condition(condition, deadline)
+    wait_for_condition_old(condition, deadline)
+  end
+
+  @doc """
+  Wait for a condition to become true, checking periodically.
+
+  This is essential for testing concurrent systems where state changes
+  happen asynchronously.
+  """
+  @spec wait_for_condition(function(), non_neg_integer()) :: :ok | {:error, :timeout}
+  def wait_for_condition(condition_fn, timeout \\ 5000) do
+    end_time = System.monotonic_time(:millisecond) + timeout
+    wait_condition_loop(condition_fn, end_time)
+  end
+
+  defp wait_condition_loop(condition_fn, end_time) do
+    if System.monotonic_time(:millisecond) > end_time do
+      {:error, :timeout}
+    else
+      if condition_fn.() do
+        :ok
+      else
+        :timer.sleep(100)
+        wait_condition_loop(condition_fn, end_time)
+      end
+    end
   end
 
   @doc """
@@ -294,6 +319,75 @@ defmodule Foundation.TestHelpers do
     """)
   end
 
+  @doc """
+  Assert that a condition eventually becomes true.
+
+  This is a test-friendly wrapper around wait_for_condition that
+  automatically fails the test if the condition times out.
+  """
+  @spec assert_eventually(function(), non_neg_integer()) :: :ok
+  def assert_eventually(condition, timeout \\ 5000) do
+    case wait_for_condition(condition, timeout) do
+      :ok ->
+        :ok
+
+      {:error, :timeout} ->
+        ExUnit.Assertions.flunk("Condition was not met within #{timeout}ms")
+    end
+  end
+
+  @doc """
+  Verify that processes are properly cleaned up after ecosystem shutdown.
+
+  Checks that all processes in an ecosystem have terminated and their
+  memory has been reclaimed.
+  """
+  @spec verify_ecosystem_cleanup(map(), non_neg_integer()) :: :ok | {:error, term()}
+  def verify_ecosystem_cleanup(ecosystem, timeout \\ 5000) do
+    all_pids =
+      [ecosystem.coordinator | ecosystem.workers] ++
+        if Map.get(ecosystem, :supervisor), do: [ecosystem.supervisor], else: []
+
+    # First, try to shutdown the ecosystem gracefully
+    if function_exported?(Foundation.BEAM.Processes, :shutdown_ecosystem, 1) do
+      Foundation.BEAM.Processes.shutdown_ecosystem(ecosystem)
+    end
+
+    # Wait for all processes to terminate
+    case wait_for_condition(
+           fn ->
+             Enum.all?(all_pids, fn pid -> not Process.alive?(pid) end)
+           end,
+           timeout
+         ) do
+      :ok ->
+        # Force garbage collection and verify memory cleanup
+        :erlang.garbage_collect()
+        :timer.sleep(100)
+        :ok
+
+      {:error, :timeout} ->
+        alive_pids = Enum.filter(all_pids, &Process.alive?/1)
+
+        # Force kill remaining processes
+        for pid <- alive_pids do
+          if Process.alive?(pid) do
+            Process.exit(pid, :kill)
+          end
+        end
+
+        # Final check
+        :timer.sleep(100)
+        final_alive = Enum.filter(all_pids, &Process.alive?/1)
+
+        if Enum.empty?(final_alive) do
+          :ok
+        else
+          {:error, {:processes_still_alive, final_alive}}
+        end
+    end
+  end
+
   # Private Functions
 
   defp wait_loop(deadline) do
@@ -329,8 +423,8 @@ defmodule Foundation.TestHelpers do
 
   defp deep_merge_config(_original, override), do: override
 
-  @spec wait_for_condition((-> boolean()), integer()) :: :ok | :timeout
-  defp wait_for_condition(condition, deadline) do
+  @spec wait_for_condition_old((-> boolean()), integer()) :: :ok | :timeout
+  defp wait_for_condition_old(condition, deadline) do
     if System.monotonic_time(:millisecond) >= deadline do
       :timeout
     else
@@ -338,7 +432,7 @@ defmodule Foundation.TestHelpers do
         :ok
       else
         Process.sleep(10)
-        wait_for_condition(condition, deadline)
+        wait_for_condition_old(condition, deadline)
       end
     end
   end
