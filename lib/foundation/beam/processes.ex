@@ -136,25 +136,28 @@ defmodule Foundation.BEAM.Processes do
 
     ErrorContext.with_context(context, fn ->
       try do
-        {:ok, task_pid} = Task.start(fn ->
-          try do
-            result = work_fn.()
-            send(caller, {:work_complete, result})
-          rescue
-            error ->
-              send(caller, {:work_error, error})
-          end
-        end)
+        {:ok, task_pid} =
+          Task.start(fn ->
+            try do
+              result = work_fn.()
+              send(caller, {:work_complete, result})
+            rescue
+              error ->
+                send(caller, {:work_error, error})
+            end
+          end)
+
         {:ok, task_pid}
       rescue
         error ->
-          {:error, Error.new([
-            code: 5001,
-            error_type: :process_start_failed,
-            message: "Failed to start memory intensive work process: #{inspect(error)}",
-            severity: :high,
-            context: context
-          ])}
+          {:error,
+           Error.new(
+             code: 5001,
+             error_type: :process_start_failed,
+             message: "Failed to start memory intensive work process: #{inspect(error)}",
+             severity: :high,
+             context: context
+           )}
       end
     end)
   end
