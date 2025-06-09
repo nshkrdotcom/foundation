@@ -177,6 +177,9 @@ defmodule Foundation.MixProject do
       {:hammer, "~>7.0.1"},
       {:fuse, "~>2.5.0"},
 
+      # Optional integrations
+      {:gemini, path: "../gemini_ex", optional: true},
+
       # Development and testing
       {:mox, "~> 1.2", only: [:dev, :test]},
       {:stream_data, "~> 1.1", only: [:dev, :test]},

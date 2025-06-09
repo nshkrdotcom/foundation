@@ -70,11 +70,11 @@ defmodule Foundation.Application do
 
   # Private function to add Tidewave in development
   defp tidewave_children do
-    if Mix.env() == :dev and Code.ensure_loaded?(Tidewave) do
+    env = Application.get_env(:foundation, :environment, :prod)
+    if env == :dev and Code.ensure_loaded?(Tidewave) do
       [Foundation.TidewaveEndpoint]
     else
       []
     end
   end
-
 end
