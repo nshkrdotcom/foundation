@@ -7,7 +7,7 @@ config :foundation,
   telemetry_enabled: true
 
 # Configure Gemini (you'll need to set GEMINI_API_KEY environment variable)
-config :gemini,
+config :gemini_ex,
   api_key: System.get_env("GEMINI_API_KEY"),
   model: "gemini-1.5-flash"
 

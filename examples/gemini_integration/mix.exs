@@ -24,7 +24,7 @@ defmodule GeminiIntegration.MixProject do
     [
       # Local dependencies
       {:foundation, path: "../../"},
-      {:gemini, path: "../../../gemini_ex"},
+      {:gemini_ex, "~> 0.0.2"},
 
       # Dev dependencies
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false}

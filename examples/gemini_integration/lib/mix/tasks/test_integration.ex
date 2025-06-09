@@ -17,7 +17,7 @@ defmodule Mix.Tasks.TestIntegration do
     IO.puts("\n✅ Foundation.Integrations.GeminiAdapter attached to telemetry events")
 
     # Check if we have an API key configured
-    api_key = Application.get_env(:gemini, :api_key)
+    api_key = Application.get_env(:gemini_ex, :api_key)
     if api_key && api_key != "your_api_key_here" do
       IO.puts("✅ API key configured")
 
