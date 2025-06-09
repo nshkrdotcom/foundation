@@ -15,5 +15,5 @@ config :foundation,
 
 # Gemini API configuration
 # You can set GEMINI_API_KEY environment variable or put your key here
-config :gemini,
+config :gemini_ex,
   api_key: System.get_env("GEMINI_API_KEY") || "your_api_key_here"
