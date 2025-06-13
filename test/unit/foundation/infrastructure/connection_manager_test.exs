@@ -6,7 +6,7 @@ defmodule Foundation.Infrastructure.ConnectionManagerTest do
   worker checkout/checkin operations, and telemetry integration.
   """
 
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias Foundation.Infrastructure.ConnectionManager
   alias Foundation.Infrastructure.PoolWorkers.HttpWorker
