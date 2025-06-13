@@ -23,6 +23,7 @@ defmodule Foundation.Stress.ChaosResilienceTest do
   end
 
   @tag timeout: 120_000
+  @tag :slow
   test "system recovers gracefully after random service failures under load" do
     # 20 seconds of load
     load_duration = 20_000

@@ -87,6 +87,7 @@ defmodule Foundation.Integration.ConfigEventsTelemetryTest do
              "Expected config_updates metric to increase from #{initial_config_updates} to #{updated_config_updates}"
     end
 
+    @tag :slow
     test "multiple config updates create separate events with correlation" do
       # Subscribe to config notifications to track updates
       :ok = ConfigServer.subscribe()
@@ -176,6 +177,7 @@ defmodule Foundation.Integration.ConfigEventsTelemetryTest do
   end
 
   describe "service coordination" do
+    @tag :slow
     test "services restart gracefully and maintain integration" do
       # Perform initial update to establish baseline
       assert :ok = Config.update([:ai, :planning, :sampling_rate], 0.5)
@@ -208,6 +210,7 @@ defmodule Foundation.Integration.ConfigEventsTelemetryTest do
   end
 
   describe "performance integration" do
+    @tag :slow
     test "high-frequency config updates maintain performance" do
       start_time = System.monotonic_time(:millisecond)
 

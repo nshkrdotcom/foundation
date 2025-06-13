@@ -171,6 +171,7 @@ defmodule Foundation.Infrastructure.PoolWorkers.HttpWorkerTest do
     end
 
     @tag :external_http
+    @tag :slow
     test "performs successful GET request", %{worker: pid} do
       # Use httpbin.org which provides reliable test endpoints
       result = HttpWorker.get(pid, "/get")
@@ -196,6 +197,7 @@ defmodule Foundation.Infrastructure.PoolWorkers.HttpWorkerTest do
     end
 
     @tag :external_http
+    @tag :slow
     test "handles GET request with custom headers", %{worker: pid} do
       options = [headers: [{"X-Test-Header", "test-value"}]]
 
@@ -225,6 +227,7 @@ defmodule Foundation.Infrastructure.PoolWorkers.HttpWorkerTest do
       end)
     end
 
+    @tag :slow
     test "updates statistics after GET request", %{worker: pid} do
       # Get initial stats
       {:ok, initial_status} = HttpWorker.get_status(pid)
@@ -269,6 +272,7 @@ defmodule Foundation.Infrastructure.PoolWorkers.HttpWorkerTest do
     end
 
     @tag :external_http
+    @tag :slow
     test "performs POST with custom headers", %{worker: pid} do
       body = %{message: "hello"}
       options = [headers: [{"X-Custom", "value"}]]
@@ -302,6 +306,7 @@ defmodule Foundation.Infrastructure.PoolWorkers.HttpWorkerTest do
       assert response_body["data"] == "plain text data"
     end
 
+    @tag :slow
     test "updates statistics after POST request", %{worker: pid} do
       # Get initial stats
       {:ok, initial_status} = HttpWorker.get_status(pid)
@@ -354,6 +359,7 @@ defmodule Foundation.Infrastructure.PoolWorkers.HttpWorkerTest do
       assert updated_errors >= initial_errors
     end
 
+    @tag :slow
     test "recovers from network errors", %{worker: pid} do
       # Cause a network error
       HttpWorker.get(pid, "/invalid-network-request")
@@ -404,6 +410,7 @@ defmodule Foundation.Infrastructure.PoolWorkers.HttpWorkerTest do
       end
     end
 
+    @tag :slow
     test "maintains separate state per worker instance" do
       config = [base_url: @test_base_url]
 
@@ -506,6 +513,7 @@ defmodule Foundation.Infrastructure.PoolWorkers.HttpWorkerTest do
   end
 
   describe "performance and resource management" do
+    @tag :slow
     test "handles concurrent requests efficiently" do
       config = [base_url: @test_base_url]
       {:ok, pid} = HttpWorker.start_link(config)
@@ -564,6 +572,7 @@ defmodule Foundation.Infrastructure.PoolWorkers.HttpWorkerTest do
     end
 
     @tag :external_http
+    @tag :slow
     test "handles different HTTP status codes", %{worker: pid} do
       status_codes = [200, 404, 500]
 
@@ -576,6 +585,7 @@ defmodule Foundation.Infrastructure.PoolWorkers.HttpWorkerTest do
     end
 
     @tag :external_http
+    @tag :slow
     test "handles redirects within limits", %{worker: pid} do
       # httpbin.org provides redirect endpoints
       # 2 redirects

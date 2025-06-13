@@ -13,6 +13,7 @@ defmodule Foundation.Stress.SustainedLoadTest do
   end
 
   @tag timeout: 120_000
+  @tag :slow
   test "system remains stable and responsive under sustained concurrent load" do
     # 30 seconds
     load_duration = 30_000

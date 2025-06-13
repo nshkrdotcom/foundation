@@ -192,6 +192,7 @@ defmodule Foundation.ConcurrencyValidationTest do
   end
 
   describe "Service Recovery" do
+    @tag :slow
     test "services restart after crash", %{namespace: namespace} do
       # Get original PID
       {:ok, original_pid} = ServiceRegistry.lookup(namespace, :config_server)
@@ -211,6 +212,7 @@ defmodule Foundation.ConcurrencyValidationTest do
       end)
     end
 
+    @tag :slow
     test "namespace remains healthy after service restart", %{test_ref: test_ref} do
       # Initial health check
       assert TestSupervisor.namespace_healthy?(test_ref)
@@ -224,6 +226,7 @@ defmodule Foundation.ConcurrencyValidationTest do
   end
 
   describe "Cleanup and Isolation" do
+    @tag :slow
     test "test cleanup doesn't affect other namespaces" do
       # Create two test references
       test_ref1 = make_ref()
