@@ -6,13 +6,25 @@ ExUnit.start()
 # This ensures all components including ProcessRegistry are available
 {:ok, _} = Application.ensure_all_started(:foundation)
 
-# Wait for critical services to be available
-try do
-  Foundation.ProcessRegistry.stats()
-  Process.sleep(50)
-rescue
-  _ -> Process.sleep(100)
+# Wait for ProcessRegistry specifically to be available
+retries = 20
+
+wait_for_registry = fn
+  _wait_fn, 0 ->
+    raise "ProcessRegistry not available after maximum retries"
+
+  wait_fn, retries_left ->
+    try do
+      Foundation.ProcessRegistry.stats()
+      :ok
+    rescue
+      ArgumentError ->
+        Process.sleep(100)
+        wait_fn.(wait_fn, retries_left - 1)
+    end
 end
+
+wait_for_registry.(wait_for_registry, retries)
 
 # Configure ExUnit with callback to ensure Foundation is available before each test
 ExUnit.configure(

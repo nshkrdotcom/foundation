@@ -1,5 +1,5 @@
 defmodule Foundation.ServiceRegistryTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
   @moduletag :foundation
 
   alias Foundation.{ServiceRegistry, ProcessRegistry}

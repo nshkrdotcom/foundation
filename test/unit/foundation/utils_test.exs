@@ -1,5 +1,5 @@
 defmodule Foundation.UtilsTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias Foundation.Utils
 
@@ -32,6 +32,27 @@ defmodule Foundation.UtilsTest do
       id2 = Utils.generate_correlation_id()
 
       assert id1 != id2
+    end
+
+    test "is available immediately after Foundation startup" do
+      # This test reproduces the DSPEx defensive code scenario
+      # DSPEx had rescue blocks around generate_correlation_id() calls
+      # indicating timing issues during startup
+
+      # Simulate startup scenario by stopping and starting Foundation
+      :ok = Application.stop(:foundation)
+      {:ok, _} = Application.ensure_all_started(:foundation)
+
+      # Should work immediately without rescue blocks needed
+      correlation_id = Utils.generate_correlation_id()
+
+      assert is_binary(correlation_id)
+      assert String.length(correlation_id) == 36
+
+      assert String.match?(
+               correlation_id,
+               ~r/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+             )
     end
   end
 
@@ -168,7 +189,7 @@ defmodule Foundation.UtilsTest do
 end
 
 # defmodule Foundation.UtilsTest do
-#   use ExUnit.Case, async: true
+#   use ExUnit.Case, async: false
 #   @moduletag :foundation
 
 #   alias Foundation.Utils

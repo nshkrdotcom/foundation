@@ -6,7 +6,7 @@ defmodule Foundation.Telemetry.HistogramApiTest do
   that we're implementing to complete the telemetry API in Foundation.Telemetry.
   """
 
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias Foundation.Telemetry
 

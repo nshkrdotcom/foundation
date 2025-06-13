@@ -38,6 +38,57 @@ defmodule Foundation.Services.EventStoreTest do
       assert {:error, error} = EventStore.store(invalid_event)
       assert error.error_type == :validation_failed
     end
+
+    test "handles unserializable terms gracefully" do
+      # This test reproduces DSPEx defensive code scenario - Test Case 8
+      # DSPEx had comments indicating Events API was previously broken
+      # when given PIDs or functions that can't be serialized
+
+      # Test with PID in data
+      pid_data = %{process: self(), message: "test"}
+      event_with_pid = create_test_event(124, :test_pid, pid_data)
+
+      # Should not crash the EventStore GenServer
+      result_pid = EventStore.store(event_with_pid)
+
+      # Either succeeds (sanitized data) or fails gracefully (not crash)
+      assert match?({:ok, _}, result_pid) or match?({:error, _}, result_pid)
+
+      # Test with function in data
+      fun_data = %{callback: fn -> :ok end, value: 42}
+      event_with_fun = create_test_event(125, :test_function, fun_data)
+
+      # Should not crash the EventStore GenServer
+      result_fun = EventStore.store(event_with_fun)
+
+      # Either succeeds (sanitized data) or fails gracefully (not crash)
+      assert match?({:ok, _}, result_fun) or match?({:error, _}, result_fun)
+
+      # Test with deeply nested unserializable data
+      nested_data = %{
+        level1: %{
+          level2: %{
+            level3: %{
+              pid: self(),
+              ref: make_ref(),
+              port: Port.list() |> List.first()
+            }
+          }
+        }
+      }
+
+      event_with_nested = create_test_event(126, :test_nested, nested_data)
+
+      # Should not crash the EventStore GenServer
+      result_nested = EventStore.store(event_with_nested)
+
+      # Either succeeds (sanitized data) or fails gracefully (not crash)
+      assert match?({:ok, _}, result_nested) or match?({:error, _}, result_nested)
+
+      # Verify EventStore is still functional after processing unserializable terms
+      normal_event = create_test_event(127, :test_normal, %{status: "working"})
+      assert {:ok, 127} = EventStore.store(normal_event)
+    end
   end
 
   describe "store_batch/1" do

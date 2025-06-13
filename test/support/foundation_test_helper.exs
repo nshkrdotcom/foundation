@@ -168,7 +168,7 @@ defmodule Foundation.TestHelpers do
            |> Enum.any?(fn {app, _, _} -> app == :foundation end) do
       # Start the Foundation application
       {:ok, _} = Application.ensure_all_started(:foundation)
-      Process.sleep(200)
+      Process.sleep(300)
     else
       # Application is running, but ProcessRegistry might be down
       try do
@@ -178,9 +178,22 @@ defmodule Foundation.TestHelpers do
           # ProcessRegistry is down, restart Foundation
           Application.stop(:foundation)
           {:ok, _} = Application.ensure_all_started(:foundation)
-          Process.sleep(200)
+          Process.sleep(300)
       end
     end
+
+    # Extra wait for ProcessRegistry to be fully available
+    wait_for(
+      fn ->
+        try do
+          Foundation.ProcessRegistry.stats()
+          true
+        rescue
+          ArgumentError -> false
+        end
+      end,
+      5000
+    )
 
     :ok
   end

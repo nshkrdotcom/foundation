@@ -74,6 +74,37 @@ defmodule Foundation.Logic.ConfigLogicTest do
       assert {:error, error} = ConfigLogic.get_config_value(config, [:nonexistent, :path])
       assert error.error_type == :config_path_not_found
     end
+
+    test "handles mid-path termination on non-map values gracefully" do
+      # This test reproduces DSPEx defensive code scenario - Test Case 4
+      # Trying to access a key inside a non-map value should not crash
+      config = Config.new()
+
+      # First set debug_mode to a boolean value
+      {:ok, updated_config} = ConfigLogic.update_config(config, [:dev, :debug_mode], true)
+
+      # Now try to access a nested key inside the boolean value
+      # This should return :config_path_not_found, not crash
+      assert {:error, error} =
+               ConfigLogic.get_config_value(updated_config, [:dev, :debug_mode, :nested_key])
+
+      assert error.error_type == :config_path_not_found
+      assert String.contains?(error.message, "Configuration path not found")
+
+      # Test with integer value as well
+      {:ok, updated_config2} =
+        ConfigLogic.update_config(config, [:ai, :planning, :sampling_rate], 0.5)
+
+      assert {:error, error2} =
+               ConfigLogic.get_config_value(updated_config2, [
+                 :ai,
+                 :planning,
+                 :sampling_rate,
+                 :sub_key
+               ])
+
+      assert error2.error_type == :config_path_not_found
+    end
   end
 
   describe "merge_env_config/2" do
