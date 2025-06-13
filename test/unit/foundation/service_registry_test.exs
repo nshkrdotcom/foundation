@@ -411,6 +411,7 @@ defmodule Foundation.ServiceRegistryTest do
       Agent.stop(pid)
     end
 
+    @tag :slow
     test "handles custom health check timeout", %{namespace: namespace} do
       service = :timeout_health_service
       {:ok, pid} = Agent.start_link(fn -> %{} end)
@@ -527,12 +528,14 @@ defmodule Foundation.ServiceRegistryTest do
       Agent.stop(pid)
     end
 
+    @tag :slow
     test "returns timeout error when service never appears", %{namespace: namespace} do
       service = :never_appears
 
       assert {:error, :timeout} = ServiceRegistry.wait_for_service(namespace, service, 100)
     end
 
+    @tag :slow
     test "uses default timeout when not specified", %{namespace: namespace} do
       service = :default_timeout_service
 
@@ -623,6 +626,7 @@ defmodule Foundation.ServiceRegistryTest do
   end
 
   describe "cleanup_test_namespace/1" do
+    @tag :slow
     test "cleans up all services in test namespace with logging" do
       # Trap exits to prevent test process termination during cleanup
       Process.flag(:trap_exit, true)

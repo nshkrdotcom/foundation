@@ -368,6 +368,7 @@ defmodule Foundation.Infrastructure.ConnectionManagerTest do
       assert {:error, :not_found} = ConnectionManager.get_pool_status(:non_existent_pool)
     end
 
+    @tag :slow
     test "status reflects pool usage", %{pool_name: pool_name} do
       # Get initial status
       {:ok, initial_status} = ConnectionManager.get_pool_status(pool_name)
@@ -617,6 +618,7 @@ defmodule Foundation.Infrastructure.ConnectionManagerTest do
       %{manager: manager_pid}
     end
 
+    @tag :slow
     test "handles worker that returns error then crashes" do
       pool_name = unique_pool_name()
 
@@ -684,6 +686,7 @@ defmodule Foundation.Infrastructure.ConnectionManagerTest do
       ConnectionManager.stop_pool(pool_name)
     end
 
+    @tag :slow
     test "recovers from pool supervisor restarts" do
       pool_name = unique_pool_name()
 
