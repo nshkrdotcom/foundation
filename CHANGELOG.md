@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2025-06-12
+
+### Added
+- **Comprehensive Test Suite**: Added extensive test coverage including integration tests for service lifecycle, connection manager, config logic, service registry, event store, telemetry, and utilities
+- **Python Bridge Modules**: Implemented Foundation Python Bridge with core module, supervisor, extensions, and integration examples (draft implementations)
+- **Distribution Primitives**: Significant progress on distribution primitives with 59 properties and 562 tests providing robust distributed system capabilities
+- **Gemini Integration Example**: Complete Gemini AI integration example project with streaming support, mix tasks, and comprehensive configuration
+- **Tidewave Development Endpoint**: Added Tidewave endpoint integration for enhanced development workflow
+- **Mock Worker Support**: Enhanced testing infrastructure with mock worker implementation for better test isolation
+
+### Changed
+- **Dependency Update**: Updated from `:gemini` to `:gemini_ex` for improved Gemini AI integration capabilities
+- **Test Organization**: Implemented test flagging system to categorize slow tests for better CI/CD performance
+- **Code Formatting**: Applied consistent formatting standards across core Foundation modules
+
+### Improved
+- **Test Coverage**: Achieved comprehensive test coverage across all major Foundation components with property-based testing
+- **Code Quality**: Enhanced code formatting and consistency across application and BEAM process modules
+- **Development Workflow**: Improved development experience with better tooling and integration examples
+- **Documentation Structure**: Reorganized documentation and development planning materials
+
+### Technical Details
+- Enhanced test helper infrastructure with better Foundation application lifecycle management
+- Added concurrent test helpers for improved stress testing capabilities
+- Implemented property-based testing for BEAM processes with extensive edge case coverage
+- Added comprehensive integration testing for service lifecycles and system interactions
+
 ## [0.1.4] - 2025-06-07
 
 ### Fixed
