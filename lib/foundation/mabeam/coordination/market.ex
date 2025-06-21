@@ -1251,7 +1251,9 @@ defmodule Foundation.MABEAM.Coordination.Market do
       max_iterations: Map.get(parameters, :max_iterations, 10),
       price_step: Map.get(parameters, :price_step, 0.1),
       convergence_threshold: Map.get(parameters, :convergence_threshold, 0.05),
-      timeout_ms: Map.get(parameters, :timeout_ms, 30_000)
+      timeout_ms: Map.get(parameters, :timeout_ms, 30_000),
+      volatility: Map.get(parameters, :volatility, nil),
+      external_shocks: Map.get(parameters, :external_shocks, nil)
     }
 
     {:ok, result} = discover_price(:coordination_resource, config)
