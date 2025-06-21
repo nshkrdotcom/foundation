@@ -168,6 +168,7 @@ defmodule Foundation.Services.ServiceBehaviour do
       }
 
       # Enhanced GenServer callbacks with service behavior
+      @impl GenServer
       def init(opts) do
         service_name = __MODULE__
         namespace = Keyword.get(opts, :namespace, :production)
@@ -217,12 +218,14 @@ defmodule Foundation.Services.ServiceBehaviour do
         end
       end
 
+      @impl GenServer
       def handle_info(:health_check, state) do
         new_state = perform_health_check(state)
         schedule_health_check(state.config.health_check_interval)
         {:noreply, new_state}
       end
 
+      @impl GenServer
       def handle_info({:dependency_status, dependency, status}, state) do
         new_dependency_status = Map.put(state.dependency_status, dependency, status)
         new_state = %{state | dependency_status: new_dependency_status}
@@ -238,27 +241,32 @@ defmodule Foundation.Services.ServiceBehaviour do
         end
       end
 
+      @impl GenServer
       def handle_info(:shutdown, state) do
         # Graceful shutdown
         emit_service_event(:stopping, state)
         {:stop, :shutdown, state}
       end
 
+      @impl GenServer
       def handle_call(:health_status, _from, state) do
         {:reply, {:ok, state.health_status}, state}
       end
 
+      @impl GenServer
       def handle_call(:service_metrics, _from, state) do
         metrics = calculate_current_metrics(state)
         {:reply, {:ok, metrics}, state}
       end
 
+      @impl GenServer
       def handle_call({:update_config, new_config}, _from, state) do
         {:ok, new_state} = handle_config_change(new_config, state)
         updated_state = %{new_state | config: Map.merge(state.config, new_config)}
         {:reply, :ok, updated_state}
       end
 
+      @impl GenServer
       def terminate(reason, state) do
         emit_service_event(:stopped, state, %{reason: reason})
 
