@@ -251,7 +251,7 @@ defmodule Foundation.MABEAM.CoreTest do
     test "system status includes coordination history" do
       {:ok, status} = Core.system_status()
       assert is_list(status.coordination_history)
-      assert length(status.coordination_history) == 0
+      assert Enum.empty?(status.coordination_history)
 
       # Perform coordination to generate history
       variable = create_valid_orchestration_variable()
