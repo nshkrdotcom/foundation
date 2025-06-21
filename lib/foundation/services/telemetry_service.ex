@@ -529,9 +529,8 @@ defmodule Foundation.Services.TelemetryService do
 
   defp create_default_handler(event_name) do
     fn ^event_name, measurements, metadata ->
-      Logger.debug("Telemetry event: #{inspect(event_name)}",
-        measurements: measurements,
-        metadata: metadata
+      Logger.debug(
+        "Telemetry event: #{inspect(event_name)}, measurements: #{inspect(measurements)}, metadata: #{inspect(metadata)}"
       )
     end
   end
