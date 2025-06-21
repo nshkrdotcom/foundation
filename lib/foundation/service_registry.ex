@@ -24,7 +24,13 @@ defmodule Foundation.ServiceRegistry do
   alias Foundation.Types.Error
 
   @type namespace :: :production | {:test, reference()}
-  @type service_name :: :config_server | :event_store | :telemetry_service | :test_supervisor
+  @type service_name ::
+          :config_server
+          | :event_store
+          | :telemetry_service
+          | :test_supervisor
+          | {:agent, atom()}
+          | atom()
   @type registration_result :: :ok | {:error, {:already_registered, pid()}}
   @type lookup_result :: {:ok, pid()} | {:error, Error.t()}
 

@@ -45,6 +45,8 @@ defmodule Foundation.ProcessRegistry do
           | :event_store
           | :telemetry_service
           | :test_supervisor
+          | {:agent, atom()}
+          | atom()
 
   @type registry_key :: {namespace(), service_name()}
 

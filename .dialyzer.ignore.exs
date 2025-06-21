@@ -21,5 +21,8 @@
   {"lib/foundation/services/event_store.ex", :pattern_match},
 
   # telemetry_service.ex pattern_match warnings - test_mode conditional compilation
-  {"lib/foundation/services/telemetry_service.ex", :pattern_match}
+  {"lib/foundation/services/telemetry_service.ex", :pattern_match},
+
+  # core.ex pattern_match warning - false positive from ServiceBehaviour macro expansion
+  {"lib/foundation/mabeam/core.ex", :pattern_match}
 ]
