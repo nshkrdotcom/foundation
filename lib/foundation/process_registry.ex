@@ -49,6 +49,17 @@ defmodule Foundation.ProcessRegistry do
   @type registry_key :: {namespace(), service_name()}
 
   @doc """
+  Start the ProcessRegistry.
+  """
+  def start_link(_opts \\ []) do
+    Registry.start_link(
+      keys: :unique,
+      name: __MODULE__,
+      partitions: System.schedulers_online()
+    )
+  end
+
+  @doc """
   Child specification for supervision tree integration.
   """
   def child_spec(_opts) do

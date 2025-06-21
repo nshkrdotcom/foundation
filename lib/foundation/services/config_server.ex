@@ -319,9 +319,11 @@ defmodule Foundation.Services.ConfigServer do
 
     case ConfigLogic.build_config(opts) do
       {:ok, config} ->
-        Logger.info(
-          "Configuration server initialized successfully in namespace #{inspect(namespace)}"
-        )
+        unless Application.get_env(:foundation, :test_mode, false) do
+          Logger.info(
+            "Configuration server initialized successfully in namespace #{inspect(namespace)}"
+          )
+        end
 
         state = %{
           config: config,
@@ -492,6 +494,18 @@ defmodule Foundation.Services.ConfigServer do
     }
 
     {:reply, {:ok, status}, state}
+  end
+
+  @impl GenServer
+  def handle_call(:health_status, _from, state) do
+    # Health check for application monitoring
+    {:reply, {:ok, :healthy}, state}
+  end
+
+  @impl GenServer
+  def handle_call(:ping, _from, state) do
+    # Simple ping for response time measurement
+    {:reply, :pong, state}
   end
 
   @impl GenServer

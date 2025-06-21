@@ -33,22 +33,14 @@ config :foundation,
     performance_monitoring: false
   ]
 
-# Configure test logging - reduce noise
+# Configure test logging - allow info for tests that check logs
 config :logger,
-  level: :warning,  # Only show warnings and errors during tests
-  format: "$time $metadata[$level] $message\n",
-  # metadata: [:request_id],
-  compile_time_purge_matching: []
-
-# For even better error formatting
-config :logger, :console,
-  format: "\n$time [$level] $metadata\n$message\n",
-  metadata: [:module, :function, :line]
-
-# We want normal logging in tests to see what's happening
-config :logger,
-  level: :debug,
+  level: :info,  # Allow info logs for capture_log tests
   backends: [:console]
+
+config :logger, :console,
+  format: "[$level] $message\n",
+  metadata: []
 
 # Configure ExUnit for comprehensive testing
 config :foundation, ExUnit,

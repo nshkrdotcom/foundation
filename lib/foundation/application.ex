@@ -2,7 +2,7 @@
 defmodule Foundation.Application do
   @moduledoc """
   Enhanced Foundation Application Supervisor with MABEAM support.
-  
+
   Manages the lifecycle of all Foundation components in a supervised manner with
   enhanced service management, health monitoring, and coordination primitives
   for multi-agent systems.
@@ -47,17 +47,17 @@ defmodule Foundation.Application do
   use Application
   require Logger
 
-  alias Foundation.{ProcessRegistry, ServiceRegistry}
+  alias Foundation.ProcessRegistry
 
   @type startup_phase :: :infrastructure | :foundation_services | :coordination | :application
   @type service_config :: %{
-    module: module(),
-    args: keyword(),
-    dependencies: [atom()],
-    startup_phase: startup_phase(),
-    health_check_interval: pos_integer(),
-    restart_strategy: :permanent | :temporary | :transient
-  }
+          module: module(),
+          args: keyword(),
+          dependencies: [atom()],
+          startup_phase: startup_phase(),
+          health_check_interval: pos_integer(),
+          restart_strategy: :permanent | :temporary | :transient
+        }
 
   # Enhanced service definitions with dependencies and health monitoring
   @service_definitions %{
@@ -70,53 +70,37 @@ defmodule Foundation.Application do
       health_check_interval: 60_000,
       restart_strategy: :permanent
     },
-    
-    service_registry: %{
-      module: ServiceRegistry,
-      args: [],
-      dependencies: [:process_registry],
-      startup_phase: :infrastructure,
-      health_check_interval: 30_000,
-      restart_strategy: :permanent
-    },
+
+    # Note: ServiceRegistry is a utility module, not a GenServer - no supervision needed
 
     # Foundation Services Phase - Core business logic
     config_server: %{
       module: Foundation.Services.ConfigServer,
       args: [namespace: :production],
-      dependencies: [:process_registry, :service_registry],
+      dependencies: [:process_registry],
       startup_phase: :foundation_services,
       health_check_interval: 30_000,
       restart_strategy: :permanent
     },
-
     event_store: %{
       module: Foundation.Services.EventStore,
       args: [namespace: :production],
-      dependencies: [:process_registry, :service_registry],
+      dependencies: [:process_registry],
       startup_phase: :foundation_services,
       health_check_interval: 30_000,
       restart_strategy: :permanent
     },
-
     telemetry_service: %{
       module: Foundation.Services.TelemetryService,
       args: [namespace: :production],
-      dependencies: [:process_registry, :service_registry],
+      dependencies: [:process_registry],
       startup_phase: :foundation_services,
       health_check_interval: 30_000,
       restart_strategy: :permanent
     },
 
     # Coordination Phase - Distributed coordination primitives
-    coordination_primitives: %{
-      module: Foundation.Coordination.Primitives,
-      args: [],
-      dependencies: [:config_server, :event_store, :telemetry_service],
-      startup_phase: :coordination,
-      health_check_interval: 60_000,
-      restart_strategy: :permanent
-    },
+    # Note: Coordination.Primitives is a utility module, not a GenServer - no supervision needed
 
     connection_manager: %{
       module: Foundation.Infrastructure.ConnectionManager,
@@ -126,7 +110,6 @@ defmodule Foundation.Application do
       health_check_interval: 45_000,
       restart_strategy: :permanent
     },
-
     rate_limiter_backend: %{
       module: Foundation.Infrastructure.RateLimiter.HammerBackend,
       args: [],
@@ -149,24 +132,30 @@ defmodule Foundation.Application do
 
   @impl true
   def start(_type, _args) do
-    Logger.info("Starting enhanced Foundation application...")
-    
+    test_mode = Application.get_env(:foundation, :test_mode, false)
+
+    unless test_mode do
+      Logger.info("Starting enhanced Foundation application...")
+    end
+
     # Initialize application-level configuration
     setup_application_config()
-    
+
     # Initialize infrastructure components
     case initialize_infrastructure() do
       :ok ->
-        Logger.info("Infrastructure initialization complete")
-      
+        unless test_mode do
+          Logger.info("Infrastructure initialization complete")
+        end
+
       {:error, reason} ->
         Logger.error("Infrastructure initialization failed: #{inspect(reason)}")
-        return {:error, {:infrastructure_init_failed, reason}}
+        {:error, {:infrastructure_init_failed, reason}}
     end
 
     # Build supervision tree with proper ordering
     children = build_supervision_tree()
-    
+
     # Enhanced supervisor options with better restart strategies
     opts = [
       strategy: :one_for_one,
@@ -178,7 +167,11 @@ defmodule Foundation.Application do
     case Supervisor.start_link(children, opts) do
       {:ok, pid} ->
         post_startup_tasks()
-        Logger.info("Enhanced Foundation application started successfully")
+
+        unless test_mode do
+          Logger.info("Enhanced Foundation application started successfully")
+        end
+
         {:ok, pid}
 
       {:error, reason} ->
@@ -190,31 +183,31 @@ defmodule Foundation.Application do
   @impl true
   def stop(_state) do
     Logger.info("Stopping Enhanced Foundation application...")
-    
+
     # Graceful shutdown sequence
     perform_graceful_shutdown()
-    
+
     Logger.info("Enhanced Foundation application stopped")
     :ok
   end
 
   @doc """
   Get the current status of all Foundation services.
-  
+
   Returns detailed health and dependency information for monitoring.
   """
   @spec get_application_status() :: %{
-    status: :healthy | :degraded | :unhealthy,
-    services: %{atom() => service_status()},
-    startup_phases: %{startup_phase() => phase_status()},
-    dependencies: %{atom() => [atom()]},
-    health_summary: health_summary()
-  }
+          status: :healthy | :degraded | :unhealthy,
+          services: %{atom() => service_status()},
+          startup_phases: %{startup_phase() => phase_status()},
+          dependencies: %{atom() => [atom()]},
+          health_summary: health_summary()
+        }
   def get_application_status do
     service_statuses = get_all_service_statuses()
     phase_statuses = group_services_by_phase(service_statuses)
     overall_status = determine_overall_status(service_statuses)
-    
+
     %{
       status: overall_status,
       services: service_statuses,
@@ -226,7 +219,7 @@ defmodule Foundation.Application do
 
   @doc """
   Restart a specific service with dependency checking.
-  
+
   Ensures dependencies are available before restarting the service.
   """
   @spec restart_service(atom()) :: :ok | {:error, term()}
@@ -234,10 +227,10 @@ defmodule Foundation.Application do
     case Map.get(@service_definitions, service_name) do
       nil ->
         {:error, {:unknown_service, service_name}}
-      
+
       service_config ->
         Logger.info("Restarting service: #{service_name}")
-        
+
         # Check dependencies first
         case check_service_dependencies(service_config.dependencies) do
           :ok ->
@@ -246,18 +239,21 @@ defmodule Foundation.Application do
               {:ok, _pid} ->
                 Logger.info("Service #{service_name} restarted successfully")
                 :ok
-              
+
               {:ok, _pid, _info} ->
                 Logger.info("Service #{service_name} restarted successfully")
                 :ok
-              
+
               {:error, reason} ->
                 Logger.error("Failed to restart service #{service_name}: #{inspect(reason)}")
                 {:error, reason}
             end
-          
+
           {:error, missing_deps} ->
-            Logger.error("Cannot restart #{service_name}: missing dependencies #{inspect(missing_deps)}")
+            Logger.error(
+              "Cannot restart #{service_name}: missing dependencies #{inspect(missing_deps)}"
+            )
+
             {:error, {:missing_dependencies, missing_deps}}
         end
     end
@@ -265,37 +261,38 @@ defmodule Foundation.Application do
 
   @doc """
   Perform health check on all services.
-  
+
   Returns detailed health information for monitoring and alerting.
   """
   @spec health_check() :: %{
-    overall_health: :healthy | :degraded | :unhealthy,
-    service_health: %{atom() => health_status()},
-    failed_services: [atom()],
-    degraded_services: [atom()],
-    recommendations: [String.t()]
-  }
+          overall_health: :healthy | :degraded | :unhealthy,
+          service_health: %{atom() => health_status()},
+          failed_services: [atom()],
+          degraded_services: [atom()],
+          recommendations: [String.t()]
+        }
   def health_check do
     service_health = perform_health_checks()
-    
-    failed_services = 
+
+    failed_services =
       service_health
       |> Enum.filter(fn {_service, status} -> status.health == :unhealthy end)
       |> Enum.map(fn {service, _status} -> service end)
-    
-    degraded_services = 
+
+    degraded_services =
       service_health
       |> Enum.filter(fn {_service, status} -> status.health == :degraded end)
       |> Enum.map(fn {service, _status} -> service end)
-    
-    overall_health = cond do
-      length(failed_services) > 0 -> :unhealthy
-      length(degraded_services) > 0 -> :degraded
-      true -> :healthy
-    end
-    
+
+    overall_health =
+      cond do
+        length(failed_services) > 0 -> :unhealthy
+        length(degraded_services) > 0 -> :degraded
+        true -> :healthy
+      end
+
     recommendations = generate_health_recommendations(failed_services, degraded_services)
-    
+
     %{
       overall_health: overall_health,
       service_health: service_health,
@@ -313,7 +310,7 @@ defmodule Foundation.Application do
       true ->
         # Configure enhanced error types and distributed error handling
         :ok
-      
+
       false ->
         Logger.info("Enhanced error handling disabled")
     end
@@ -325,9 +322,9 @@ defmodule Foundation.Application do
       lock_timeout: 5000,
       barrier_timeout: 10_000
     }
-    
+
     Application.put_env(:foundation, :coordination, coordination_config)
-    
+
     # Setup service health monitoring
     health_config = %{
       global_health_check_interval: 30_000,
@@ -335,7 +332,7 @@ defmodule Foundation.Application do
       unhealthy_threshold: 3,
       degraded_threshold: 1
     }
-    
+
     Application.put_env(:foundation, :health_monitoring, health_config)
   end
 
@@ -344,10 +341,14 @@ defmodule Foundation.Application do
       # Initialize Hammer configuration for rate limiting
       case Application.get_env(:hammer, :backend) do
         nil ->
-          Application.put_env(:hammer, :backend, {Hammer.Backend.ETS, [
-            expiry_ms: 60_000 * 60 * 2,  # 2 hours
-            cleanup_interval_ms: 60_000 * 10  # 10 minutes
-          ]})
+          Application.put_env(:hammer, :backend, {Hammer.Backend.ETS,
+           [
+             # 2 hours
+             expiry_ms: 60_000 * 60 * 2,
+             # 10 minutes
+             cleanup_interval_ms: 60_000 * 10
+           ]})
+
         _ ->
           :ok
       end
@@ -360,7 +361,7 @@ defmodule Foundation.Application do
 
       # Initialize coordination primitives infrastructure
       Foundation.Coordination.Primitives.initialize_infrastructure()
-      
+
       :ok
     rescue
       exception ->
@@ -374,27 +375,29 @@ defmodule Foundation.Application do
     foundation_children = build_phase_children(:foundation_services)
     coordination_children = build_phase_children(:coordination)
     application_children = build_phase_children(:application)
-    
-    # Add test and development children
-    test_children = if Application.get_env(:foundation, :test_mode, false) do
-      [child_spec_for_service(:test_supervisor)]
-    else
-      []
-    end
 
-    tidewave_children = if should_start_tidewave?() do
-      [Foundation.TidewaveEndpoint]
-    else
-      []
-    end
+    # Add test and development children
+    test_children =
+      if Application.get_env(:foundation, :test_mode, false) do
+        [child_spec_for_service(:test_supervisor)]
+      else
+        []
+      end
+
+    tidewave_children =
+      if should_start_tidewave?() do
+        [Foundation.TidewaveEndpoint]
+      else
+        []
+      end
 
     # Combine all children in startup order
-    infrastructure_children ++ 
-    foundation_children ++ 
-    coordination_children ++ 
-    application_children ++ 
-    test_children ++ 
-    tidewave_children
+    infrastructure_children ++
+      foundation_children ++
+      coordination_children ++
+      application_children ++
+      test_children ++
+      tidewave_children
   end
 
   defp build_phase_children(phase) do
@@ -408,12 +411,13 @@ defmodule Foundation.Application do
       nil ->
         # Handle special cases not in definitions
         case service_name do
-          :test_supervisor -> 
+          :test_supervisor ->
             {Foundation.TestSupport.TestSupervisor, []}
+
           _ ->
             raise "Unknown service: #{service_name}"
         end
-      
+
       service_config ->
         %{
           id: service_name,
@@ -426,21 +430,28 @@ defmodule Foundation.Application do
   end
 
   defp should_start_tidewave? do
-    Mix.env() == :dev and Code.ensure_loaded?(Tidewave)
+    # Only start Tidewave in development environment if it's loaded
+    Application.get_env(:foundation, :environment, :prod) == :dev and Code.ensure_loaded?(Tidewave)
   end
 
   defp post_startup_tasks do
-    # Register application-level health checks
-    spawn(fn ->
-      Process.sleep(1000)  # Allow services to fully start
-      schedule_periodic_health_check()
-    end)
+    test_mode = Application.get_env(:foundation, :test_mode, false)
 
-    # Initialize service monitoring
-    spawn(fn ->
-      Process.sleep(2000)  # Allow all services to be ready
-      initialize_service_monitoring()
-    end)
+    unless test_mode do
+      # Register application-level health checks
+      spawn(fn ->
+        # Allow services to fully start
+        Process.sleep(1000)
+        schedule_periodic_health_check()
+      end)
+
+      # Initialize service monitoring
+      spawn(fn ->
+        # Allow all services to be ready
+        Process.sleep(2000)
+        initialize_service_monitoring()
+      end)
+    end
 
     # Emit application started event
     try do
@@ -451,43 +462,44 @@ defmodule Foundation.Application do
       })
       |> Foundation.Events.store()
     rescue
-      _ -> :ok  # Don't fail startup due to event emission
+      # Don't fail startup due to event emission
+      _ -> :ok
     end
   end
 
   defp perform_graceful_shutdown do
     Logger.info("Beginning graceful shutdown sequence...")
-    
+
     # Stop services in reverse dependency order
     shutdown_phases = [:application, :coordination, :foundation_services, :infrastructure]
-    
+
     Enum.each(shutdown_phases, fn phase ->
       Logger.info("Shutting down #{phase} services...")
       shutdown_phase_services(phase)
     end)
-    
+
     # Final cleanup
     cleanup_application_resources()
   end
 
   defp shutdown_phase_services(phase) do
-    phase_services = 
+    phase_services =
       @service_definitions
       |> Enum.filter(fn {_name, config} -> config.startup_phase == phase end)
       |> Enum.map(fn {service_name, _config} -> service_name end)
-    
+
     # Send graceful shutdown signal to each service
     Enum.each(phase_services, fn service_name ->
       case ProcessRegistry.lookup(:production, service_name) do
         {:ok, pid} ->
           Logger.debug("Sending graceful shutdown to #{service_name}")
           send(pid, :shutdown)
-        
-        {:error, _} ->
+
+        :error ->
           Logger.debug("Service #{service_name} not found during shutdown")
       end
     end)
-    
+
     # Wait for graceful shutdown
     Process.sleep(1000)
   end
@@ -495,7 +507,7 @@ defmodule Foundation.Application do
   defp cleanup_application_resources do
     # Clean up ETS tables, close files, etc.
     Logger.debug("Cleaning up application resources...")
-    
+
     # Cleanup coordination primitive resources
     try do
       Foundation.Coordination.Primitives.cleanup_infrastructure()
@@ -523,8 +535,8 @@ defmodule Foundation.Application do
           health: :healthy,
           last_health_check: DateTime.utc_now()
         }
-      
-      {:error, _} ->
+
+      :error ->
         %{
           status: :stopped,
           pid: nil,
@@ -539,35 +551,35 @@ defmodule Foundation.Application do
 
   defp group_services_by_phase(service_statuses) do
     phases = [:infrastructure, :foundation_services, :coordination, :application]
-    
+
     Enum.reduce(phases, %{}, fn phase, acc ->
-      phase_services = 
+      phase_services =
         @service_definitions
         |> Enum.filter(fn {_name, config} -> config.startup_phase == phase end)
         |> Enum.map(fn {service_name, _config} -> service_name end)
-      
+
       phase_status = %{
         services: phase_services,
         healthy_count: count_healthy_services(phase_services, service_statuses),
         total_count: length(phase_services),
         status: determine_phase_status(phase_services, service_statuses)
       }
-      
+
       Map.put(acc, phase, phase_status)
     end)
   end
 
   defp determine_overall_status(service_statuses) do
-    health_counts = 
+    health_counts =
       service_statuses
       |> Map.values()
       |> Enum.group_by(& &1.health)
       |> Enum.map(fn {health, services} -> {health, length(services)} end)
       |> Enum.into(%{})
-    
+
     unhealthy_count = Map.get(health_counts, :unhealthy, 0)
     degraded_count = Map.get(health_counts, :degraded, 0)
-    
+
     cond do
       unhealthy_count > 0 -> :unhealthy
       degraded_count > 0 -> :degraded
@@ -583,14 +595,14 @@ defmodule Foundation.Application do
 
   defp calculate_health_summary(service_statuses) do
     total_services = map_size(service_statuses)
-    
-    health_counts = 
+
+    health_counts =
       service_statuses
       |> Map.values()
       |> Enum.group_by(& &1.health)
       |> Enum.map(fn {health, services} -> {health, length(services)} end)
       |> Enum.into(%{})
-    
+
     %{
       total_services: total_services,
       healthy: Map.get(health_counts, :healthy, 0),
@@ -606,23 +618,31 @@ defmodule Foundation.Application do
     else
       healthy_count = Map.get(health_counts, :healthy, 0)
       degraded_count = Map.get(health_counts, :degraded, 0)
-      
+
       # Degraded services count as 50% healthy
-      weighted_healthy = healthy_count + (degraded_count * 0.5)
+      weighted_healthy = healthy_count + degraded_count * 0.5
       Float.round(weighted_healthy / total_services * 100, 1)
     end
   end
 
   defp check_service_dependencies(dependencies) do
-    missing_deps = 
+    missing_deps =
       dependencies
       |> Enum.filter(fn dep_service ->
-        case ProcessRegistry.lookup(:production, dep_service) do
-          {:ok, _pid} -> false
-          {:error, _} -> true
+        case dep_service do
+          :process_registry ->
+            # Special case: check if ProcessRegistry itself is running
+            Process.whereis(ProcessRegistry) == nil
+
+          _ ->
+            # Normal case: look up through ProcessRegistry
+            case ProcessRegistry.lookup(:production, dep_service) do
+              {:ok, _pid} -> false
+              :error -> true
+            end
         end
       end)
-    
+
     if Enum.empty?(missing_deps) do
       :ok
     else
@@ -637,13 +657,14 @@ defmodule Foundation.Application do
   end
 
   defp determine_phase_status(service_names, service_statuses) do
-    phase_services = Enum.map(service_names, fn name -> 
-      Map.get(service_statuses, name, %{health: :unhealthy})
-    end)
-    
+    phase_services =
+      Enum.map(service_names, fn name ->
+        Map.get(service_statuses, name, %{health: :unhealthy})
+      end)
+
     unhealthy_count = Enum.count(phase_services, fn s -> s.health == :unhealthy end)
     degraded_count = Enum.count(phase_services, fn s -> s.health == :degraded end)
-    
+
     cond do
       unhealthy_count > 0 -> :unhealthy
       degraded_count > 0 -> :degraded
@@ -659,66 +680,121 @@ defmodule Foundation.Application do
   end
 
   defp perform_service_health_check(service_name, _config) do
-    case ProcessRegistry.lookup(:production, service_name) do
-      {:ok, pid} ->
-        try do
-          # Attempt to get health status from service if it supports it
-          case GenServer.call(pid, :health_status, 5000) do
-            {:ok, health} ->
-              %{
-                health: health,
-                response_time: measure_response_time(pid),
-                last_check: DateTime.utc_now(),
-                details: "Health check successful"
-              }
-            
-            {:error, reason} ->
-              %{
-                health: :degraded,
-                response_time: nil,
-                last_check: DateTime.utc_now(),
-                details: "Health check returned error: #{inspect(reason)}"
-              }
-            
-            other ->
-              %{
-                health: :degraded,
-                response_time: nil,
-                last_check: DateTime.utc_now(),
-                details: "Unexpected health check response: #{inspect(other)}"
-              }
-          end
-        catch
-          :exit, {:timeout, _} ->
-            %{
-              health: :degraded,
-              response_time: nil,
-              last_check: DateTime.utc_now(),
-              details: "Health check timed out"
-            }
-          
-          :exit, {reason, _} ->
+    # Special handling for services that don't support health checks
+    case service_name do
+      :process_registry ->
+        # ProcessRegistry is the Registry itself, check if it's alive
+        case Process.whereis(ProcessRegistry) do
+          nil ->
             %{
               health: :unhealthy,
               response_time: nil,
               last_check: DateTime.utc_now(),
-              details: "Health check failed: #{inspect(reason)}"
+              details: "ProcessRegistry not found"
+            }
+
+          pid when is_pid(pid) ->
+            %{
+              health: :healthy,
+              response_time: 0,
+              last_check: DateTime.utc_now(),
+              details: "ProcessRegistry running"
             }
         end
-      
-      {:error, _} ->
-        %{
-          health: :unhealthy,
-          response_time: nil,
-          last_check: DateTime.utc_now(),
-          details: "Service process not found"
-        }
+
+      :task_supervisor ->
+        # TaskSupervisor is a built-in supervisor, check if it's alive
+        case Process.whereis(Foundation.TaskSupervisor) do
+          nil ->
+            %{
+              health: :unhealthy,
+              response_time: nil,
+              last_check: DateTime.utc_now(),
+              details: "TaskSupervisor not found"
+            }
+
+          pid when is_pid(pid) ->
+            %{
+              health: :healthy,
+              response_time: 0,
+              last_check: DateTime.utc_now(),
+              details: "TaskSupervisor running"
+            }
+        end
+
+      _ ->
+        # For other services, try the normal health check
+        case ProcessRegistry.lookup(:production, service_name) do
+          {:ok, pid} ->
+            try do
+              # Attempt to get health status from service if it supports it
+              case GenServer.call(pid, :health_status, 5000) do
+                {:ok, health} ->
+                  %{
+                    health: health,
+                    response_time: measure_response_time(pid),
+                    last_check: DateTime.utc_now(),
+                    details: "Health check successful"
+                  }
+
+                {:error, reason} ->
+                  %{
+                    health: :degraded,
+                    response_time: nil,
+                    last_check: DateTime.utc_now(),
+                    details: "Health check returned error: #{inspect(reason)}"
+                  }
+
+                other ->
+                  %{
+                    health: :degraded,
+                    response_time: nil,
+                    last_check: DateTime.utc_now(),
+                    details: "Unexpected health check response: #{inspect(other)}"
+                  }
+              end
+            catch
+              :exit, {:timeout, _} ->
+                %{
+                  health: :degraded,
+                  response_time: nil,
+                  last_check: DateTime.utc_now(),
+                  details: "Health check timed out"
+                }
+
+              :exit, {reason, _} ->
+                # Service doesn't support health_status, but it's alive - that's ok
+                if is_tuple(reason) and elem(reason, 0) == :function_clause do
+                  %{
+                    health: :healthy,
+                    response_time: nil,
+                    last_check: DateTime.utc_now(),
+                    details: "Service alive but doesn't support health checks"
+                  }
+                else
+                  %{
+                    health: :unhealthy,
+                    response_time: nil,
+                    last_check: DateTime.utc_now(),
+                    details: "Health check failed: #{inspect(reason)}"
+                  }
+                end
+            end
+
+          :error ->
+            %{
+              health: :unhealthy,
+              response_time: nil,
+              last_check: DateTime.utc_now(),
+              details: "Service process not found"
+            }
+        end
     end
   end
 
   defp measure_response_time(pid) do
     start_time = System.monotonic_time(:microsecond)
-    
+
     try do
       GenServer.call(pid, :ping, 1000)
       end_time = System.monotonic_time(:microsecond)
@@ -730,29 +806,33 @@ defmodule Foundation.Application do
 
   defp generate_health_recommendations(failed_services, degraded_services) do
     recommendations = []
-    
-    recommendations = if length(failed_services) > 0 do
-      failed_recommendations = [
-        "Immediate attention required: #{length(failed_services)} services are unhealthy",
-        "Check logs for failed services: #{Enum.join(failed_services, ", ")}",
-        "Consider restarting failed services if logs indicate transient issues"
-      ]
-      recommendations ++ failed_recommendations
-    else
-      recommendations
-    end
-    
-    recommendations = if length(degraded_services) > 0 do
-      degraded_recommendations = [
-        "Monitor degraded services: #{Enum.join(degraded_services, ", ")}",
-        "Check resource utilization and dependencies for degraded services",
-        "Consider scaling or optimizing degraded services"
-      ]
-      recommendations ++ degraded_recommendations
-    else
-      recommendations
-    end
-    
+
+    recommendations =
+      if length(failed_services) > 0 do
+        failed_recommendations = [
+          "Immediate attention required: #{length(failed_services)} services are unhealthy",
+          "Check logs for failed services: #{Enum.join(failed_services, ", ")}",
+          "Consider restarting failed services if logs indicate transient issues"
+        ]
+
+        recommendations ++ failed_recommendations
+      else
+        recommendations
+      end
+
+    recommendations =
+      if length(degraded_services) > 0 do
+        degraded_recommendations = [
+          "Monitor degraded services: #{Enum.join(degraded_services, ", ")}",
+          "Check resource utilization and dependencies for degraded services",
+          "Consider scaling or optimizing degraded services"
+        ]
+
+        recommendations ++ degraded_recommendations
+      else
+        recommendations
+      end
+
     if Enum.empty?(recommendations) do
       ["All services are healthy"]
     else
@@ -763,18 +843,18 @@ defmodule Foundation.Application do
   defp schedule_periodic_health_check do
     health_config = Application.get_env(:foundation, :health_monitoring, %{})
     interval = Map.get(health_config, :global_health_check_interval, 30_000)
-    
+
     Process.send_after(self(), :perform_health_check, interval)
   end
 
   defp initialize_service_monitoring do
     Logger.info("Initializing service monitoring...")
-    
+
     # Start periodic health checking
     spawn(fn ->
       health_check_loop()
     end)
-    
+
     # Initialize service dependency monitoring
     spawn(fn ->
       dependency_monitor_loop()
@@ -784,10 +864,10 @@ defmodule Foundation.Application do
   defp health_check_loop do
     health_config = Application.get_env(:foundation, :health_monitoring, %{})
     interval = Map.get(health_config, :global_health_check_interval, 30_000)
-    
+
     try do
       health_result = health_check()
-      
+
       # Emit health metrics
       Foundation.Telemetry.emit_gauge(
         [:foundation, :application, :health_percentage],
@@ -797,19 +877,18 @@ defmodule Foundation.Application do
           degraded_services: length(health_result.degraded_services)
         }
       )
-      
+
       # Log health issues
       if health_result.overall_health != :healthy do
         Logger.warning("Application health: #{health_result.overall_health}")
         Logger.warning("Failed services: #{inspect(health_result.failed_services)}")
         Logger.warning("Degraded services: #{inspect(health_result.degraded_services)}")
       end
-      
     rescue
       error ->
         Logger.error("Health check failed: #{inspect(error)}")
     end
-    
+
     Process.sleep(interval)
     health_check_loop()
   end
@@ -818,23 +897,23 @@ defmodule Foundation.Application do
     try do
       # Check for services with unmet dependencies
       unmet_dependencies = find_unmet_dependencies()
-      
+
       if not Enum.empty?(unmet_dependencies) do
         Logger.warning("Services with unmet dependencies: #{inspect(unmet_dependencies)}")
-        
+
         # Emit dependency warning
         Foundation.Telemetry.emit_counter(
           [:foundation, :application, :dependency_warnings],
           %{unmet_count: length(unmet_dependencies)}
         )
       end
-      
     rescue
       error ->
         Logger.error("Dependency monitoring failed: #{inspect(error)}")
     end
-    
-    Process.sleep(60_000)  # Check every minute
+
+    # Check every minute
+    Process.sleep(60_000)
     dependency_monitor_loop()
   end
 
@@ -856,7 +935,7 @@ defmodule Foundation.Application do
       {_, _} ->
         # Rough estimate - in production, you'd track actual start time
         System.monotonic_time(:millisecond)
-      
+
       nil ->
         0
     end
@@ -878,34 +957,34 @@ defmodule Foundation.Application do
 
   # Type definitions for better documentation
   @type service_status :: %{
-    status: :running | :stopped,
-    pid: pid() | nil,
-    uptime: non_neg_integer(),
-    memory_usage: non_neg_integer(),
-    message_queue_length: non_neg_integer(),
-    health: :healthy | :degraded | :unhealthy,
-    last_health_check: DateTime.t()
-  }
+          status: :running | :stopped,
+          pid: pid() | nil,
+          uptime: non_neg_integer(),
+          memory_usage: non_neg_integer(),
+          message_queue_length: non_neg_integer(),
+          health: :healthy | :degraded | :unhealthy,
+          last_health_check: DateTime.t()
+        }
 
   @type phase_status :: %{
-    services: [atom()],
-    healthy_count: non_neg_integer(),
-    total_count: non_neg_integer(),
-    status: :healthy | :degraded | :unhealthy
-  }
+          services: [atom()],
+          healthy_count: non_neg_integer(),
+          total_count: non_neg_integer(),
+          status: :healthy | :degraded | :unhealthy
+        }
 
   @type health_summary :: %{
-    total_services: non_neg_integer(),
-    healthy: non_neg_integer(),
-    degraded: non_neg_integer(),
-    unhealthy: non_neg_integer(),
-    health_percentage: float()
-  }
+          total_services: non_neg_integer(),
+          healthy: non_neg_integer(),
+          degraded: non_neg_integer(),
+          unhealthy: non_neg_integer(),
+          health_percentage: float()
+        }
 
   @type health_status :: %{
-    health: :healthy | :degraded | :unhealthy,
-    response_time: non_neg_integer() | nil,
-    last_check: DateTime.t(),
-    details: String.t()
-  }
+          health: :healthy | :degraded | :unhealthy,
+          response_time: non_neg_integer() | nil,
+          last_check: DateTime.t(),
+          details: String.t()
+        }
 end

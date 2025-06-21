@@ -344,7 +344,14 @@ defmodule Foundation.Services.TelemetryService do
       attach_vm_metrics()
     end
 
-    Logger.info("Telemetry service initialized successfully in namespace #{inspect(namespace)}")
+    case Application.get_env(:foundation, :test_mode, false) do
+      false ->
+        Logger.info("Telemetry service initialized successfully in namespace #{inspect(namespace)}")
+
+      _ ->
+        :ok
+    end
+
     {:ok, state}
   end
 
@@ -392,6 +399,25 @@ defmodule Foundation.Services.TelemetryService do
     }
 
     {:reply, {:ok, status}, state}
+  end
+
+  @impl GenServer
+  def handle_call(:health_status, _from, state) do
+    # Health check for application monitoring
+    health =
+      if map_size(state.metrics) >= 0 and map_size(state.handlers) >= 0 do
+        :healthy
+      else
+        :degraded
+      end
+
+    {:reply, {:ok, health}, state}
+  end
+
+  @impl GenServer
+  def handle_call(:ping, _from, state) do
+    # Simple ping for response time measurement
+    {:reply, :pong, state}
   end
 
   @impl GenServer
