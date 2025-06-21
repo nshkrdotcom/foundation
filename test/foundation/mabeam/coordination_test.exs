@@ -356,16 +356,6 @@ defmodule Foundation.MABEAM.CoordinationTest do
     }
   end
 
-  defp create_consensus_protocol do
-    %{
-      name: :consensus_protocol,
-      type: :consensus,
-      algorithm: &simple_consensus_algorithm/1,
-      timeout: 5000,
-      retry_policy: %{max_retries: 3, backoff: :exponential}
-    }
-  end
-
   defp create_negotiation_protocol do
     %{
       name: :negotiation_protocol,
@@ -374,43 +364,6 @@ defmodule Foundation.MABEAM.CoordinationTest do
       timeout: 10_000,
       retry_policy: %{max_retries: 5, backoff: :linear}
     }
-  end
-
-  defp simple_consensus_algorithm(context) do
-    agents = Map.get(context, :agents, [])
-    question = Map.get(context, :question, "Default question")
-    options = Map.get(context, :options, [:yes, :no])
-    timeout = Map.get(context, :timeout, 5000)
-
-    # Simulate collecting votes from agents
-    votes = collect_votes_from_agents(agents, question, options, timeout)
-
-    case analyze_consensus_votes(votes) do
-      {:consensus, winning_option, vote_count} ->
-        {:ok,
-         %{
-           consensus: winning_option,
-           vote_count: vote_count,
-           total_votes: length(votes),
-           status: :consensus_reached
-         }}
-
-      {:timeout, partial_votes} ->
-        {:ok,
-         %{
-           status: :timeout,
-           partial_votes: length(partial_votes),
-           total_expected: length(agents)
-         }}
-
-      {:tie, _tied_options} ->
-        {:ok,
-         %{
-           status: :tie,
-           vote_count: div(length(votes), 2),
-           total_votes: length(votes)
-         }}
-    end
   end
 
   defp simple_negotiation_algorithm(context) do
@@ -438,52 +391,6 @@ defmodule Foundation.MABEAM.CoordinationTest do
            rounds: rounds,
            resource: resource
          }}
-    end
-  end
-
-  defp collect_votes_from_agents(agents, _question, _options, timeout) do
-    # Check for slow agents and simulate timeout
-    slow_agents =
-      Enum.filter(agents, fn agent ->
-        agent_name = to_string(agent)
-        String.contains?(agent_name, "slow")
-      end)
-
-    if length(slow_agents) > 0 and timeout < 1000 do
-      # Simulate timeout with partial votes
-      regular_agents = agents -- slow_agents
-
-      Enum.map(regular_agents, fn agent ->
-        {agent, get_mocked_agent_response(agent, :option_a)}
-      end)
-    else
-      # Normal vote collection
-      Enum.map(agents, fn agent ->
-        {agent, get_mocked_agent_response(agent, :option_a)}
-      end)
-    end
-  end
-
-  defp analyze_consensus_votes(votes) do
-    if length(votes) == 0 do
-      {:timeout, []}
-    else
-      vote_counts =
-        votes
-        |> Enum.map(fn {_agent, vote} -> vote end)
-        |> Enum.frequencies()
-
-      max_votes = Enum.max(Map.values(vote_counts))
-
-      winners =
-        vote_counts
-        |> Enum.filter(fn {_option, count} -> count == max_votes end)
-        |> Enum.map(fn {option, _count} -> option end)
-
-      case length(winners) do
-        1 -> {:consensus, hd(winners), max_votes}
-        _ -> {:tie, winners}
-      end
     end
   end
 
@@ -643,12 +550,5 @@ defmodule Foundation.MABEAM.CoordinationTest do
   defp mock_agent_responses(response_map) do
     # Store responses in process dictionary for get_mocked_agent_response/2
     Process.put(:mocked_responses, response_map)
-  end
-
-  defp get_mocked_agent_response(agent, default) do
-    case Process.get(:mocked_responses) do
-      nil -> default
-      responses -> Map.get(responses, agent, default)
-    end
   end
 end
