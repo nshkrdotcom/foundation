@@ -215,7 +215,7 @@ defmodule Foundation.Security.InputValidationSecurityTest do
         %{eval: "System.halt()"},
 
         # Executable content
-        %{func: fn -> :os.cmd(~c"rm -rf /") end},
+        %{func: fn -> System.cmd("echo", ["test"]) end},
         %{code: "Code.eval_string('System.halt()')"},
 
         # Binary injection
@@ -345,7 +345,7 @@ defmodule Foundation.Security.InputValidationSecurityTest do
       Enum.each(malicious_keys, fn malicious_key ->
         # Test rate limiter with malicious key
         verify_safe_isolation(fn ->
-          # Test rate limiter key validation (using existing API) 
+          # Test rate limiter key validation (using existing API)
           Foundation.Infrastructure.RateLimiter.check_rate(
             :test_bucket,
             malicious_key,

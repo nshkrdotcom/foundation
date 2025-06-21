@@ -218,7 +218,7 @@ defmodule Foundation.GracefulDegradationTest do
       recent_after = :ets.lookup(@fallback_table, recent_key)
 
       # Should be removed
-      assert length(old_after) == 0
+      assert Enum.empty?(old_after)
       # Recent might be removed too depending on TTL, but cleanup should succeed
       assert is_list(recent_after)
     end

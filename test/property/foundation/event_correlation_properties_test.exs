@@ -457,7 +457,7 @@ defmodule Foundation.Property.EventCorrelationPropertiesTest do
             end
           end)
 
-        assert length(actually_missing) == 0,
+        assert Enum.empty?(actually_missing),
                "Expected events #{inspect(actually_missing)} to be in store but they were missing"
       end
 

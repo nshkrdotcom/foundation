@@ -110,9 +110,10 @@ defmodule Foundation.Services.ServiceBehaviour do
 
   ## Returns
   - `{:ok, new_state}` - Dependency ready handled successfully
-  - `{:error, reason, new_state}` - Error handling dependency readiness
+
+  Note: Default implementation always returns `{:ok, state}`. Override to handle errors.
   """
-  @callback handle_dependency_ready(atom(), term()) :: {:ok, term()} | {:error, term(), term()}
+  @callback handle_dependency_ready(atom(), term()) :: {:ok, term()}
 
   @doc """
   Called when a dependency becomes unavailable.
@@ -123,9 +124,10 @@ defmodule Foundation.Services.ServiceBehaviour do
 
   ## Returns
   - `{:ok, new_state}` - Dependency loss handled successfully
-  - `{:error, reason, new_state}` - Error handling dependency loss
+
+  Note: Default implementation always returns `{:ok, state}`. Override to handle errors.
   """
-  @callback handle_dependency_lost(atom(), term()) :: {:ok, term()} | {:error, term(), term()}
+  @callback handle_dependency_lost(atom(), term()) :: {:ok, term()}
 
   @doc """
   Called when service configuration changes.
@@ -136,9 +138,10 @@ defmodule Foundation.Services.ServiceBehaviour do
 
   ## Returns
   - `{:ok, new_state}` - Configuration change handled successfully
-  - `{:error, reason, new_state}` - Error handling configuration change
+
+  Note: Default implementation always returns `{:ok, state}`. Override to handle errors.
   """
-  @callback handle_config_change(map(), term()) :: {:ok, term()} | {:error, term(), term()}
+  @callback handle_config_change(map(), term()) :: {:ok, term()}
 
   # Optional callbacks with default implementations
   @optional_callbacks [
@@ -150,6 +153,7 @@ defmodule Foundation.Services.ServiceBehaviour do
   defmacro __using__(_opts \\ []) do
     quote do
       @behaviour Foundation.Services.ServiceBehaviour
+      use GenServer
 
       # Import enhanced service functionality
       import Foundation.Services.ServiceBehaviour
@@ -225,16 +229,12 @@ defmodule Foundation.Services.ServiceBehaviour do
 
         case status do
           true ->
-            case handle_dependency_ready(dependency, new_state) do
-              {:ok, updated_state} -> {:noreply, updated_state}
-              {:error, _reason, updated_state} -> {:noreply, updated_state}
-            end
+            {:ok, updated_state} = handle_dependency_ready(dependency, new_state)
+            {:noreply, updated_state}
 
           false ->
-            case handle_dependency_lost(dependency, new_state) do
-              {:ok, updated_state} -> {:noreply, updated_state}
-              {:error, _reason, updated_state} -> {:noreply, updated_state}
-            end
+            {:ok, updated_state} = handle_dependency_lost(dependency, new_state)
+            {:noreply, updated_state}
         end
       end
 
@@ -254,14 +254,9 @@ defmodule Foundation.Services.ServiceBehaviour do
       end
 
       def handle_call({:update_config, new_config}, _from, state) do
-        case handle_config_change(new_config, state) do
-          {:ok, new_state} ->
-            updated_state = %{new_state | config: Map.merge(state.config, new_config)}
-            {:reply, :ok, updated_state}
-
-          {:error, reason, error_state} ->
-            {:reply, {:error, reason}, error_state}
-        end
+        {:ok, new_state} = handle_config_change(new_config, state)
+        updated_state = %{new_state | config: Map.merge(state.config, new_config)}
+        {:reply, :ok, updated_state}
       end
 
       def terminate(reason, state) do
