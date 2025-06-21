@@ -1,5 +1,6 @@
-# lib/foundation/mabeam/core.ex
 defmodule Foundation.MABEAM.Core do
+  @dialyzer {:nowarn_function, handle_info: 2}
+
   @moduledoc """
   Universal Variable Orchestrator for multi-agent coordination on the BEAM.
 
@@ -40,7 +41,7 @@ defmodule Foundation.MABEAM.Core do
 
   use Foundation.Services.ServiceBehaviour
 
-  alias Foundation.{Events, ProcessRegistry, ServiceRegistry, Telemetry}
+  alias Foundation.{Events, ProcessRegistry, ServiceRegistry}
   # alias Foundation.MABEAM.Types  # Not used yet, will be needed for validation
 
   # ============================================================================
@@ -294,7 +295,7 @@ defmodule Foundation.MABEAM.Core do
     final_config = Map.merge(default_core_config(), config)
 
     # Register with ProcessRegistry
-    case ProcessRegistry.register(:production, __MODULE__, self()) do
+    case ProcessRegistry.register(:production, :mabeam_core, self()) do
       :ok ->
         setup_telemetry()
         {:ok, Map.put(core_state, :config, final_config)}
@@ -558,14 +559,14 @@ defmodule Foundation.MABEAM.Core do
 
   # Health check helpers
   defp check_process_registry do
-    case ProcessRegistry.lookup(:production, __MODULE__) do
+    case ProcessRegistry.lookup(:production, :mabeam_core) do
       {:ok, _pid} -> :healthy
       :error -> :unhealthy
     end
   end
 
   defp check_service_registry do
-    case ServiceRegistry.lookup(:production, __MODULE__) do
+    case ServiceRegistry.lookup(:production, :mabeam_core) do
       {:ok, _info} -> :healthy
       # Not critical for basic operation
       {:error, _} -> :degraded

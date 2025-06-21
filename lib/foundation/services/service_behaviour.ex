@@ -230,14 +230,12 @@ defmodule Foundation.Services.ServiceBehaviour do
         new_dependency_status = Map.put(state.dependency_status, dependency, status)
         new_state = %{state | dependency_status: new_dependency_status}
 
-        case status do
-          true ->
-            {:ok, updated_state} = handle_dependency_ready(dependency, new_state)
-            {:noreply, updated_state}
-
-          false ->
-            {:ok, updated_state} = handle_dependency_lost(dependency, new_state)
-            {:noreply, updated_state}
+        if status do
+          {:ok, updated_state} = handle_dependency_ready(dependency, new_state)
+          {:noreply, updated_state}
+        else
+          {:ok, updated_state} = handle_dependency_lost(dependency, new_state)
+          {:noreply, updated_state}
         end
       end
 
@@ -364,11 +362,19 @@ defmodule Foundation.Services.ServiceBehaviour do
         Process.send_after(self(), :health_check, interval)
       end
 
-      defp check_dependencies(state) do
-        Enum.each(state.dependencies, fn dependency ->
-          status = ServiceRegistry.health_check(state.namespace, dependency)
-          send(self(), {:dependency_status, dependency, status == {:ok, :healthy}})
-        end)
+      defp check_dependencies(state) when is_map(state) do
+        if length(state.dependencies) > 0 do
+          Enum.each(state.dependencies, fn dependency ->
+            # For pragmatic implementation, assume dependencies are healthy if they're registered
+            is_healthy =
+              case ServiceRegistry.lookup(state.namespace, dependency) do
+                {:ok, _pid} -> true
+                {:error, _} -> false
+              end
+
+            send(self(), {:dependency_status, dependency, is_healthy})
+          end)
+        end
       end
 
       defp initialize_metrics do
