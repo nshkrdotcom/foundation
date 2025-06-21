@@ -163,12 +163,12 @@ defmodule Foundation.MABEAM.Coordination.Market do
         {:cpu_supplier, %{supply: 100, min_price: 1.0}},
         {:memory_supplier, %{supply: 200, min_price: 0.5}}
       ]
-      
+
       demanders = [
         {:compute_agent, %{demand: 80, max_price: 2.0}},
         {:storage_agent, %{demand: 150, max_price: 1.0}}
       ]
-      
+
       {:ok, result} = Market.find_equilibrium(:resource_market, suppliers, demanders)
   """
   @spec find_equilibrium(atom(), [market_participant()], [market_participant()]) ::
@@ -206,7 +206,7 @@ defmodule Foundation.MABEAM.Coordination.Market do
         convergence_threshold: 0.05,
         volatility: :medium
       }
-      
+
       {:ok, result} = Market.discover_price(:cpu_time, config)
   """
   @spec discover_price(atom(), market_config()) ::
@@ -246,7 +246,7 @@ defmodule Foundation.MABEAM.Coordination.Market do
         budget_constraints: %{compute_agent: 100.0, storage_agent: 80.0},
         resource_availability: %{cpu: 100, memory: 200}
       }
-      
+
       {:ok, result} = Market.allocate_resources(:multi_resource_market, request)
   """
   @spec allocate_resources(atom(), map()) :: {:ok, allocation_result()} | {:error, term()}
@@ -284,7 +284,7 @@ defmodule Foundation.MABEAM.Coordination.Market do
         supply_variation: 0.05,
         learning_enabled: true
       }
-      
+
       {:ok, result} = Market.simulate_market(:dynamic_market, config)
   """
   @spec simulate_market(atom(), map()) :: {:ok, simulation_result()}
@@ -306,7 +306,7 @@ defmodule Foundation.MABEAM.Coordination.Market do
   their bidding strategies over time.
 
   ## Parameters
-  - `market_id` - Market simulation identifier  
+  - `market_id` - Market simulation identifier
   - `learning_config` - Learning simulation parameters
 
   ## Returns
@@ -556,7 +556,7 @@ defmodule Foundation.MABEAM.Coordination.Market do
   end
 
   defp generate_price_range(suppliers, demanders) do
-    if length(suppliers) == 0 or length(demanders) == 0 do
+    if Enum.empty?(suppliers) or Enum.empty?(demanders) do
       []
     else
       min_price = suppliers |> Enum.map(fn {_agent, %{min_price: p}} -> p end) |> Enum.min()
@@ -874,7 +874,7 @@ defmodule Foundation.MABEAM.Coordination.Market do
       |> Enum.chunk_every(2, 1, :discard)
       |> Enum.map(fn [current, previous] -> current - previous end)
 
-    if length(price_changes) == 0 do
+    if Enum.empty?(price_changes) do
       0.0
     else
       mean_change = Enum.sum(price_changes) / length(price_changes)
@@ -1054,7 +1054,7 @@ defmodule Foundation.MABEAM.Coordination.Market do
   end
 
   defp calculate_overall_efficiency(period_results) do
-    if length(period_results) == 0 do
+    if Enum.empty?(period_results) do
       0.0
     else
       period_results
