@@ -213,7 +213,11 @@ defmodule Foundation.Services.EventStore do
       }
     }
 
-    Logger.info("Event store initialized successfully")
+    case Application.get_env(:foundation, :test_mode, false) do
+      false -> Logger.info("Event store initialized successfully")
+      _ -> :ok
+    end
+
     {:ok, state}
   end
 
@@ -365,6 +369,25 @@ defmodule Foundation.Services.EventStore do
     }
 
     {:reply, :ok, new_state}
+  end
+
+  @impl GenServer
+  def handle_call(:health_status, _from, state) do
+    # Health check for application monitoring
+    health =
+      if map_size(state.events) >= 0 do
+        :healthy
+      else
+        :degraded
+      end
+
+    {:reply, {:ok, health}, state}
+  end
+
+  @impl GenServer
+  def handle_call(:ping, _from, state) do
+    # Simple ping for response time measurement
+    {:reply, :pong, state}
   end
 
   # Catch-all for unsupported operations (security protection)

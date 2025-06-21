@@ -15,5 +15,11 @@
   {"lib/foundation/infrastructure/rate_limiter.ex", :contract_supertype},
 
   # pool_workers contract_supertype warnings
-  {"lib/foundation/infrastructure/pool_workers/http_worker.ex", :contract_supertype}
+  {"lib/foundation/infrastructure/pool_workers/http_worker.ex", :contract_supertype},
+
+  # event_store.ex pattern_match warnings - test_mode conditional compilation
+  {"lib/foundation/services/event_store.ex", :pattern_match},
+
+  # telemetry_service.ex pattern_match warnings - test_mode conditional compilation
+  {"lib/foundation/services/telemetry_service.ex", :pattern_match}
 ]

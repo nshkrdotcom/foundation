@@ -20,9 +20,152 @@ defmodule Foundation.Infrastructure.RateLimiter do
 
   defmodule HammerBackend do
     @moduledoc false
-    use Hammer,
-      backend: :ets,
-      cleanup_rate: 60_000
+    use GenServer
+
+    def start_link(_opts \\ []) do
+      GenServer.start_link(__MODULE__, [], name: __MODULE__)
+    end
+
+    # Serialize all rate limiting through GenServer to eliminate race conditions
+    def hit(key, time_window_ms, limit, increment \\ 1) do
+      try do
+        GenServer.call(__MODULE__, {:check_rate, key, time_window_ms, limit, increment}, 5000)
+      rescue
+        _error ->
+          # Fallback to allow on any error
+          {:allow, 1}
+      end
+    end
+
+    defp ensure_table_exists(table_name) do
+      case :ets.whereis(table_name) do
+        :undefined ->
+          try do
+            :ets.new(table_name, [
+              :named_table,
+              :set,
+              :public,
+              {:write_concurrency, true},
+              {:read_concurrency, true}
+            ])
+          rescue
+            _error ->
+              # Table might have been created by another process
+              :ok
+          end
+
+        _ ->
+          :ok
+      end
+    end
+
+    @impl GenServer
+    def init(_opts) do
+      # Configure Hammer backend
+      Application.put_env(:hammer, :backend, {Hammer.Backend.ETS,
+       [
+         # 2 hours
+         expiry_ms: 60_000 * 60 * 2,
+         # 10 minutes
+         cleanup_interval_ms: 60_000 * 10
+       ]})
+
+      # Schedule periodic cleanup of old rate limit buckets
+      schedule_cleanup()
+
+      {:ok, %{started_at: DateTime.utc_now()}}
+    end
+
+    # Clean up old rate limit buckets
+    defp schedule_cleanup do
+      # Clean every minute
+      Process.send_after(self(), :cleanup_buckets, 60_000)
+    end
+
+    @impl GenServer
+    def handle_call({:check_rate, key, time_window_ms, limit, increment}, _from, state) do
+      table_name = :rate_limiter_buckets
+      ensure_table_exists(table_name)
+
+      current_time = System.system_time(:millisecond)
+
+      # Handle edge case of zero time window
+      window_start =
+        if time_window_ms > 0 do
+          div(current_time, time_window_ms) * time_window_ms
+        else
+          # Each call gets its own window
+          current_time
+        end
+
+      bucket_key = {key, window_start}
+
+      current_count =
+        case :ets.lookup(table_name, bucket_key) do
+          [{^bucket_key, count}] -> count
+          [] -> 0
+        end
+
+      new_count = current_count + increment
+
+      result =
+        if new_count <= limit do
+          :ets.insert(table_name, {bucket_key, new_count})
+          {:allow, new_count}
+        else
+          {:deny, current_count}
+        end
+
+      {:reply, result, state}
+    end
+
+    @impl GenServer
+    def handle_call(:health_status, _from, state) do
+      {:reply, {:ok, :healthy}, state}
+    end
+
+    @impl GenServer
+    def handle_call(:ping, _from, state) do
+      {:reply, :pong, state}
+    end
+
+    @impl GenServer
+    def handle_call(_request, _from, state) do
+      {:reply, {:error, :not_supported}, state}
+    end
+
+    @impl GenServer
+    def handle_cast(_request, state) do
+      {:noreply, state}
+    end
+
+    @impl GenServer
+    def handle_info(:cleanup_buckets, state) do
+      cleanup_old_buckets()
+      schedule_cleanup()
+      {:noreply, state}
+    end
+
+    @impl GenServer
+    def handle_info(_info, state) do
+      {:noreply, state}
+    end
+
+    # Clean up buckets older than 2 hours
+    defp cleanup_old_buckets do
+      table_name = :rate_limiter_buckets
+
+      if :ets.whereis(table_name) != :undefined do
+        current_time = System.system_time(:millisecond)
+        # 2 hours ago
+        cutoff_time = current_time - 2 * 60 * 60 * 1000
+
+        # Delete old entries
+        :ets.select_delete(table_name, [
+          {{{:_, :"$1"}, :_}, [{:<, :"$1", cutoff_time}], [true]}
+        ])
+      end
+    end
   end
 
   alias Foundation.Types.Error

@@ -171,7 +171,10 @@ defmodule Foundation.Infrastructure.ConnectionManager do
       configs: %{}
     }
 
-    Logger.info("ConnectionManager started")
+    unless Application.get_env(:foundation, :test_mode, false) do
+      Logger.info("ConnectionManager started")
+    end
+
     {:ok, state}
   end
 
@@ -266,6 +269,18 @@ defmodule Foundation.Infrastructure.ConnectionManager do
   def handle_call(:list_pools, _from, state) do
     pool_names = Map.keys(state.pools)
     {:reply, pool_names, state}
+  end
+
+  @impl GenServer
+  def handle_call(:health_status, _from, state) do
+    # Health check for application monitoring
+    {:reply, {:ok, :healthy}, state}
+  end
+
+  @impl GenServer
+  def handle_call(:ping, _from, state) do
+    # Simple ping for response time measurement
+    {:reply, :pong, state}
   end
 
   ## Private Functions
