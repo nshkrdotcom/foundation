@@ -8,9 +8,9 @@ defmodule Foundation.Config do
 
   @behaviour Foundation.Contracts.Configurable
 
+  alias Foundation.Error
   alias Foundation.Services.ConfigServer
   alias Foundation.Types.Config
-  alias Foundation.Error
 
   @type config_path :: [atom()]
   @type config_value :: term()
@@ -31,7 +31,7 @@ defmodule Foundation.Config do
       :ok
   """
   @spec initialize() :: :ok | {:error, Error.t()}
-  def initialize() do
+  def initialize do
     ConfigServer.initialize()
   end
 
@@ -54,10 +54,10 @@ defmodule Foundation.Config do
   ## Examples
 
       iex> Foundation.Config.status()
-      {:ok, %{status: :running, uptime: 12345}}
+      {:ok, %{status: :running, uptime: 12_345}}
   """
   @spec status() :: {:ok, map()} | {:error, Error.t()}
-  def status() do
+  def status do
     ConfigServer.status()
   end
 

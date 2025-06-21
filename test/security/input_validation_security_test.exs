@@ -245,7 +245,7 @@ defmodule Foundation.Security.InputValidationSecurityTest do
     test "validates correlation ID entropy and format" do
       weak_correlation_ids = [
         # Predictable patterns
-        "123456789",
+        "12_3456789",
         "000000000",
         "abcdefghi",
 
@@ -321,7 +321,7 @@ defmodule Foundation.Security.InputValidationSecurityTest do
         :"/rm_rf",
         "'; DROP TABLE circuits; --",
         "<script>alert('xss')</script>",
-        String.duplicate("A", 10000)
+        String.duplicate("A", 10_000)
       ]
 
       Enum.each(malicious_names, fn malicious_name ->
@@ -338,7 +338,7 @@ defmodule Foundation.Security.InputValidationSecurityTest do
         "../../etc/passwd",
         "key'; DROP TABLE rates; --",
         "<script>alert('xss')</script>",
-        String.duplicate("evil", 10000),
+        String.duplicate("evil", 10_000),
         <<0xFF, 0xFE, 0xBA, 0xAD>>
       ]
 

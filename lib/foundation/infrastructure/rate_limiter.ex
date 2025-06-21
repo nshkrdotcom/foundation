@@ -3,7 +3,7 @@ defmodule Foundation.Infrastructure.RateLimiter do
   Rate limiter wrapper around Hammer library.
 
   Provides standardized rate limiting functionality with telemetry integration
-  and Foundation-specific error handling. Translates Hammer responses to 
+  and Foundation-specific error handling. Translates Hammer responses to
   Foundation.Types.Error structures.
 
   ## Usage
@@ -13,7 +13,7 @@ defmodule Foundation.Infrastructure.RateLimiter do
         :ok -> proceed_with_request()
         {:error, error} -> handle_rate_limit(error)
       end
-      
+
       # Get current rate status
       status = RateLimiter.get_status("user:123", :login)
   """
@@ -182,7 +182,7 @@ defmodule Foundation.Infrastructure.RateLimiter do
 
   ## Parameters
   - `entity_id`: Identifier for the entity being rate limited (user, IP, etc.)
-  - `operation`: Type of operation being performed  
+  - `operation`: Type of operation being performed
   - `limit`: Maximum number of requests allowed
   - `time_window_ms`: Time window in milliseconds
   - `metadata`: Additional telemetry metadata
@@ -191,7 +191,7 @@ defmodule Foundation.Infrastructure.RateLimiter do
 
       iex> RateLimiter.check_rate("user:123", :api_call, 100, 60_000)
       :ok
-      
+
       iex> RateLimiter.check_rate("user:456", :heavy_operation, 5, 60_000)
       {:error, %Error{error_type: :rate_limit_exceeded}}
   """
@@ -313,7 +313,7 @@ defmodule Foundation.Infrastructure.RateLimiter do
   @doc """
   Reset the rate limiting bucket for an entity and operation.
 
-  Note: This is a simplified implementation that may not actually clear 
+  Note: This is a simplified implementation that may not actually clear
   the bucket depending on the Hammer backend configuration.
 
   ## Parameters
@@ -335,7 +335,7 @@ defmodule Foundation.Infrastructure.RateLimiter do
       })
 
       # For now, we just log the reset attempt
-      # In a production implementation, you might want to use a different 
+      # In a production implementation, you might want to use a different
       # Hammer backend that supports bucket deletion
       :ok
     rescue

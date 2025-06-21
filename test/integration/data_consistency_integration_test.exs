@@ -461,7 +461,7 @@ defmodule Foundation.Integration.DataConsistencyIntegrationTest do
         end
 
       # Wait for all operations to complete
-      results = Task.await_many(tasks, 15000)
+      results = Task.await_many(tasks, 15_000)
 
       # Verify all operations completed successfully
       assert length(results) == 4

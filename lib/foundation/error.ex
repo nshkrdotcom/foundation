@@ -243,7 +243,7 @@ defmodule Foundation.Error do
 
   ## Error Analysis and Recovery
 
-  def is_retryable?(%__MODULE__{retry_strategy: strategy}) do
+  def retryable?(%__MODULE__{retry_strategy: strategy}) do
     strategy != :no_retry
   end
 

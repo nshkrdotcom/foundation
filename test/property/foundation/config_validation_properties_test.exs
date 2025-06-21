@@ -6,7 +6,7 @@ defmodule Foundation.Property.ConfigValidationPropertiesTest do
   # Property tests are inherently slow
   @moduletag :slow
 
-  alias Foundation.{Config}
+  alias Foundation.Config
   alias Foundation.Services.ConfigServer
   alias Foundation.TestHelpers
 
@@ -60,7 +60,7 @@ defmodule Foundation.Property.ConfigValidationPropertiesTest do
       # For boolean configs
       boolean(),
       # For integer configs
-      integer(1..86400),
+      integer(1..86_400),
       # For string configs
       string(:alphanumeric, min_length: 1, max_length: 100)
     ])

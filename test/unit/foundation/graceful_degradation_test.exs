@@ -295,7 +295,7 @@ defmodule Foundation.GracefulDegradationTest do
     test "serialize_safe/1 serializes normal events successfully" do
       event = %Event{
         event_type: :test_event,
-        event_id: 12345,
+        event_id: 12_345,
         timestamp: System.system_time(:microsecond),
         wall_time: DateTime.utc_now(),
         node: Node.self(),
@@ -315,7 +315,7 @@ defmodule Foundation.GracefulDegradationTest do
     test "serialize_safe/1 handles problematic events with fallback" do
       event = %Event{
         event_type: :availability_test,
-        event_id: 67890,
+        event_id: 67_890,
         timestamp: System.system_time(:microsecond),
         wall_time: DateTime.utc_now(),
         node: Node.self(),
@@ -337,7 +337,7 @@ defmodule Foundation.GracefulDegradationTest do
     test "deserialize_safe/1 handles normal serialized events" do
       event = %Event{
         event_type: :test_event,
-        event_id: 11111,
+        event_id: 11_111,
         timestamp: System.system_time(:microsecond),
         wall_time: DateTime.utc_now(),
         node: Node.self(),

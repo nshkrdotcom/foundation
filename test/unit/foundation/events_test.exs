@@ -22,7 +22,7 @@ defmodule Foundation.EventsTest do
 
     test "creates event with optional correlation and parent IDs" do
       correlation_id = "test-correlation"
-      parent_id = 12345
+      parent_id = 12_345
 
       {:ok, event} =
         Events.new_event(:test_event, %{},
@@ -74,7 +74,7 @@ defmodule Foundation.EventsTest do
     end
 
     test "creates function exit event" do
-      call_id = 12345
+      call_id = 12_345
       result = :ok
       duration = 1_000_000
 

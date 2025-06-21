@@ -330,7 +330,7 @@ defmodule Foundation.Infrastructure.PoolWorkers.HttpWorker do
         {:ok, response}
 
       String.contains?(url, "/bytes/") ->
-        # Extract byte count from URL pattern like /bytes/10000
+        # Extract byte count from URL pattern like /bytes/10_000
         bytes_match = Regex.run(~r"/bytes/(\d+)", url)
 
         byte_count =

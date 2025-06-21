@@ -193,7 +193,7 @@ defmodule Foundation.Services.ConfigServer do
       :ok = Foundation.Services.ConfigServer.initialize()
   """
   @spec initialize() :: :ok | {:error, Error.t()}
-  def initialize() do
+  def initialize do
     initialize([])
   end
 
@@ -238,7 +238,7 @@ defmodule Foundation.Services.ConfigServer do
       {:ok, status} = Foundation.Services.ConfigServer.status()
   """
   @spec status() :: {:ok, map()} | {:error, Error.t()}
-  def status() do
+  def status do
     case ServiceRegistry.lookup(:production, :config_server) do
       {:ok, pid} -> GenServer.call(pid, :get_status)
       {:error, _} -> create_service_error("Configuration service not started")

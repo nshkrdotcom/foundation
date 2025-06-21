@@ -6,7 +6,7 @@ defmodule Foundation.Property.EventCorrelationPropertiesTest do
   # Property tests are inherently slow
   @moduletag :slow
 
-  alias Foundation.{Events}
+  alias Foundation.Events
   alias Foundation.Services.EventStore
   alias Foundation.Types.Event
   alias Foundation.TestHelpers

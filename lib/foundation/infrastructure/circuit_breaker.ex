@@ -3,20 +3,20 @@ defmodule Foundation.Infrastructure.CircuitBreaker do
   Circuit breaker wrapper around :fuse library.
 
   Provides standardized circuit breaker functionality with telemetry integration
-  and Foundation-specific error handling. Translates :fuse errors to 
+  and Foundation-specific error handling. Translates :fuse errors to
   Foundation.Types.Error structures.
 
   ## Usage
 
       # Start a fuse instance
       {:ok, _pid} = CircuitBreaker.start_fuse_instance(:my_service, options)
-      
+
       # Execute protected operation
       case CircuitBreaker.execute(:my_service, fn -> risky_operation() end) do
         {:ok, result} -> result
         {:error, error} -> handle_error(error)
       end
-      
+
       # Check circuit status
       status = CircuitBreaker.get_status(:my_service)
   """
@@ -42,7 +42,7 @@ defmodule Foundation.Infrastructure.CircuitBreaker do
 
   ## Examples
 
-      iex> CircuitBreaker.start_fuse_instance(:database, 
+      iex> CircuitBreaker.start_fuse_instance(:database,
       ...>   strategy: :standard, tolerance: 5, refresh: 60_000)
       {:ok, #PID<0.123.0>}
   """
@@ -113,7 +113,7 @@ defmodule Foundation.Infrastructure.CircuitBreaker do
 
       iex> CircuitBreaker.execute(:database, fn -> DB.query("SELECT 1") end)
       {:ok, [%{column: 1}]}
-      
+
       iex> CircuitBreaker.execute(:failing_service, fn -> raise "boom" end)
       {:error, %Error{error_type: :circuit_breaker_blown}}
   """
@@ -299,15 +299,15 @@ defmodule Foundation.Infrastructure.CircuitBreaker do
 
   ## Returns
   - `:ok` - Circuit is closed (healthy)
-  - `:blown` - Circuit is open (unhealthy)  
+  - `:blown` - Circuit is open (unhealthy)
   - `{:error, Error.t()}` - Fuse not found or other error
 
   ## Examples
 
       iex> CircuitBreaker.get_status(:my_service)
       :ok
-      
-      iex> CircuitBreaker.get_status(:blown_service) 
+
+      iex> CircuitBreaker.get_status(:blown_service)
       :blown
   """
   @spec get_status(fuse_name()) :: :ok | :blown | {:error, Error.t()}

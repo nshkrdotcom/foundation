@@ -208,10 +208,10 @@ defmodule Foundation.Property.ErrorPropertiesTest do
     end
   end
 
-  property "Error.is_retryable?/1 with any error always returns boolean" do
+  property "Error.retryable?/1 with any error always returns boolean" do
     check all(error_type <- error_type_generator()) do
       error = Error.new(error_type)
-      result = Error.is_retryable?(error)
+      result = Error.retryable?(error)
 
       assert is_boolean(result)
     end

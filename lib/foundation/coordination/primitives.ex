@@ -65,11 +65,11 @@ defmodule Foundation.Coordination.Primitives do
 
       # Simple consensus on a value
       {:committed, :option_a, 1} = Primitives.consensus(:option_a)
-      
+
       # Consensus with specific nodes and timeout
       result = Primitives.consensus(
         %{action: :scale_up, instances: 3},
-        nodes: [:node1@host, :node2@host], 
+        nodes: [:node1@host, :node2@host],
         timeout: 10_000
       )
   """
@@ -125,7 +125,7 @@ defmodule Foundation.Coordination.Primitives do
   ## Examples
 
       {:leader_elected, leader_node, term_1} = Primitives.elect_leader()
-      
+
       # Election with specific nodes
       {:leader_elected, leader, term} = Primitives.elect_leader(
         nodes: [:node1@host, :node2@host, :node3@host],
@@ -179,10 +179,10 @@ defmodule Foundation.Coordination.Primitives do
   ## Examples
 
       {:acquired, lock_ref} = Primitives.acquire_lock(:critical_resource)
-      
+
       # Do critical work
       :ok = perform_critical_operation()
-      
+
       :ok = Primitives.release_lock(lock_ref)
   """
   @spec acquire_lock(term(), keyword()) ::
@@ -257,7 +257,7 @@ defmodule Foundation.Coordination.Primitives do
   ## Parameters
   - `barrier_id` - Unique identifier for the barrier
   - `expected_count` - Number of processes expected to reach the barrier
-  - `timeout` - Maximum time to wait for all processes (default: 10000ms)
+  - `timeout` - Maximum time to wait for all processes (default: 10_000ms)
 
   ## Returns
   - `:ok` - All processes reached the barrier
@@ -268,10 +268,10 @@ defmodule Foundation.Coordination.Primitives do
 
       # Process 1
       :ok = Primitives.barrier_sync(:phase_1_complete, 3)
-      
+
       # Process 2
       :ok = Primitives.barrier_sync(:phase_1_complete, 3)
-      
+
       # Process 3
       :ok = Primitives.barrier_sync(:phase_1_complete, 3)
       # All processes continue here

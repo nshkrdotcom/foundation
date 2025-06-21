@@ -1,8 +1,8 @@
 defmodule Foundation.Logic.EventLogicTest do
   use ExUnit.Case, async: true
 
-  alias Foundation.Types.Event
   alias Foundation.Logic.EventLogic
+  alias Foundation.Types.Event
 
   describe "create_event/3" do
     test "creates valid event with defaults" do

@@ -10,7 +10,7 @@ defmodule Foundation.ConcurrencyValidationTest do
 
   alias Foundation.{ProcessRegistry, ServiceRegistry}
   alias Foundation.TestSupport.TestSupervisor
-  # alias Foundation.Services.{ConfigServer}
+  # alias ConfigServer
 
   describe "Registry Infrastructure" do
     test "ProcessRegistry provides namespace isolation", %{test_ref: test_ref} do

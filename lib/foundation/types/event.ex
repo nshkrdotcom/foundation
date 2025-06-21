@@ -5,7 +5,7 @@ defmodule Foundation.Types.Event do
   Events represent actions, state changes, and system events that occur
   during Foundation operation. This is a pure data structure with no behavior.
 
-  While all fields are optional for maximum flexibility, production events 
+  While all fields are optional for maximum flexibility, production events
   typically should have at least an event_type and timestamp.
 
   See `@type t` for the complete type specification.
@@ -73,7 +73,7 @@ defmodule Foundation.Types.Event do
       :custom
   """
   @spec new() :: t()
-  def new() do
+  def new do
     new([])
   end
 
@@ -92,7 +92,7 @@ defmodule Foundation.Types.Event do
   @doc """
   Create a new event structure with a specific event type.
 
-  Accepts an atom for the event_type and creates an event with 
+  Accepts an atom for the event_type and creates an event with
   default values for required fields.
 
   ## Parameters
@@ -132,7 +132,7 @@ defmodule Foundation.Types.Event do
           parent_id: nil,
           data: nil
         }
-  def empty() do
+  def empty do
     %__MODULE__{
       event_type: nil,
       event_id: nil,

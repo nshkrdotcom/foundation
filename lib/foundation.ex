@@ -7,7 +7,7 @@ defmodule Foundation do
   interacting with the Foundation layer.
   """
 
-  alias Foundation.{Config, Events, Telemetry, ErrorContext}
+  alias Foundation.{Config, ErrorContext, Events, Telemetry}
   alias Foundation.Types.Error
 
   @doc """
@@ -44,13 +44,13 @@ defmodule Foundation do
 
       iex> Foundation.status()
       {:ok, %{
-        config: %{status: :running, uptime_ms: 12345},
+        config: %{status: :running, uptime_ms: 12_345},
         events: %{status: :running, events_count: 1000},
         telemetry: %{status: :running, metrics_count: 50}
       }}
   """
   @spec status() :: {:ok, map()} | {:error, Error.t()}
-  def status() do
+  def status do
     with {:ok, config_status} <- Config.status(),
          {:ok, events_status} <- Events.status(),
          {:ok, telemetry_status} <- Telemetry.status() do
@@ -87,7 +87,7 @@ defmodule Foundation do
       "0.1.0"
   """
   @spec version() :: String.t()
-  def version() do
+  def version do
     Application.spec(:foundation, :vsn) |> to_string()
   end
 
@@ -116,7 +116,7 @@ defmodule Foundation do
       :ok
   """
   @spec shutdown() :: :ok
-  def shutdown() do
+  def shutdown do
     # Stop services in reverse order
     # Let the supervision tree handle the actual shutdown
     case Process.whereis(Foundation.Supervisor) do
@@ -145,7 +145,7 @@ defmodule Foundation do
       }}
   """
   @spec health() :: {:ok, map()} | {:error, Error.t()}
-  def health() do
+  def health do
     case status() do
       {:ok, service_status} ->
         health_info = %{
