@@ -24,7 +24,7 @@ defmodule Foundation.Events do
       :ok
   """
   @spec initialize() :: :ok | {:error, Error.t()}
-  def initialize() do
+  def initialize do
     EventStore.initialize()
   end
 
@@ -34,10 +34,10 @@ defmodule Foundation.Events do
   ## Examples
 
       iex> Foundation.Events.status()
-      {:ok, %{status: :running, uptime: 12345}}
+      {:ok, %{status: :running, uptime: 12_345}}
   """
   @spec status() :: {:ok, map()} | {:error, Error.t()}
-  def status() do
+  def status do
     EventStore.status()
   end
 
@@ -193,10 +193,10 @@ defmodule Foundation.Events do
 
       iex> {:ok, event} = Event.new(event_type: :test, data: %{key: "value"})
       iex> Foundation.Events.store(event)
-      {:ok, 12345}
+      {:ok, 12_345}
 
       iex> Foundation.Events.new_event(:test, %{key: "value"}) |> Foundation.Events.store()
-      {:ok, 12345}
+      {:ok, 12_345}
   """
   @spec store(Event.t() | {:ok, Event.t()}) :: {:ok, event_id()} | {:error, Error.t()}
   defdelegate store(event_or_tuple), to: EventStore
@@ -208,7 +208,7 @@ defmodule Foundation.Events do
 
       iex> events = [event1, event2, event3]
       iex> Foundation.Events.store_batch(events)
-      {:ok, [12345, 12346, 12347]}
+      {:ok, [12_345, 12346, 12347]}
   """
   @spec store_batch([Event.t()]) :: {:ok, [event_id()]} | {:error, Error.t()}
   defdelegate store_batch(events), to: EventStore
@@ -218,10 +218,10 @@ defmodule Foundation.Events do
 
   ## Examples
 
-      iex> Foundation.Events.get(12345)
-      {:ok, %Event{event_id: 12345, ...}}
+      iex> Foundation.Events.get(12_345)
+      {:ok, %Event{event_id: 12_345, ...}}
 
-      iex> Foundation.Events.get(99999)
+      iex> Foundation.Events.get(99_999)
       {:error, %Error{error_type: :not_found}}
   """
   @spec get(event_id()) :: {:ok, Event.t()} | {:error, Error.t()}

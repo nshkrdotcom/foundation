@@ -20,11 +20,11 @@ defmodule Foundation.Services.ServiceBehaviour do
 
       defmodule MyService do
         use Foundation.Services.ServiceBehaviour
-        
+
         # Implement required callbacks
         @impl true
         def service_config, do: %{health_check_interval: 30_000}
-        
+
         @impl true
         def handle_health_check(state), do: {:ok, :healthy, state}
       end

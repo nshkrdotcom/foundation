@@ -392,7 +392,7 @@ defmodule Foundation.Integration.CrossServiceIntegrationTest do
         end
 
       # Wait for all tasks to complete
-      results = Task.await_many(tasks, 10000)
+      results = Task.await_many(tasks, 10_000)
 
       # Verify all tasks succeeded
       assert length(results) == task_count

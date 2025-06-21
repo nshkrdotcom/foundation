@@ -23,7 +23,7 @@ defmodule Foundation.Telemetry do
       :ok
   """
   @spec initialize() :: :ok | {:error, Error.t()}
-  def initialize() do
+  def initialize do
     TelemetryService.initialize()
   end
 
@@ -33,10 +33,10 @@ defmodule Foundation.Telemetry do
   ## Examples
 
       iex> Foundation.Telemetry.status()
-      {:ok, %{status: :running, uptime: 12345}}
+      {:ok, %{status: :running, uptime: 12_345}}
   """
   @spec status() :: {:ok, map()} | {:error, Error.t()}
-  def status() do
+  def status do
     TelemetryService.status()
   end
 
@@ -142,7 +142,7 @@ defmodule Foundation.Telemetry do
       iex> Foundation.Telemetry.get_metrics()
       {:ok, %{
         [:foundation, :function, :call] => %{
-          timestamp: 123456789,
+          timestamp: 12_3456789,
           measurements: %{duration: 1500},
           count: 42
         }

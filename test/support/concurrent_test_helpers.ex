@@ -16,9 +16,9 @@ defmodule Foundation.ConcurrentTestHelpers do
 
       # Wait for a process to start
       wait_for_condition(fn -> Process.alive?(pid) end)
-      
+
       # Wait for a GenServer to reach a specific state
-      wait_for_condition(fn -> 
+      wait_for_condition(fn ->
         GenServer.call(server, :get_state) == :ready
       end, 3000)
   """
@@ -52,7 +52,7 @@ defmodule Foundation.ConcurrentTestHelpers do
 
       # Assert a process eventually dies
       assert_eventually(fn -> not Process.alive?(pid) end)
-      
+
       # Assert ecosystem reaches desired worker count
       assert_eventually(fn ->
         {:ok, info} = Foundation.BEAM.Processes.ecosystem_info(ecosystem)
@@ -80,7 +80,7 @@ defmodule Foundation.ConcurrentTestHelpers do
       {result, memory_usage} = measure_memory_usage(fn ->
         Foundation.BEAM.Processes.isolate_memory_intensive_work(heavy_work)
       end)
-      
+
       assert memory_usage[:total] < 1_000_000  # Less than 1MB used
   """
   @spec measure_memory_usage(function()) :: {any(), keyword()}
@@ -152,8 +152,8 @@ defmodule Foundation.ConcurrentTestHelpers do
       monitor = start_memory_monitor(ecosystem_processes, 1000)
       # ... run test ...
       readings = stop_memory_monitor(monitor)
-      
-      assert Enum.all?(readings, fn reading -> 
+
+      assert Enum.all?(readings, fn reading ->
         reading.memory < 10_000_000  # Less than 10MB
       end)
   """
@@ -308,7 +308,7 @@ defmodule Foundation.ConcurrentTestHelpers do
         failure_rate: 0.1,  # 10% chance per interval
         types: [:process_kill, :network_partition, :memory_pressure]
       }
-      
+
       chaos_pid = start_chaos_monkey(chaos_config)
       # ... run test under chaos ...
       stop_chaos_monkey(chaos_pid)

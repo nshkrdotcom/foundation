@@ -429,7 +429,7 @@ defmodule Foundation.BEAM.Processes do
         worker_loop()
 
       {:test_message, _data, caller_pid} ->
-        # Echo test message for property tests  
+        # Echo test message for property tests
         send(caller_pid, {:message_processed, :worker})
         worker_loop()
 

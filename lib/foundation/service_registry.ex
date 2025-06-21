@@ -335,7 +335,7 @@ defmodule Foundation.ServiceRegistry do
       %{
         namespace: :production,
         services: %{
-          config_server: %{pid: #PID<0.123.0>, alive: true, uptime_ms: 12345},
+          config_server: %{pid: #PID<0.123.0>, alive: true, uptime_ms: 12_345},
           event_store: %{pid: #PID<0.124.0>, alive: true, uptime_ms: 12344}
         },
         total_services: 2,

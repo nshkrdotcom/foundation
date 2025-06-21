@@ -25,7 +25,7 @@ defmodule Foundation.Types.EnhancedError do
     {:agent, :communication, :response_timeout} => {5202, :medium, "Agent response timeout"},
     {:agent, :communication, :invalid_message_format} => {5203, :low, "Invalid message format"},
 
-    # Coordination Errors (6000-6999)  
+    # Coordination Errors (6000-6999)
     {:coordination, :consensus, :consensus_failed} =>
       {6001, :high, "Consensus algorithm failed to reach agreement"},
     {:coordination, :consensus, :consensus_timeout} =>
@@ -364,7 +364,7 @@ defmodule Foundation.Types.EnhancedError do
     # Group errors by time windows (last hour, last day, etc.)
     now = System.system_time(:second)
     one_hour_ago = now - 3600
-    one_day_ago = now - 86400
+    one_day_ago = now - 86_400
 
     recent_errors =
       Enum.filter(errors, fn error ->

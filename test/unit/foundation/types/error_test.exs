@@ -322,21 +322,21 @@ defmodule Foundation.Types.ErrorTest do
     end
   end
 
-  describe "Error.is_retryable?/1" do
+  describe "Error.retryable?/1" do
     test "returns false for no_retry strategy" do
       error = Error.new(:invalid_config_value, "Invalid config")
-      refute Error.is_retryable?(error)
+      refute Error.retryable?(error)
     end
 
     test "returns true for retryable strategies" do
       network_error = Error.new(:network_error, "Network failed")
-      assert Error.is_retryable?(network_error)
+      assert Error.retryable?(network_error)
 
       service_error = Error.new(:external_service_error, "Service error")
-      assert Error.is_retryable?(service_error)
+      assert Error.retryable?(service_error)
 
       resource_error = Error.new(:resource_exhausted, "Out of memory")
-      assert Error.is_retryable?(resource_error)
+      assert Error.retryable?(resource_error)
     end
   end
 end

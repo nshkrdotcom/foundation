@@ -6,8 +6,9 @@ defmodule Foundation.TestHelpers do
   and creating test data for Foundation layer functionality.
   """
 
-  alias Foundation.{Config, Events, Utils, Error, ErrorContext}
+  alias Foundation.{Config, ErrorContext, Events, Utils}
   alias Foundation.Services.{ConfigServer, EventStore, TelemetryService}
+  alias Foundation.Types.Error
 
   # Service Management
 

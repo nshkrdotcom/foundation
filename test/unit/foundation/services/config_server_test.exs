@@ -2,8 +2,7 @@ defmodule Foundation.Services.ConfigServerTest do
   use ExUnit.Case, async: false
 
   alias Foundation.Services.ConfigServer
-  # , Error}
-  alias Foundation.Types.{Config}
+  alias Foundation.Types.Config
 
   setup do
     # Use our modern test helper instead of TestProcessManager
@@ -181,8 +180,8 @@ end
 
 #   alias Foundation.Services.ConfigServer
 #   alias Foundation.Logic.ConfigLogic
-#   alias Foundation.Types.{Config, Error}
-#   alias Foundation.{Events, Telemetry}
+#   alias Foundation.Config, Foundation.Types.Error
+#   alias Events, Telemetry
 
 #   setup do
 #     # Start ConfigServer for testing

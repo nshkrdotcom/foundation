@@ -554,7 +554,7 @@ defmodule Foundation.ProcessRegistry do
           memory_usage_bytes: non_neg_integer(),
           ets_table_info: map()
         }
-  def stats() do
+  def stats do
     # Ensure backup table exists before trying to use it
     ensure_backup_registry()
 

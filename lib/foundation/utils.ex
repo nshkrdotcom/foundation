@@ -445,10 +445,10 @@ defmodule Foundation.Utils do
 
       iex> Foundation.Utils.format_bytes(1024)
       "1.0 KB"
-      
+
       iex> Foundation.Utils.format_bytes(1536)
       "1.5 KB"
-      
+
       iex> Foundation.Utils.format_bytes(1048576)
       "1.0 MB"
   """
@@ -538,13 +538,13 @@ defmodule Foundation.Utils do
 
       iex> Foundation.Utils.valid_positive_integer?(42)
       true
-      
+
       iex> Foundation.Utils.valid_positive_integer?(0)
       false
-      
+
       iex> Foundation.Utils.valid_positive_integer?(-1)
       false
-      
+
       iex> Foundation.Utils.valid_positive_integer?("42")
       false
   """

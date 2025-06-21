@@ -52,7 +52,7 @@ defmodule Foundation.Infrastructure do
   require Logger
 
   alias Foundation.Infrastructure.{CircuitBreaker, RateLimiter, ConnectionManager}
-  alias Foundation.Services.{TelemetryService}
+  alias Foundation.Services.TelemetryService
   alias Foundation.Types.Error
 
   @type protection_key :: atom()
@@ -86,7 +86,7 @@ defmodule Foundation.Infrastructure do
       {:ok, []}
   """
   @spec initialize_all_infra_components() :: {:ok, []} | {:error, term()}
-  def initialize_all_infra_components() do
+  def initialize_all_infra_components do
     initialize_all_infra_components(%{})
   end
 
@@ -99,7 +99,7 @@ defmodule Foundation.Infrastructure do
       {:ok, %{fuse: :running, hammer: :running}}
   """
   @spec get_infrastructure_status() :: {:ok, map()} | {:error, term()}
-  def get_infrastructure_status() do
+  def get_infrastructure_status do
     try do
       fuse_status =
         case Process.whereis(:fuse_sup) do

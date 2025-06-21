@@ -80,7 +80,7 @@ defmodule Foundation.ProcessRegistryTest do
 
     test "supports production namespace" do
       {:ok, pid} = Agent.start_link(fn -> %{} end)
-      service = :"test_production_#{:rand.uniform(10000)}"
+      service = :"test_production_#{:rand.uniform(10_000)}"
 
       assert :ok = ProcessRegistry.register(:production, service, pid)
       assert {:ok, ^pid} = ProcessRegistry.lookup(:production, service)
@@ -138,7 +138,7 @@ defmodule Foundation.ProcessRegistryTest do
 
       # Register same service in production namespace
       {:ok, prod_pid} = Agent.start_link(fn -> %{} end)
-      production_service = :"isolation_test_#{:rand.uniform(10000)}"
+      production_service = :"isolation_test_#{:rand.uniform(10_000)}"
       ProcessRegistry.register(:production, production_service, prod_pid)
 
       # Verify isolation
@@ -242,7 +242,7 @@ defmodule Foundation.ProcessRegistryTest do
       ProcessRegistry.register(test_namespace, test_service, test_pid)
 
       # Register service in production namespace
-      prod_service = :"prod_list_service_#{:rand.uniform(10000)}"
+      prod_service = :"prod_list_service_#{:rand.uniform(10_000)}"
       {:ok, prod_pid} = Agent.start_link(fn -> %{} end)
       ProcessRegistry.register(:production, prod_service, prod_pid)
 
@@ -511,7 +511,7 @@ defmodule Foundation.ProcessRegistryTest do
       ProcessRegistry.register(test_namespace, :stats_test_service, test_pid)
 
       # Register service in production namespace
-      prod_service = :"stats_prod_service_#{:rand.uniform(10000)}"
+      prod_service = :"stats_prod_service_#{:rand.uniform(10_000)}"
       {:ok, prod_pid} = Agent.start_link(fn -> %{} end)
       ProcessRegistry.register(:production, prod_service, prod_pid)
 
