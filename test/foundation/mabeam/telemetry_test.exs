@@ -11,17 +11,13 @@ defmodule Foundation.MABEAM.TelemetryTest do
   alias Foundation.MABEAM.Telemetry
 
   setup do
-    # Start telemetry for testing
-    {:ok, pid} = Telemetry.start_link()
-
-    # Clear any existing metrics
+    # Use the existing telemetry service from the application
+    # Clear any existing metrics before each test
     Telemetry.clear_metrics()
 
     on_exit(fn ->
-      if Process.alive?(pid) do
-        Telemetry.clear_metrics()
-        GenServer.stop(pid)
-      end
+      # Clear metrics after each test to avoid interference
+      Telemetry.clear_metrics()
     end)
 
     :ok

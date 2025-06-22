@@ -592,6 +592,9 @@ defmodule Foundation.MABEAM.AgentRegistry do
   end
 
   defp setup_telemetry do
+    # Register with ProcessRegistry for service discovery
+    ProcessRegistry.register(:production, __MODULE__, self())
+
     # Setup telemetry metrics for the agent registry
     :telemetry.execute([:foundation, :mabeam, :agent_registry, :started], %{}, %{
       service: __MODULE__,

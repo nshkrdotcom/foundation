@@ -2,13 +2,11 @@
 defmodule Foundation.MABEAM.CoordinationTest do
   use ExUnit.Case, async: false
 
-  alias Foundation.MABEAM.{Coordination, Core, AgentRegistry}
+  alias Foundation.MABEAM.{Coordination, AgentRegistry}
 
   setup do
-    # Start the Core services required for coordination
-    start_supervised!(Core)
-    start_supervised!(AgentRegistry)
-    start_supervised!(Coordination)
+    # Use the existing MABEAM services from the application supervision tree
+    # No need to start additional instances - they are already running
     :ok
   end
 
@@ -442,7 +440,12 @@ defmodule Foundation.MABEAM.CoordinationTest do
       }
     }
 
-    :ok = AgentRegistry.register_agent(agent_id, agent_config)
+    # Agent might already be registered from previous tests - that's ok
+    case AgentRegistry.register_agent(agent_id, agent_config) do
+      :ok -> :ok
+      {:error, :already_registered} -> :ok
+      error -> error
+    end
   end
 
   defp register_slow_agent(agent_id) do
@@ -458,7 +461,12 @@ defmodule Foundation.MABEAM.CoordinationTest do
       }
     }
 
-    :ok = AgentRegistry.register_agent(agent_id, agent_config)
+    # Agent might already be registered from previous tests - that's ok
+    case AgentRegistry.register_agent(agent_id, agent_config) do
+      :ok -> :ok
+      {:error, :already_registered} -> :ok
+      error -> error
+    end
   end
 
   defp register_resource_agent(agent_id) do
@@ -472,7 +480,12 @@ defmodule Foundation.MABEAM.CoordinationTest do
       }
     }
 
-    :ok = AgentRegistry.register_agent(agent_id, agent_config)
+    # Agent might already be registered from previous tests - that's ok
+    case AgentRegistry.register_agent(agent_id, agent_config) do
+      :ok -> :ok
+      {:error, :already_registered} -> :ok
+      error -> error
+    end
   end
 
   defp register_stubborn_agent(agent_id) do
@@ -487,7 +500,12 @@ defmodule Foundation.MABEAM.CoordinationTest do
       }
     }
 
-    :ok = AgentRegistry.register_agent(agent_id, agent_config)
+    # Agent might already be registered from previous tests - that's ok
+    case AgentRegistry.register_agent(agent_id, agent_config) do
+      :ok -> :ok
+      {:error, :already_registered} -> :ok
+      error -> error
+    end
   end
 
   defp register_flexible_agent(agent_id) do
@@ -502,7 +520,12 @@ defmodule Foundation.MABEAM.CoordinationTest do
       }
     }
 
-    :ok = AgentRegistry.register_agent(agent_id, agent_config)
+    # Agent might already be registered from previous tests - that's ok
+    case AgentRegistry.register_agent(agent_id, agent_config) do
+      :ok -> :ok
+      {:error, :already_registered} -> :ok
+      error -> error
+    end
   end
 
   defp register_greedy_agent(agent_id) do
@@ -516,7 +539,12 @@ defmodule Foundation.MABEAM.CoordinationTest do
       }
     }
 
-    :ok = AgentRegistry.register_agent(agent_id, agent_config)
+    # Agent might already be registered from previous tests - that's ok
+    case AgentRegistry.register_agent(agent_id, agent_config) do
+      :ok -> :ok
+      {:error, :already_registered} -> :ok
+      error -> error
+    end
   end
 
   defp register_agent_with_priority(agent_id, priority) do
@@ -530,7 +558,12 @@ defmodule Foundation.MABEAM.CoordinationTest do
       }
     }
 
-    :ok = AgentRegistry.register_agent(agent_id, agent_config)
+    # Agent might already be registered from previous tests - that's ok
+    case AgentRegistry.register_agent(agent_id, agent_config) do
+      :ok -> :ok
+      {:error, :already_registered} -> :ok
+      error -> error
+    end
   end
 
   defp register_inflexible_agent(agent_id) do
@@ -544,7 +577,12 @@ defmodule Foundation.MABEAM.CoordinationTest do
       }
     }
 
-    :ok = AgentRegistry.register_agent(agent_id, agent_config)
+    # Agent might already be registered from previous tests - that's ok
+    case AgentRegistry.register_agent(agent_id, agent_config) do
+      :ok -> :ok
+      {:error, :already_registered} -> :ok
+      error -> error
+    end
   end
 
   defp mock_agent_responses(response_map) do

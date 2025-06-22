@@ -49,7 +49,8 @@ defmodule Foundation.Application do
 
   alias Foundation.ProcessRegistry
 
-  @type startup_phase :: :infrastructure | :foundation_services | :coordination | :application
+  @type startup_phase ::
+          :infrastructure | :foundation_services | :coordination | :application | :mabeam
   @type service_config :: %{
           module: module(),
           args: keyword(),
@@ -126,6 +127,40 @@ defmodule Foundation.Application do
       dependencies: [:telemetry_service],
       startup_phase: :application,
       health_check_interval: 60_000,
+      restart_strategy: :permanent
+    },
+
+    # MABEAM Phase - Multi-agent orchestration services
+    mabeam_core: %{
+      module: Foundation.MABEAM.Core,
+      args: [],
+      dependencies: [:process_registry, :telemetry_service],
+      startup_phase: :mabeam,
+      health_check_interval: 30_000,
+      restart_strategy: :permanent
+    },
+    mabeam_agent_registry: %{
+      module: Foundation.MABEAM.AgentRegistry,
+      args: [],
+      dependencies: [:process_registry, :mabeam_core],
+      startup_phase: :mabeam,
+      health_check_interval: 30_000,
+      restart_strategy: :permanent
+    },
+    mabeam_coordination: %{
+      module: Foundation.MABEAM.Coordination,
+      args: [],
+      dependencies: [:mabeam_agent_registry],
+      startup_phase: :mabeam,
+      health_check_interval: 30_000,
+      restart_strategy: :permanent
+    },
+    mabeam_telemetry: %{
+      module: Foundation.MABEAM.Telemetry,
+      args: [],
+      dependencies: [:process_registry],
+      startup_phase: :mabeam,
+      health_check_interval: 30_000,
       restart_strategy: :permanent
     }
   }
@@ -375,6 +410,7 @@ defmodule Foundation.Application do
     foundation_children = build_phase_children(:foundation_services)
     coordination_children = build_phase_children(:coordination)
     application_children = build_phase_children(:application)
+    mabeam_children = build_phase_children(:mabeam)
 
     # Add test and development children
     test_children =
@@ -396,6 +432,7 @@ defmodule Foundation.Application do
       foundation_children ++
       coordination_children ++
       application_children ++
+      mabeam_children ++
       test_children ++
       tidewave_children
   end
@@ -471,7 +508,7 @@ defmodule Foundation.Application do
     Logger.info("Beginning graceful shutdown sequence...")
 
     # Stop services in reverse dependency order
-    shutdown_phases = [:application, :coordination, :foundation_services, :infrastructure]
+    shutdown_phases = [:mabeam, :application, :coordination, :foundation_services, :infrastructure]
 
     Enum.each(shutdown_phases, fn phase ->
       Logger.info("Shutting down #{phase} services...")
@@ -550,7 +587,7 @@ defmodule Foundation.Application do
   end
 
   defp group_services_by_phase(service_statuses) do
-    phases = [:infrastructure, :foundation_services, :coordination, :application]
+    phases = [:infrastructure, :foundation_services, :coordination, :application, :mabeam]
 
     Enum.reduce(phases, %{}, fn phase, acc ->
       phase_services =

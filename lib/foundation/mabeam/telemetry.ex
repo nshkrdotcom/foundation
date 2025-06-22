@@ -249,6 +249,9 @@ defmodule Foundation.MABEAM.Telemetry do
 
   @impl GenServer
   def init(_opts) do
+    # Register with ProcessRegistry for service discovery
+    Foundation.ProcessRegistry.register(:production, __MODULE__, self())
+
     # Schedule periodic cleanup
     Process.send_after(self(), :cleanup, @cleanup_interval_ms)
 

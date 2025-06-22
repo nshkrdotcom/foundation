@@ -459,6 +459,9 @@ defmodule Foundation.MABEAM.Coordination do
   end
 
   defp setup_telemetry do
+    # Register with ProcessRegistry for service discovery
+    Foundation.ProcessRegistry.register(:production, __MODULE__, self())
+
     # Define telemetry events for coordination operations
     events = [
       [:foundation, :mabeam, :coordination, :protocol_registered],
