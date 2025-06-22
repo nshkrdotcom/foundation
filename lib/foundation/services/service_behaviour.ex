@@ -67,11 +67,12 @@ defmodule Foundation.Services.ServiceBehaviour do
         }
 
   @type service_config :: %{
-          health_check_interval: pos_integer(),
-          graceful_shutdown_timeout: pos_integer(),
-          dependencies: [atom()],
-          telemetry_enabled: boolean(),
-          resource_monitoring: boolean()
+          required(:health_check_interval) => pos_integer(),
+          required(:graceful_shutdown_timeout) => pos_integer(),
+          required(:dependencies) => [atom()],
+          required(:telemetry_enabled) => boolean(),
+          required(:resource_monitoring) => boolean(),
+          optional(atom()) => term()
         }
 
   @doc """
@@ -96,10 +97,14 @@ defmodule Foundation.Services.ServiceBehaviour do
   ## Returns
   - `{:ok, :healthy, new_state}` - Service is healthy
   - `{:ok, :degraded, new_state}` - Service is degraded but operational
-  - `{:error, reason, new_state}` - Service is unhealthy
+  - `{:ok, :unhealthy, new_state}` - Service is unhealthy
+  - `{:ok, status, new_state, details}` - Enhanced health check with details
+  - `{:error, reason, new_state}` - Health check failed
   """
   @callback handle_health_check(term()) ::
-              {:ok, :healthy | :degraded, term()} | {:error, term(), term()}
+              {:ok, :healthy | :degraded | :unhealthy, term()}
+              | {:ok, :healthy | :degraded | :unhealthy, term(), map()}
+              | {:error, term(), term()}
 
   @doc """
   Called when a dependency becomes available.
@@ -333,6 +338,46 @@ defmodule Foundation.Services.ServiceBehaviour do
                 | health_status: :degraded,
                   last_health_check: DateTime.utc_now(),
                   metrics: update_health_metrics(state.metrics, :degraded)
+              }
+
+            {:ok, :unhealthy, new_state} ->
+              emit_health_check_failure(state, :unhealthy, start_time)
+
+              %{
+                new_state
+                | health_status: :unhealthy,
+                  last_health_check: DateTime.utc_now(),
+                  metrics: update_health_metrics(state.metrics, :failure)
+              }
+
+            {:ok, :healthy, new_state, _details} ->
+              emit_health_check_success(state, start_time)
+
+              %{
+                new_state
+                | health_status: :healthy,
+                  last_health_check: DateTime.utc_now(),
+                  metrics: update_health_metrics(state.metrics, :success)
+              }
+
+            {:ok, :degraded, new_state, _details} ->
+              emit_health_check_degraded(state, start_time)
+
+              %{
+                new_state
+                | health_status: :degraded,
+                  last_health_check: DateTime.utc_now(),
+                  metrics: update_health_metrics(state.metrics, :degraded)
+              }
+
+            {:ok, :unhealthy, new_state, _details} ->
+              emit_health_check_failure(state, :unhealthy, start_time)
+
+              %{
+                new_state
+                | health_status: :unhealthy,
+                  last_health_check: DateTime.utc_now(),
+                  metrics: update_health_metrics(state.metrics, :failure)
               }
 
             {:error, reason, new_state} ->

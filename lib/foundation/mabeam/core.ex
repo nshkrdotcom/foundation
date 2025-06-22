@@ -1,6 +1,4 @@
 defmodule Foundation.MABEAM.Core do
-  @dialyzer {:nowarn_function, handle_info: 2}
-
   @moduledoc """
   Universal Variable Orchestrator for multi-agent coordination on the BEAM.
 
@@ -240,7 +238,7 @@ defmodule Foundation.MABEAM.Core do
     %{
       health_check_interval: 30_000,
       graceful_shutdown_timeout: 10_000,
-      dependencies: [ProcessRegistry, ServiceRegistry, Telemetry],
+      dependencies: [Foundation.ProcessRegistry, Foundation.ServiceRegistry, Foundation.Telemetry],
       telemetry_enabled: true,
       resource_monitoring: true
     }
@@ -294,15 +292,9 @@ defmodule Foundation.MABEAM.Core do
     # Merge with user config
     final_config = Map.merge(default_core_config(), config)
 
-    # Register with ProcessRegistry
-    case ProcessRegistry.register(:production, :mabeam_core, self()) do
-      :ok ->
-        setup_telemetry()
-        {:ok, Map.put(core_state, :config, final_config)}
-
-      {:error, reason} ->
-        {:stop, {:process_registry_error, reason}}
-    end
+    # Note: ServiceBehaviour handles registration automatically
+    setup_telemetry()
+    {:ok, Map.put(core_state, :config, final_config)}
   end
 
   @impl GenServer
@@ -412,6 +404,27 @@ defmodule Foundation.MABEAM.Core do
 
         {:reply, {:ok, health_info}, new_state}
     end
+  end
+
+  @impl GenServer
+  def handle_call(:ping, _from, state) do
+    {:reply, :pong, state}
+  end
+
+  @impl GenServer
+  def handle_call(:get_metrics, _from, state) do
+    metrics = %{
+      variable_count: map_size(state.variable_registry),
+      coordination_count: state.performance_metrics.coordination_count,
+      success_rate: state.performance_metrics.success_rate,
+      avg_coordination_time_ms: state.performance_metrics.avg_coordination_time_ms,
+      error_count: state.performance_metrics.error_count,
+      uptime_ms: DateTime.diff(DateTime.utc_now(), state.startup_time, :millisecond),
+      health_status: state.health_status,
+      memory_usage: state.metrics.memory_usage
+    }
+
+    {:reply, {:ok, metrics}, state}
   end
 
   # ============================================================================
@@ -531,6 +544,9 @@ defmodule Foundation.MABEAM.Core do
   end
 
   defp setup_telemetry do
+    # Register with ProcessRegistry for service discovery
+    ProcessRegistry.register(:production, __MODULE__, self())
+
     :telemetry.execute([:mabeam, :core, :started], %{count: 1}, %{
       module: __MODULE__,
       timestamp: DateTime.utc_now()
@@ -559,14 +575,14 @@ defmodule Foundation.MABEAM.Core do
 
   # Health check helpers
   defp check_process_registry do
-    case ProcessRegistry.lookup(:production, :mabeam_core) do
+    case ProcessRegistry.lookup(:production, __MODULE__) do
       {:ok, _pid} -> :healthy
       :error -> :unhealthy
     end
   end
 
   defp check_service_registry do
-    case ServiceRegistry.lookup(:production, :mabeam_core) do
+    case ServiceRegistry.lookup(:production, __MODULE__) do
       {:ok, _info} -> :healthy
       # Not critical for basic operation
       {:error, _} -> :degraded

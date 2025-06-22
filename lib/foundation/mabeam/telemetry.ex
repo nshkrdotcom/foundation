@@ -13,7 +13,7 @@ defmodule Foundation.MABEAM.Telemetry do
   while maintaining compatibility with the existing telemetry infrastructure.
   """
 
-  use GenServer
+  use Foundation.Services.ServiceBehaviour
   require Logger
 
   alias Foundation.Telemetry
@@ -37,7 +37,50 @@ defmodule Foundation.MABEAM.Telemetry do
   # Standard deviations
   @anomaly_detection_threshold 2.0
 
-  ## Public API
+  # ============================================================================
+  # ServiceBehaviour Callbacks
+  # ============================================================================
+
+  @impl Foundation.Services.ServiceBehaviour
+  def service_config do
+    %{
+      health_check_interval: 30_000,
+      graceful_shutdown_timeout: 5_000,
+      dependencies: [Foundation.ProcessRegistry],
+      telemetry_enabled: true,
+      resource_monitoring: true,
+      service_type: :telemetry
+    }
+  end
+
+  @impl Foundation.Services.ServiceBehaviour
+  def handle_health_check(state) do
+    # Calculate health based on telemetry system state
+    total_metrics = map_size(state.agent_metrics) + map_size(state.coordination_metrics)
+    memory_usage = :erlang.memory(:total)
+
+    health_status =
+      cond do
+        # High memory usage (1GB)
+        memory_usage > 1_000_000_000 -> :degraded
+        # No metrics being tracked
+        total_metrics == 0 -> :degraded
+        true -> :healthy
+      end
+
+    health_details = %{
+      total_metrics: total_metrics,
+      memory_usage: memory_usage,
+      agent_count: map_size(state.agent_metrics),
+      coordination_count: map_size(state.coordination_metrics)
+    }
+
+    {:ok, health_status, state, health_details}
+  end
+
+  # ============================================================================
+  # Public API
+  # ============================================================================
 
   @doc "Start the MABEAM telemetry service"
   @spec start_link(keyword()) :: GenServer.on_start()
@@ -247,27 +290,32 @@ defmodule Foundation.MABEAM.Telemetry do
 
   ## GenServer Implementation
 
-  @impl GenServer
-  def init(_opts) do
-    # Register with ProcessRegistry for service discovery
-    Foundation.ProcessRegistry.register(:production, __MODULE__, self())
+  @doc false
+  def init_service(opts) do
+    config = Keyword.get(opts, :config, %{})
 
+    # Initialize Telemetry-specific state
+    telemetry_state = %{
+      agent_metrics: %{},
+      agent_outcomes: %{},
+      variable_metrics: %{},
+      coordination_events: %{},
+      auction_events: %{},
+      market_events: %{},
+      resource_usage: %{},
+      alert_configs: %{},
+      alert_handler: nil,
+      start_time: System.system_time(:millisecond)
+    }
+
+    # Merge with user config
+    final_config = Map.merge(default_telemetry_config(), config)
+
+    # Note: ServiceBehaviour handles registration automatically
     # Schedule periodic cleanup
     Process.send_after(self(), :cleanup, @cleanup_interval_ms)
 
-    {:ok,
-     %{
-       agent_metrics: %{},
-       agent_outcomes: %{},
-       variable_metrics: %{},
-       coordination_events: %{},
-       auction_events: %{},
-       market_events: %{},
-       resource_usage: %{},
-       alert_configs: %{},
-       alert_handler: nil,
-       start_time: System.system_time(:millisecond)
-     }}
+    {:ok, Map.put(telemetry_state, :config, final_config)}
   end
 
   @impl GenServer
@@ -461,6 +509,25 @@ defmodule Foundation.MABEAM.Telemetry do
       _ ->
         {:reply, {:error, "Unsupported format"}, state}
     end
+  end
+
+  @impl GenServer
+  def handle_call(:ping, _from, state) do
+    {:reply, :pong, state}
+  end
+
+  @impl GenServer
+  def handle_call(:get_metrics, _from, state) do
+    metrics = %{
+      total_agents: map_size(state.agent_metrics),
+      coordination_events_count: map_size(state.coordination_events),
+      resource_usage: state.resource_usage,
+      uptime_ms:
+        DateTime.diff(DateTime.utc_now(), state.startup_time || DateTime.utc_now(), :millisecond),
+      health_status: state.health_status || :healthy
+    }
+
+    {:reply, {:ok, metrics}, state}
   end
 
   @impl GenServer
@@ -1005,6 +1072,17 @@ defmodule Foundation.MABEAM.Telemetry do
       cleaned_data = Enum.filter(data, fn {_value, timestamp} -> timestamp >= cutoff_time end)
       {resource_type, cleaned_data}
     end)
+  end
+
+  defp default_telemetry_config do
+    %{
+      retention_minutes: @default_retention_minutes,
+      cleanup_interval_ms: @cleanup_interval_ms,
+      anomaly_detection: true,
+      anomaly_threshold: @anomaly_detection_threshold,
+      telemetry_enabled: true,
+      metrics_enabled: true
+    }
   end
 
   # JSON serialization helpers

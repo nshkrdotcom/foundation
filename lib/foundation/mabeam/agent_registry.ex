@@ -41,7 +41,7 @@ defmodule Foundation.MABEAM.AgentRegistry do
       {:ok, status} = Foundation.MABEAM.AgentRegistry.get_agent_status(:my_agent)
   """
 
-  use GenServer
+  use Foundation.Services.ServiceBehaviour
 
   alias Foundation.ProcessRegistry
 
@@ -124,6 +124,46 @@ defmodule Foundation.MABEAM.AgentRegistry do
           children_count: non_neg_integer(),
           restart_count: non_neg_integer()
         }
+
+  # ============================================================================
+  # ServiceBehaviour Callbacks
+  # ============================================================================
+
+  @impl Foundation.Services.ServiceBehaviour
+  def service_config do
+    %{
+      health_check_interval: 30_000,
+      graceful_shutdown_timeout: 10_000,
+      dependencies: [Foundation.ProcessRegistry, Foundation.MABEAM.Core],
+      telemetry_enabled: true,
+      resource_monitoring: true,
+      service_type: :agent_registry
+    }
+  end
+
+  @impl Foundation.Services.ServiceBehaviour
+  def handle_health_check(state) do
+    # Calculate health based on agent states and system resources
+    total_agents = map_size(state.agents)
+    active_agents = count_active_agents(state.agents)
+    failed_agents = count_failed_agents(state.agents)
+
+    health_status =
+      cond do
+        failed_agents > total_agents / 2 -> :unhealthy
+        failed_agents > 0 -> :degraded
+        true -> :healthy
+      end
+
+    health_details = %{
+      total_agents: total_agents,
+      active_agents: active_agents,
+      failed_agents: failed_agents,
+      memory_usage: state.metrics.memory_usage
+    }
+
+    {:ok, health_status, state, health_details}
+  end
 
   # ============================================================================
   # Public API
@@ -213,12 +253,28 @@ defmodule Foundation.MABEAM.AgentRegistry do
   # GenServer Implementation
   # ============================================================================
 
-  @impl true
-  def init(opts) do
-    state = initialize_registry_state(opts)
+  @doc false
+  def init_service(opts) do
+    config = Keyword.get(opts, :config, %{})
+
+    # Initialize AgentRegistry-specific state
+    registry_state = %{
+      agents: %{},
+      supervisors: %{},
+      health_monitors: %{},
+      dynamic_supervisor: nil,
+      metrics: initialize_registry_metrics()
+    }
+
+    # Merge with user config
+    final_config = Map.merge(default_registry_config(), config)
+
+    # Note: ServiceBehaviour handles registration automatically
     setup_telemetry()
     schedule_health_check()
-    {:ok, state}
+
+    Logger.info("MABEAM Agent Registry service started successfully")
+    {:ok, Map.put(registry_state, :config, final_config)}
   end
 
   @impl true
@@ -528,6 +584,25 @@ defmodule Foundation.MABEAM.AgentRegistry do
   end
 
   @impl true
+  def handle_call(:ping, _from, state) do
+    {:reply, :pong, state}
+  end
+
+  @impl true
+  def handle_call(:get_metrics, _from, state) do
+    metrics = %{
+      total_agents: map_size(state.agents),
+      active_agents: count_active_agents(state.agents),
+      failed_agents: count_failed_agents(state.agents),
+      memory_usage: state.metrics.memory_usage,
+      uptime_ms: DateTime.diff(DateTime.utc_now(), state.startup_time, :millisecond),
+      health_status: state.health_status
+    }
+
+    {:reply, {:ok, metrics}, state}
+  end
+
+  @impl true
   def handle_info(:health_check_tick, state) do
     # Perform periodic health checks
     updated_state = perform_periodic_health_checks(state)
@@ -569,18 +644,29 @@ defmodule Foundation.MABEAM.AgentRegistry do
   # Private Implementation
   # ============================================================================
 
-  defp initialize_registry_state(opts) do
+  defp count_active_agents(agents) do
+    agents
+    |> Map.values()
+    |> Enum.count(fn agent -> agent.status == :active end)
+  end
+
+  defp count_failed_agents(agents) do
+    agents
+    |> Map.values()
+    |> Enum.count(fn agent -> agent.status == :failed end)
+  end
+
+  defp default_registry_config do
     %{
-      agents: %{},
-      supervisors: %{},
-      health_monitors: %{},
-      dynamic_supervisor: nil,
-      metrics: initialize_metrics(),
-      config: opts
+      max_agents: 1000,
+      health_check_interval: 30_000,
+      telemetry_enabled: true,
+      auto_restart: true,
+      resource_monitoring: true
     }
   end
 
-  defp initialize_metrics do
+  defp initialize_registry_metrics do
     %{
       total_agents: 0,
       active_agents: 0,

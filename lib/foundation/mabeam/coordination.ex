@@ -26,7 +26,7 @@ defmodule Foundation.MABEAM.Coordination do
   - Leverages Foundation services for reliability and observability
   """
 
-  use GenServer
+  use Foundation.Services.ServiceBehaviour
 
   alias Foundation.MABEAM.{AgentRegistry, Types}
 
@@ -140,6 +140,51 @@ defmodule Foundation.MABEAM.Coordination do
         max_concurrent_coordinations: 50
       )
   """
+
+  # ============================================================================
+  # ServiceBehaviour Callbacks
+  # ============================================================================
+
+  @impl Foundation.Services.ServiceBehaviour
+  def service_config do
+    %{
+      health_check_interval: 30_000,
+      graceful_shutdown_timeout: 15_000,
+      dependencies: [Foundation.MABEAM.AgentRegistry],
+      telemetry_enabled: true,
+      resource_monitoring: true,
+      service_type: :coordination
+    }
+  end
+
+  @impl Foundation.Services.ServiceBehaviour
+  def handle_health_check(state) do
+    # Calculate health based on coordination state
+    active_coordinations = map_size(state.active_coordinations)
+    total_protocols = map_size(state.protocols)
+
+    health_status =
+      cond do
+        # No protocols registered
+        total_protocols == 0 -> :degraded
+        # Too many active coordinations
+        active_coordinations > 100 -> :degraded
+        true -> :healthy
+      end
+
+    health_details = %{
+      total_protocols: total_protocols,
+      active_coordinations: active_coordinations,
+      metrics: state.metrics
+    }
+
+    {:ok, health_status, state, health_details}
+  end
+
+  # ============================================================================
+  # Public API
+  # ============================================================================
+
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -268,14 +313,27 @@ defmodule Foundation.MABEAM.Coordination do
   # GenServer Implementation
   # ============================================================================
 
-  @impl true
-  def init(opts) do
-    state = initialize_coordination_state(opts)
-    register_default_protocols(state)
+  @doc false
+  def init_service(opts) do
+    config = Keyword.get(opts, :config, %{})
+
+    # Initialize Coordination-specific state
+    coordination_state = %{
+      protocols: %{},
+      active_coordinations: %{},
+      metrics: initialize_coordination_metrics()
+    }
+
+    # Merge with user config
+    final_config = Map.merge(default_coordination_config(), config)
+
+    # Note: ServiceBehaviour handles registration automatically
+    final_state = Map.put(coordination_state, :config, final_config)
+    register_default_protocols(final_state)
     setup_telemetry()
 
     Logger.info("MABEAM Coordination service started successfully")
-    {:ok, state}
+    {:ok, final_state}
   end
 
   @impl true
@@ -365,6 +423,25 @@ defmodule Foundation.MABEAM.Coordination do
   end
 
   @impl true
+  def handle_call(:ping, _from, state) do
+    {:reply, :pong, state}
+  end
+
+  @impl true
+  def handle_call(:get_metrics, _from, state) do
+    metrics = %{
+      total_protocols: map_size(state.protocols),
+      active_coordinations: map_size(state.active_coordinations),
+      coordination_metrics: state.metrics,
+      uptime_ms:
+        DateTime.diff(DateTime.utc_now(), state.startup_time || DateTime.utc_now(), :millisecond),
+      health_status: state.health_status || :healthy
+    }
+
+    {:reply, {:ok, metrics}, state}
+  end
+
+  @impl true
   def handle_cast({:register_default_protocol, name, protocol}, state) do
     case Map.get(state.protocols, name) do
       nil ->
@@ -416,8 +493,7 @@ defmodule Foundation.MABEAM.Coordination do
     {:noreply, state}
   end
 
-  @impl true
-  def terminate(reason, _state) do
+  def terminate_service(reason, _state) do
     Logger.info("MABEAM Coordination service terminating: #{inspect(reason)}")
     :ok
   end
@@ -426,19 +502,13 @@ defmodule Foundation.MABEAM.Coordination do
   # Private Implementation Functions
   # ============================================================================
 
-  defp initialize_coordination_state(opts) do
-    config = %{
-      default_timeout: Keyword.get(opts, :default_timeout, 5_000),
-      max_concurrent_coordinations: Keyword.get(opts, :max_concurrent_coordinations, 100),
-      telemetry_enabled: Keyword.get(opts, :telemetry_enabled, true),
-      metrics_enabled: Keyword.get(opts, :metrics_enabled, true)
-    }
-
+  defp default_coordination_config do
     %{
-      protocols: %{},
-      active_coordinations: %{},
-      metrics: initialize_metrics(),
-      config: config
+      default_timeout: 5_000,
+      max_concurrent_coordinations: 100,
+      telemetry_enabled: true,
+      metrics_enabled: true,
+      protocol_timeout: 10_000
     }
   end
 
@@ -648,7 +718,7 @@ defmodule Foundation.MABEAM.Coordination do
     end
   end
 
-  defp initialize_metrics do
+  defp initialize_coordination_metrics do
     %{
       total_coordinations: 0,
       successful_coordinations: 0,

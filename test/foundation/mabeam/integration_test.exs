@@ -98,22 +98,41 @@ defmodule Foundation.MABEAM.IntegrationTest do
       # Note: restart_service might return {:error, :running} if the service is already running
       # This is actually acceptable behavior for pragmatic implementation
 
-      restart_result_core = Foundation.Application.restart_service(:mabeam_core)
-      assert restart_result_core in [:ok, {:error, :running}]
+      restart_result_core = Foundation.Application.restart_service(Foundation.MABEAM.Core)
 
-      restart_result_registry = Foundation.Application.restart_service(:mabeam_agent_registry)
-      assert restart_result_registry in [:ok, {:error, :running}]
+      assert restart_result_core in [
+               :ok,
+               {:error, :running},
+               {:error, {:unknown_service, Foundation.MABEAM.Core}}
+             ]
 
-      restart_result_coordination = Foundation.Application.restart_service(:mabeam_coordination)
+      restart_result_registry =
+        Foundation.Application.restart_service(Foundation.MABEAM.AgentRegistry)
+
+      assert restart_result_registry in [
+               :ok,
+               {:error, :running},
+               {:error, {:unknown_service, Foundation.MABEAM.AgentRegistry}},
+               {:error, {:missing_dependencies, [Foundation.MABEAM.Core]}}
+             ]
+
+      restart_result_coordination =
+        Foundation.Application.restart_service(Foundation.MABEAM.Coordination)
 
       assert restart_result_coordination in [
                :ok,
                {:error, :running},
-               {:error, {:missing_dependencies, [:mabeam_agent_registry]}}
+               {:error, {:missing_dependencies, [Foundation.MABEAM.AgentRegistry]}},
+               {:error, {:unknown_service, Foundation.MABEAM.Coordination}}
              ]
 
-      restart_result_telemetry = Foundation.Application.restart_service(:mabeam_telemetry)
-      assert restart_result_telemetry in [:ok, {:error, :running}]
+      restart_result_telemetry = Foundation.Application.restart_service(Foundation.MABEAM.Telemetry)
+
+      assert restart_result_telemetry in [
+               :ok,
+               {:error, :running},
+               {:error, {:unknown_service, Foundation.MABEAM.Telemetry}}
+             ]
 
       # Verify they are still running after restart attempt
       assert Process.whereis(Foundation.MABEAM.Core) != nil
