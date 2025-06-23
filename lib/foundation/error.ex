@@ -295,25 +295,22 @@ defmodule Foundation.Error do
   @spec get_error_definition(error_code()) :: {pos_integer(), error_severity(), String.t()}
   defp get_error_definition(error_type) do
     # Find the error definition by searching for matching error_type
-    case Enum.find(@all_error_definitions, fn {key, _value} ->
-           case key do
-             {_category, _subcategory, ^error_type} -> true
-             _ -> false
-           end
-         end) do
+    case Enum.find(@all_error_definitions, &error_key_matches?(&1, error_type)) do
       {_key, definition} -> definition
       nil -> {9999, :medium, "Unknown error"}
     end
   end
 
+  defp error_key_matches?({key, _value}, error_type) do
+    case key do
+      {_category, _subcategory, ^error_type} -> true
+      _ -> false
+    end
+  end
+
   @spec categorize_error(error_code()) :: {error_category(), error_subcategory()}
   defp categorize_error(error_type) do
-    case Enum.find(@all_error_definitions, fn {key, _value} ->
-           case key do
-             {_category, _subcategory, ^error_type} -> true
-             _ -> false
-           end
-         end) do
+    case Enum.find(@all_error_definitions, &error_key_matches?(&1, error_type)) do
       {{category, subcategory, _error_type}, _definition} -> {category, subcategory}
       nil -> {:unknown, :unknown}
     end

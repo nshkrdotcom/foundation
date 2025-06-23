@@ -373,28 +373,31 @@ defmodule Foundation.Coordination.Primitives do
       :equal
     else
       all_nodes = MapSet.union(MapSet.new(Map.keys(clock1)), MapSet.new(Map.keys(clock2)))
+      comparisons = Enum.map(all_nodes, &compare_node_values(clock1, clock2, &1))
+      determine_clock_relationship(comparisons)
+    end
+  end
 
-      comparisons =
-        Enum.map(all_nodes, fn node ->
-          val1 = Map.get(clock1, node, 0)
-          val2 = Map.get(clock2, node, 0)
+  defp compare_node_values(clock1, clock2, node) do
+    val1 = Map.get(clock1, node, 0)
+    val2 = Map.get(clock2, node, 0)
 
-          cond do
-            val1 < val2 -> :less
-            val1 > val2 -> :greater
-            true -> :equal
-          end
-        end)
+    cond do
+      val1 < val2 -> :less
+      val1 > val2 -> :greater
+      true -> :equal
+    end
+  end
 
-      has_less = :less in comparisons
-      has_greater = :greater in comparisons
+  defp determine_clock_relationship(comparisons) do
+    has_less = :less in comparisons
+    has_greater = :greater in comparisons
 
-      cond do
-        has_less and has_greater -> :concurrent
-        has_less -> :before
-        has_greater -> :after
-        true -> :equal
-      end
+    cond do
+      has_less and has_greater -> :concurrent
+      has_less -> :before
+      has_greater -> :after
+      true -> :equal
     end
   end
 

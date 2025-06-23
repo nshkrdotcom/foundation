@@ -270,20 +270,7 @@ defmodule Foundation.Application do
         # Check dependencies first
         case check_service_dependencies(service_config.dependencies) do
           :ok ->
-            # Perform restart
-            case Supervisor.restart_child(Foundation.Supervisor, service_name) do
-              {:ok, _pid} ->
-                Logger.info("Service #{service_name} restarted successfully")
-                :ok
-
-              {:ok, _pid, _info} ->
-                Logger.info("Service #{service_name} restarted successfully")
-                :ok
-
-              {:error, reason} ->
-                Logger.error("Failed to restart service #{service_name}: #{inspect(reason)}")
-                {:error, reason}
-            end
+            perform_service_restart(service_name)
 
           {:error, missing_deps} ->
             Logger.error(
@@ -827,6 +814,22 @@ defmodule Foundation.Application do
               details: "Service process not found"
             }
         end
+    end
+  end
+
+  defp perform_service_restart(service_name) do
+    case Supervisor.restart_child(Foundation.Supervisor, service_name) do
+      {:ok, _pid} ->
+        Logger.info("Service #{service_name} restarted successfully")
+        :ok
+
+      {:ok, _pid, _info} ->
+        Logger.info("Service #{service_name} restarted successfully")
+        :ok
+
+      {:error, reason} ->
+        Logger.error("Failed to restart service #{service_name}: #{inspect(reason)}")
+        {:error, reason}
     end
   end
 
