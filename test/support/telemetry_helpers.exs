@@ -257,12 +257,12 @@ defmodule Foundation.MABEAM.TelemetryHelpers do
   def calculate_success_rates(events) do
     success_events =
       Enum.filter(events, fn event ->
-        is_success_event?(event)
+        success_event?(event)
       end)
 
     error_events =
       Enum.filter(events, fn event ->
-        is_error_event?(event)
+        error_event?(event)
       end)
 
     total_outcome_events = length(success_events) + length(error_events)
@@ -622,7 +622,7 @@ defmodule Foundation.MABEAM.TelemetryHelpers do
     |> length()
   end
 
-  defp is_success_event?(event) do
+  defp success_event?(event) do
     success_indicators = [
       "complete",
       "completed",
@@ -640,7 +640,7 @@ defmodule Foundation.MABEAM.TelemetryHelpers do
     end) or Map.get(event.metadata, :result) == :success
   end
 
-  defp is_error_event?(event) do
+  defp error_event?(event) do
     error_indicators = [
       "error",
       "failed",
@@ -671,7 +671,7 @@ defmodule Foundation.MABEAM.TelemetryHelpers do
   end
 
   defp calculate_coordination_success_rate(coordination_events) do
-    success_events = Enum.filter(coordination_events, &is_success_event?/1)
+    success_events = Enum.filter(coordination_events, &success_event?/1)
 
     if length(coordination_events) > 0 do
       length(success_events) / length(coordination_events)
