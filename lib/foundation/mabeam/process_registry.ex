@@ -297,30 +297,8 @@ defmodule Foundation.MABEAM.ProcessRegistry do
   @impl true
   def handle_call({:restart_agent, agent_id}, _from, state) do
     case state.backend.get_agent(agent_id) do
-      {:ok, agent_entry} ->
-        case agent_entry.status do
-          :running ->
-            restart_running_agent(agent_id, state)
-
-          status when status in [:stopped, :failed] ->
-            case start_agent_process(agent_id, state) do
-              {:ok, _pid, new_state} ->
-                emit_telemetry(:restart, %{agent_id: agent_id})
-                {:reply, :ok, new_state}
-
-              {:error, reason} ->
-                {:reply, {:error, reason}, state}
-            end
-
-          :registered ->
-            {:reply, {:error, :not_started}, state}
-
-          other_status ->
-            {:reply, {:error, {:invalid_status, other_status}}, state}
-        end
-
-      {:error, :not_found} ->
-        {:reply, {:error, :not_found}, state}
+      {:ok, agent_entry} -> handle_agent_restart(agent_id, agent_entry, state)
+      {:error, :not_found} -> {:reply, {:error, :not_found}, state}
     end
   end
 
@@ -554,6 +532,26 @@ defmodule Foundation.MABEAM.ProcessRegistry do
       restart: :permanent,
       shutdown: 5000
     }
+  end
+
+  defp handle_agent_restart(agent_id, agent_entry, state) do
+    case agent_entry.status do
+      :running -> restart_running_agent(agent_id, state)
+      status when status in [:stopped, :failed] -> restart_stopped_agent(agent_id, state)
+      :registered -> {:reply, {:error, :not_started}, state}
+      other_status -> {:reply, {:error, {:invalid_status, other_status}}, state}
+    end
+  end
+
+  defp restart_stopped_agent(agent_id, state) do
+    case start_agent_process(agent_id, state) do
+      {:ok, _pid, new_state} ->
+        emit_telemetry(:restart, %{agent_id: agent_id})
+        {:reply, :ok, new_state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
   end
 
   defp restart_running_agent(agent_id, state) do

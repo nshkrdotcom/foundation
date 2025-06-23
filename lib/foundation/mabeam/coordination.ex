@@ -630,27 +630,6 @@ defmodule Foundation.MABEAM.Coordination do
     _ -> :ok
   end
 
-  defp emit_consensus_reached_event_if_success(result, protocol_name) do
-    # Emit consensus reached event if applicable
-    case result do
-      {:ok, _} ->
-        emit_consensus_telemetry(protocol_name)
-
-      _ ->
-        :ok
-    end
-  end
-
-  defp emit_consensus_telemetry(protocol_name) do
-    :telemetry.execute(
-      [:foundation, :mabeam, :coordination, :consensus_reached],
-      %{count: 1},
-      %{protocol: protocol_name}
-    )
-  rescue
-    _ -> :ok
-  end
-
   defp notify_agents_of_cancellation(agents, session_id) do
     Enum.each(agents, fn agent_id ->
       case ProcessRegistry.get_agent_pid(agent_id) do

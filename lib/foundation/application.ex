@@ -704,116 +704,74 @@ defmodule Foundation.Application do
   end
 
   defp perform_service_health_check(service_name, _config) do
-    # Special handling for services that don't support health checks
     case service_name do
-      :process_registry ->
-        # ProcessRegistry is the Registry itself, check if it's alive
-        case Process.whereis(ProcessRegistry) do
-          nil ->
-            %{
-              health: :unhealthy,
-              response_time: nil,
-              last_check: DateTime.utc_now(),
-              details: "ProcessRegistry not found"
-            }
-
-          pid when is_pid(pid) ->
-            %{
-              health: :healthy,
-              response_time: 0,
-              last_check: DateTime.utc_now(),
-              details: "ProcessRegistry running"
-            }
-        end
-
-      :task_supervisor ->
-        # TaskSupervisor is a built-in supervisor, check if it's alive
-        case Process.whereis(Foundation.TaskSupervisor) do
-          nil ->
-            %{
-              health: :unhealthy,
-              response_time: nil,
-              last_check: DateTime.utc_now(),
-              details: "TaskSupervisor not found"
-            }
-
-          pid when is_pid(pid) ->
-            %{
-              health: :healthy,
-              response_time: 0,
-              last_check: DateTime.utc_now(),
-              details: "TaskSupervisor running"
-            }
-        end
-
-      _ ->
-        # For other services, try the normal health check
-        case ProcessRegistry.lookup(:production, service_name) do
-          {:ok, pid} ->
-            try do
-              # Attempt to get health status from service if it supports it
-              case GenServer.call(pid, :health_status, 5000) do
-                {:ok, health} ->
-                  %{
-                    health: health,
-                    response_time: measure_response_time(pid),
-                    last_check: DateTime.utc_now(),
-                    details: "Health check successful"
-                  }
-
-                {:error, reason} ->
-                  %{
-                    health: :degraded,
-                    response_time: nil,
-                    last_check: DateTime.utc_now(),
-                    details: "Health check returned error: #{inspect(reason)}"
-                  }
-
-                other ->
-                  %{
-                    health: :degraded,
-                    response_time: nil,
-                    last_check: DateTime.utc_now(),
-                    details: "Unexpected health check response: #{inspect(other)}"
-                  }
-              end
-            catch
-              :exit, {:timeout, _} ->
-                %{
-                  health: :degraded,
-                  response_time: nil,
-                  last_check: DateTime.utc_now(),
-                  details: "Health check timed out"
-                }
-
-              :exit, {reason, _} ->
-                # Service doesn't support health_status, but it's alive - that's ok
-                if is_tuple(reason) and elem(reason, 0) == :function_clause do
-                  %{
-                    health: :healthy,
-                    response_time: nil,
-                    last_check: DateTime.utc_now(),
-                    details: "Service alive but doesn't support health checks"
-                  }
-                else
-                  %{
-                    health: :unhealthy,
-                    response_time: nil,
-                    last_check: DateTime.utc_now(),
-                    details: "Health check failed: #{inspect(reason)}"
-                  }
-                end
-            end
-
-          :error ->
-            %{
-              health: :unhealthy,
-              response_time: nil,
-              last_check: DateTime.utc_now(),
-              details: "Service process not found"
-            }
-        end
+      :process_registry -> check_process_registry_health()
+      :task_supervisor -> check_task_supervisor_health()
+      _ -> check_generic_service_health(service_name)
     end
+  end
+
+  defp check_process_registry_health do
+    case Process.whereis(ProcessRegistry) do
+      nil -> create_health_status(:unhealthy, nil, "ProcessRegistry not found")
+      pid when is_pid(pid) -> create_health_status(:healthy, 0, "ProcessRegistry running")
+    end
+  end
+
+  defp check_task_supervisor_health do
+    case Process.whereis(Foundation.TaskSupervisor) do
+      nil -> create_health_status(:unhealthy, nil, "TaskSupervisor not found")
+      pid when is_pid(pid) -> create_health_status(:healthy, 0, "TaskSupervisor running")
+    end
+  end
+
+  defp check_generic_service_health(service_name) do
+    case ProcessRegistry.lookup(:production, service_name) do
+      {:ok, pid} -> check_service_pid_health(pid)
+      :error -> create_health_status(:unhealthy, nil, "Service process not found")
+    end
+  end
+
+  defp check_service_pid_health(pid) do
+    try do
+      case GenServer.call(pid, :health_status, 5000) do
+        {:ok, health} -> handle_successful_health_check(health, pid)
+        {:error, reason} -> handle_health_check_error(reason)
+        other -> handle_unexpected_health_response(other)
+      end
+    catch
+      :exit, {:timeout, _} -> create_health_status(:degraded, nil, "Health check timed out")
+      :exit, {reason, _} -> handle_health_check_exit(reason)
+    end
+  end
+
+  defp handle_successful_health_check(health, pid) do
+    create_health_status(health, measure_response_time(pid), "Health check successful")
+  end
+
+  defp handle_health_check_error(reason) do
+    create_health_status(:degraded, nil, "Health check returned error: #{inspect(reason)}")
+  end
+
+  defp handle_unexpected_health_response(response) do
+    create_health_status(:degraded, nil, "Unexpected health check response: #{inspect(response)}")
+  end
+
+  defp handle_health_check_exit(reason) do
+    if is_tuple(reason) and elem(reason, 0) == :function_clause do
+      create_health_status(:healthy, nil, "Service alive but doesn't support health checks")
+    else
+      create_health_status(:unhealthy, nil, "Health check failed: #{inspect(reason)}")
+    end
+  end
+
+  defp create_health_status(health, response_time, details) do
+    %{
+      health: health,
+      response_time: response_time,
+      last_check: DateTime.utc_now(),
+      details: details
+    }
   end
 
   defp perform_service_restart(service_name) do

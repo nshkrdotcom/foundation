@@ -443,11 +443,6 @@ defmodule Foundation.TestHelpers do
     :ok
   end
 
-  defp handle_cleanup_timeout(all_pids) do
-    alive_pids = Enum.filter(all_pids, &Process.alive?/1)
-    {:error, {:processes_still_alive, alive_pids}}
-  end
-
   defp handle_cleanup_timeout_with_force_kill(all_pids) do
     alive_pids = Enum.filter(all_pids, &Process.alive?/1)
 

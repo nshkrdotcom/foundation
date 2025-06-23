@@ -145,63 +145,67 @@ defmodule Foundation.Stress.ChaosResilienceTest do
 
     loop_with_error_tracking(end_time, 0, 0, fn ops, errs ->
       operation = Enum.random(operations)
-
-      try do
-        case operation do
-          :config_read ->
-            case Foundation.Config.get([:dev, :debug_mode]) do
-              {:ok, _} -> {ops + 1, errs}
-              {:error, _} -> {ops, errs + 1}
-            end
-
-          :event_store ->
-            try do
-              {:ok, event} =
-                Foundation.Events.new_event(:chaos_test, %{
-                  worker: worker_id,
-                  timestamp: System.os_time(:microsecond),
-                  operation: operation
-                })
-
-              case Foundation.Events.store(event) do
-                {:ok, _} -> {ops + 1, errs}
-                {:error, _} -> {ops, errs + 1}
-              end
-            catch
-              # Handle process exits when EventStore is killed
-              :exit, _reason -> {ops, errs + 1}
-            end
-
-          :telemetry_emit ->
-            try do
-              case Foundation.Telemetry.emit_counter([:chaos_test, :operations], %{
-                     worker: worker_id,
-                     operation: operation
-                   }) do
-                :ok -> {ops + 1, errs}
-                {:error, _} -> {ops, errs + 1}
-              end
-            catch
-              # Handle process exits when TelemetryService is killed
-              :exit, _reason -> {ops, errs + 1}
-            end
-
-          :service_lookup ->
-            case Foundation.ServiceRegistry.lookup(:production, :config_server) do
-              {:ok, _} -> {ops + 1, errs}
-              {:error, _} -> {ops, errs + 1}
-            end
-        end
-      rescue
-        # Catch all other exceptions (ArgumentError from unknown registry, etc.)
-        _error ->
-          {ops, errs + 1}
-      catch
-        # Catch exit signals from killed processes
-        :exit, _reason ->
-          {ops, errs + 1}
-      end
+      execute_resilient_operation(operation, worker_id, ops, errs)
     end)
+  end
+
+  defp execute_resilient_operation(operation, worker_id, ops, errs) do
+    try do
+      case perform_operation(operation, worker_id) do
+        :ok -> {ops + 1, errs}
+        {:error, _} -> {ops, errs + 1}
+      end
+    rescue
+      _error -> {ops, errs + 1}
+    catch
+      :exit, _reason -> {ops, errs + 1}
+    end
+  end
+
+  defp perform_operation(:config_read, _worker_id) do
+    case Foundation.Config.get([:dev, :debug_mode]) do
+      {:ok, _} -> :ok
+      {:error, _} -> {:error, :config_read_failed}
+    end
+  end
+
+  defp perform_operation(:event_store, worker_id) do
+    try do
+      {:ok, event} =
+        Foundation.Events.new_event(:chaos_test, %{
+          worker: worker_id,
+          timestamp: System.os_time(:microsecond),
+          operation: :event_store
+        })
+
+      case Foundation.Events.store(event) do
+        {:ok, _} -> :ok
+        {:error, _} -> {:error, :event_store_failed}
+      end
+    catch
+      :exit, _reason -> {:error, :event_store_process_exit}
+    end
+  end
+
+  defp perform_operation(:telemetry_emit, worker_id) do
+    try do
+      case Foundation.Telemetry.emit_counter([:chaos_test, :operations], %{
+             worker: worker_id,
+             operation: :telemetry_emit
+           }) do
+        :ok -> :ok
+        {:error, _} -> {:error, :telemetry_emit_failed}
+      end
+    catch
+      :exit, _reason -> {:error, :telemetry_service_exit}
+    end
+  end
+
+  defp perform_operation(:service_lookup, _worker_id) do
+    case Foundation.ServiceRegistry.lookup(:production, :config_server) do
+      {:ok, _} -> :ok
+      {:error, _} -> {:error, :service_lookup_failed}
+    end
   end
 
   defp loop_with_error_tracking(end_time, operations, errors, operation_fn) do

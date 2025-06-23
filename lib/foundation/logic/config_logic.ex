@@ -270,6 +270,14 @@ defmodule Foundation.Logic.ConfigLogic do
     end)
   end
 
+  defp create_diff(old_val, new_val, path) do
+    if old_val == new_val do
+      %{}
+    else
+      %{old: old_val, new: new_val, path: path}
+    end
+  end
+
   defp process_key_diff(old_map, new_map, key, path, acc) do
     old_val = Map.get(old_map, key)
     new_val = Map.get(new_map, key)
@@ -285,14 +293,6 @@ defmodule Foundation.Logic.ConfigLogic do
 
       true ->
         Map.put(acc, key, %{old: old_val, new: new_val, path: current_path})
-    end
-  end
-
-  defp create_diff(old_val, new_val, path) do
-    if old_val == new_val do
-      %{}
-    else
-      %{old: old_val, new: new_val, path: path}
     end
   end
 
@@ -366,34 +366,34 @@ defmodule Foundation.Logic.ConfigLogic do
   # Validate that a configuration value is secure and doesn't contain dangerous content.
   defp validate_value_security(value) do
     cond do
-      is_function(value) ->
-        # Reject function values (potential code execution)
-        false
-
-      is_binary(value) and byte_size(value) > 1_000_000 ->
-        # Reject extremely large strings (>1MB)
-        false
-
-      is_map(value) and Map.has_key?(value, :__struct__) ->
-        # Reject structs referencing system modules
-        struct_module = Map.get(value, :__struct__)
-
-        case struct_module do
-          System -> false
-          File -> false
-          Code -> false
-          Process -> false
-          _ -> validate_nested_value_security(value)
-        end
-
-      is_map(value) or is_list(value) ->
-        # Recursively validate nested structures
-        validate_nested_value_security(value)
-
-      true ->
-        # Allow primitive types
-        true
+      # Reject function values (potential code execution)
+      is_function(value) -> false
+      # Reject extremely large strings
+      is_dangerous_binary?(value) -> false
+      # Reject dangerous structs
+      is_dangerous_struct?(value) -> false
+      # Recursively validate
+      is_nested_structure?(value) -> validate_nested_value_security(value)
+      # Allow primitive types
+      true -> true
     end
+  end
+
+  defp is_dangerous_binary?(value) do
+    is_binary(value) and byte_size(value) > 1_000_000
+  end
+
+  defp is_dangerous_struct?(value) do
+    is_map(value) and Map.has_key?(value, :__struct__) and is_system_struct?(value)
+  end
+
+  defp is_system_struct?(value) do
+    struct_module = Map.get(value, :__struct__)
+    struct_module in [System, File, Code, Process]
+  end
+
+  defp is_nested_structure?(value) do
+    is_map(value) or is_list(value)
   end
 
   defp validate_nested_value_security(value, depth \\ 0) do

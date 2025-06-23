@@ -79,35 +79,53 @@ defmodule Foundation.Validation.EventValidator do
   """
   @spec validate_field_types(Event.t()) :: :ok | {:error, Error.t()}
   def validate_field_types(%Event{} = event) do
-    cond do
-      event.event_id && (not is_integer(event.event_id) or event.event_id <= 0) ->
-        create_error(:type_mismatch, "Event ID must be a positive integer")
-
-      event.event_type && not is_atom(event.event_type) ->
-        create_error(:type_mismatch, "Event type must be an atom")
-
-      event.timestamp && not is_integer(event.timestamp) ->
-        create_error(:type_mismatch, "Timestamp must be an integer")
-
-      event.wall_time && not is_struct(event.wall_time, DateTime) ->
-        create_error(:type_mismatch, "Wall time must be a DateTime")
-
-      event.node && not is_atom(event.node) ->
-        create_error(:type_mismatch, "Node must be an atom")
-
-      event.pid && not is_pid(event.pid) ->
-        create_error(:type_mismatch, "PID must be a process identifier")
-
-      event.correlation_id && not is_binary(event.correlation_id) ->
-        create_error(:type_mismatch, "Correlation ID must be a string")
-
-      event.parent_id && (not is_integer(event.parent_id) or event.parent_id <= 0) ->
-        create_error(:type_mismatch, "Parent ID must be a positive integer")
-
-      true ->
-        :ok
+    with :ok <- validate_event_id(event.event_id),
+         :ok <- validate_event_type_field(event.event_type),
+         :ok <- validate_timestamp(event.timestamp),
+         :ok <- validate_wall_time(event.wall_time),
+         :ok <- validate_node(event.node),
+         :ok <- validate_pid(event.pid),
+         :ok <- validate_correlation_id(event.correlation_id),
+         :ok <- validate_parent_id(event.parent_id) do
+      :ok
     end
   end
+
+  defp validate_event_id(nil), do: :ok
+  defp validate_event_id(event_id) when is_integer(event_id) and event_id > 0, do: :ok
+  defp validate_event_id(_), do: create_error(:type_mismatch, "Event ID must be a positive integer")
+
+  defp validate_event_type_field(nil), do: :ok
+  defp validate_event_type_field(event_type) when is_atom(event_type), do: :ok
+  defp validate_event_type_field(_), do: create_error(:type_mismatch, "Event type must be an atom")
+
+  defp validate_timestamp(nil), do: :ok
+  defp validate_timestamp(timestamp) when is_integer(timestamp), do: :ok
+  defp validate_timestamp(_), do: create_error(:type_mismatch, "Timestamp must be an integer")
+
+  defp validate_wall_time(nil), do: :ok
+  defp validate_wall_time(%DateTime{}), do: :ok
+  defp validate_wall_time(_), do: create_error(:type_mismatch, "Wall time must be a DateTime")
+
+  defp validate_node(nil), do: :ok
+  defp validate_node(node) when is_atom(node), do: :ok
+  defp validate_node(_), do: create_error(:type_mismatch, "Node must be an atom")
+
+  defp validate_pid(nil), do: :ok
+  defp validate_pid(pid) when is_pid(pid), do: :ok
+  defp validate_pid(_), do: create_error(:type_mismatch, "PID must be a process identifier")
+
+  defp validate_correlation_id(nil), do: :ok
+  defp validate_correlation_id(correlation_id) when is_binary(correlation_id), do: :ok
+
+  defp validate_correlation_id(_),
+    do: create_error(:type_mismatch, "Correlation ID must be a string")
+
+  defp validate_parent_id(nil), do: :ok
+  defp validate_parent_id(parent_id) when is_integer(parent_id) and parent_id > 0, do: :ok
+
+  defp validate_parent_id(_),
+    do: create_error(:type_mismatch, "Parent ID must be a positive integer")
 
   @doc """
   Validate event data size to prevent memory issues.

@@ -253,26 +253,29 @@ defmodule Foundation.Types.EnhancedError do
   """
   @spec get_recovery_strategies(Error.t()) :: [recovery_strategy()]
   def get_recovery_strategies(%Error{} = error) do
-    base_strategies =
-      case error.category do
-        :agent -> agent_recovery_strategies(error)
-        :coordination -> coordination_recovery_strategies(error)
-        :orchestration -> orchestration_recovery_strategies(error)
-        :service -> service_recovery_strategies(error)
-        :distributed -> distributed_recovery_strategies(error)
-        _ -> general_recovery_strategies(error)
-      end
-
-    # Add context-specific strategies
-    context_strategies =
-      case error.context do
-        %{resource_exhaustion: true} -> [:scale_resources, :load_balancing]
-        %{network_partition: true} -> [:wait_for_heal, :manual_intervention]
-        %{circular_dependency: true} -> [:restructure_dependencies, :break_cycle]
-        _ -> []
-      end
-
+    base_strategies = get_category_strategies(error.category, error)
+    context_strategies = get_context_strategies(error.context)
     base_strategies ++ context_strategies
+  end
+
+  defp get_category_strategies(category, error) do
+    case category do
+      :agent -> agent_recovery_strategies(error)
+      :coordination -> coordination_recovery_strategies(error)
+      :orchestration -> orchestration_recovery_strategies(error)
+      :service -> service_recovery_strategies(error)
+      :distributed -> distributed_recovery_strategies(error)
+      _ -> general_recovery_strategies(error)
+    end
+  end
+
+  defp get_context_strategies(context) do
+    case context do
+      %{resource_exhaustion: true} -> [:scale_resources, :load_balancing]
+      %{network_partition: true} -> [:wait_for_heal, :manual_intervention]
+      %{circular_dependency: true} -> [:restructure_dependencies, :break_cycle]
+      _ -> []
+    end
   end
 
   ## Private Functions
@@ -329,34 +332,76 @@ defmodule Foundation.Types.EnhancedError do
   end
 
   defp determine_retry_strategy(error_type, severity) do
-    case {error_type, severity} do
-      # Agent errors
-      {:agent_start_failed, _} -> :exponential_backoff
-      {:agent_crashed, _} -> :immediate
-      {:agent_timeout, _} -> :fixed_delay
-      {:agent_not_found, _} -> :no_retry
-      # Coordination errors
-      {:consensus_timeout, _} -> :exponential_backoff
-      {:negotiation_deadlock, _} -> :no_retry
-      {:auction_timeout, _} -> :fixed_delay
-      {:market_failure, _} -> :exponential_backoff
-      # Orchestration errors
-      {:resource_exhausted, _} -> :exponential_backoff
-      {:execution_timeout, _} -> :fixed_delay
-      {:variable_conflict, _} -> :no_retry
-      # Service errors
-      {:service_crashed, _} -> :immediate
-      {:health_check_failed, _} -> :fixed_delay
-      {:dependency_unavailable, _} -> :exponential_backoff
-      # Distributed errors
-      {:node_unreachable, _} -> :exponential_backoff
-      {:network_partition, _} -> :no_retry
-      {:state_sync_failed, _} -> :fixed_delay
-      # Default based on severity
-      {_, :critical} -> :no_retry
-      {_, :high} -> :immediate
-      {_, :medium} -> :fixed_delay
-      {_, :low} -> :exponential_backoff
+    case get_error_retry_strategy(error_type) do
+      nil -> get_severity_retry_strategy(severity)
+      strategy -> strategy
+    end
+  end
+
+  defp get_error_retry_strategy(error_type) do
+    agent_strategies = get_agent_retry_strategy(error_type)
+    coordination_strategies = get_coordination_retry_strategy(error_type)
+    orchestration_strategies = get_orchestration_retry_strategy(error_type)
+    service_strategies = get_service_retry_strategy(error_type)
+    distributed_strategies = get_distributed_retry_strategy(error_type)
+
+    agent_strategies || coordination_strategies || orchestration_strategies ||
+      service_strategies || distributed_strategies
+  end
+
+  defp get_agent_retry_strategy(error_type) do
+    case error_type do
+      :agent_start_failed -> :exponential_backoff
+      :agent_crashed -> :immediate
+      :agent_timeout -> :fixed_delay
+      :agent_not_found -> :no_retry
+      _ -> nil
+    end
+  end
+
+  defp get_coordination_retry_strategy(error_type) do
+    case error_type do
+      :consensus_timeout -> :exponential_backoff
+      :negotiation_deadlock -> :no_retry
+      :auction_timeout -> :fixed_delay
+      :market_failure -> :exponential_backoff
+      _ -> nil
+    end
+  end
+
+  defp get_orchestration_retry_strategy(error_type) do
+    case error_type do
+      :resource_exhausted -> :exponential_backoff
+      :execution_timeout -> :fixed_delay
+      :variable_conflict -> :no_retry
+      _ -> nil
+    end
+  end
+
+  defp get_service_retry_strategy(error_type) do
+    case error_type do
+      :service_crashed -> :immediate
+      :health_check_failed -> :fixed_delay
+      :dependency_unavailable -> :exponential_backoff
+      _ -> nil
+    end
+  end
+
+  defp get_distributed_retry_strategy(error_type) do
+    case error_type do
+      :node_unreachable -> :exponential_backoff
+      :network_partition -> :no_retry
+      :state_sync_failed -> :fixed_delay
+      _ -> nil
+    end
+  end
+
+  defp get_severity_retry_strategy(severity) do
+    case severity do
+      :critical -> :no_retry
+      :high -> :immediate
+      :medium -> :fixed_delay
+      :low -> :exponential_backoff
     end
   end
 

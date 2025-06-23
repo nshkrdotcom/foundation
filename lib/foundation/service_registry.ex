@@ -208,94 +208,115 @@ defmodule Foundation.ServiceRegistry do
              | {:health_check_failed, term()}
              | Error.t()}
   def health_check(namespace, service, opts \\ []) do
-    # Only log debug for health checks if explicitly requested
+    log_health_check_start(namespace, service, opts)
+
+    case lookup(namespace, service) do
+      {:ok, pid} -> perform_health_check_on_pid(pid, service, opts)
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp log_health_check_start(namespace, service, opts) do
     if Keyword.get(opts, :debug_health_check, false) do
       Logger.debug("Health checking service #{inspect(service)} in namespace #{inspect(namespace)}")
     end
+  end
 
-    case lookup(namespace, service) do
-      {:ok, pid} ->
-        if Process.alive?(pid) do
-          case Keyword.get(opts, :health_check) do
-            nil ->
-              {:ok, pid}
-
-            health_check_fun when is_function(health_check_fun, 1) ->
-              timeout = Keyword.get(opts, :timeout, 5000)
-
-              # Trap exits to handle health check crashes gracefully
-              original_trap_exit = Process.flag(:trap_exit, true)
-
-              try do
-                task =
-                  Task.async(fn ->
-                    start_time = System.monotonic_time(:microsecond)
-                    result = health_check_fun.(pid)
-                    end_time = System.monotonic_time(:microsecond)
-                    {end_time - start_time, result}
-                  end)
-
-                case Task.await(task, timeout) do
-                  {time_us, :ok} ->
-                    Logger.debug("Health check passed for #{inspect(service)} in #{time_us}μs")
-                    {:ok, pid}
-
-                  {time_us, {:ok, _result}} ->
-                    Logger.debug("Health check passed for #{inspect(service)} in #{time_us}μs")
-                    {:ok, pid}
-
-                  {time_us, true} ->
-                    Logger.debug("Health check passed for #{inspect(service)} in #{time_us}μs")
-                    {:ok, pid}
-
-                  {_time_us, false} ->
-                    Logger.warning("Health check failed for #{inspect(service)}: returned false")
-                    {:error, {:health_check_failed, false}}
-
-                  {_time_us, error} ->
-                    Logger.warning("Health check failed for #{inspect(service)}: #{inspect(error)}")
-                    {:error, {:health_check_failed, error}}
-                end
-              catch
-                :exit, {:timeout, _} ->
-                  Logger.warning(
-                    "Health check timed out for #{inspect(service)} after #{timeout}ms"
-                  )
-
-                  {:error, :health_check_timeout}
-
-                :exit, {{%RuntimeError{} = error, _stacktrace}, {Task, :await, _}} ->
-                  Logger.warning("Health check errored for #{inspect(service)}: #{inspect(error)}")
-                  {:error, {:health_check_error, error}}
-
-                :exit, {{error, _stacktrace}, {Task, :await, _}} ->
-                  Logger.warning("Health check crashed for #{inspect(service)}: #{inspect(error)}")
-                  {:error, {:health_check_crashed, error}}
-
-                :exit, {reason, {Task, :await, _}} ->
-                  Logger.warning("Health check crashed for #{inspect(service)}: #{inspect(reason)}")
-                  {:error, {:health_check_crashed, reason}}
-
-                :exit, reason ->
-                  Logger.warning("Health check crashed for #{inspect(service)}: #{inspect(reason)}")
-                  {:error, {:health_check_crashed, reason}}
-
-                :error, reason ->
-                  Logger.warning("Health check errored for #{inspect(service)}: #{inspect(reason)}")
-                  {:error, {:health_check_error, reason}}
-              after
-                # Restore original trap_exit setting
-                Process.flag(:trap_exit, original_trap_exit)
-              end
-          end
-        else
-          Logger.warning("Service #{inspect(service)} found but process is dead")
-          {:error, :process_dead}
-        end
-
-      {:error, _reason} = error ->
-        error
+  defp perform_health_check_on_pid(pid, service, opts) do
+    if Process.alive?(pid) do
+      execute_health_check_function(pid, service, opts)
+    else
+      Logger.warning("Service #{inspect(service)} found but process is dead")
+      {:error, :process_dead}
     end
+  end
+
+  defp execute_health_check_function(pid, service, opts) do
+    case Keyword.get(opts, :health_check) do
+      nil ->
+        {:ok, pid}
+
+      health_check_fun when is_function(health_check_fun, 1) ->
+        run_health_check_with_timeout(pid, service, health_check_fun, opts)
+    end
+  end
+
+  defp run_health_check_with_timeout(pid, service, health_check_fun, opts) do
+    timeout = Keyword.get(opts, :timeout, 5000)
+    original_trap_exit = Process.flag(:trap_exit, true)
+
+    try do
+      task = create_health_check_task(health_check_fun, pid)
+      handle_health_check_result(Task.await(task, timeout), pid, service)
+    catch
+      type, reason -> handle_health_check_exception(type, reason, service, timeout)
+    after
+      Process.flag(:trap_exit, original_trap_exit)
+    end
+  end
+
+  defp create_health_check_task(health_check_fun, pid) do
+    Task.async(fn ->
+      start_time = System.monotonic_time(:microsecond)
+      result = health_check_fun.(pid)
+      end_time = System.monotonic_time(:microsecond)
+      {end_time - start_time, result}
+    end)
+  end
+
+  defp handle_health_check_result({time_us, result}, pid, service) do
+    case result do
+      :ok -> log_health_check_success(service, time_us, {:ok, pid})
+      {:ok, _result} -> log_health_check_success(service, time_us, {:ok, pid})
+      true -> log_health_check_success(service, time_us, {:ok, pid})
+      false -> handle_health_check_failure(service, false)
+      error -> handle_health_check_failure(service, error)
+    end
+  end
+
+  defp log_health_check_success(service, time_us, result) do
+    Logger.debug("Health check passed for #{inspect(service)} in #{time_us}μs")
+    result
+  end
+
+  defp handle_health_check_failure(service, error) do
+    Logger.warning("Health check failed for #{inspect(service)}: #{inspect(error)}")
+    {:error, {:health_check_failed, error}}
+  end
+
+  defp handle_health_check_exception(:exit, {:timeout, _}, service, timeout) do
+    Logger.warning("Health check timed out for #{inspect(service)} after #{timeout}ms")
+    {:error, :health_check_timeout}
+  end
+
+  defp handle_health_check_exception(
+         :exit,
+         {{%RuntimeError{} = error, _}, {Task, :await, _}},
+         service,
+         _
+       ) do
+    Logger.warning("Health check errored for #{inspect(service)}: #{inspect(error)}")
+    {:error, {:health_check_error, error}}
+  end
+
+  defp handle_health_check_exception(:exit, {{error, _}, {Task, :await, _}}, service, _) do
+    Logger.warning("Health check crashed for #{inspect(service)}: #{inspect(error)}")
+    {:error, {:health_check_crashed, error}}
+  end
+
+  defp handle_health_check_exception(:exit, {reason, {Task, :await, _}}, service, _) do
+    Logger.warning("Health check crashed for #{inspect(service)}: #{inspect(reason)}")
+    {:error, {:health_check_crashed, reason}}
+  end
+
+  defp handle_health_check_exception(:exit, reason, service, _) do
+    Logger.warning("Health check crashed for #{inspect(service)}: #{inspect(reason)}")
+    {:error, {:health_check_crashed, reason}}
+  end
+
+  defp handle_health_check_exception(:error, reason, service, _) do
+    Logger.warning("Health check errored for #{inspect(service)}: #{inspect(reason)}")
+    {:error, {:health_check_error, reason}}
   end
 
   @doc """

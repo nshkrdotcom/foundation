@@ -271,120 +271,23 @@ defmodule Foundation.Infrastructure.PoolWorkers.HttpWorker do
   defp perform_request(method, url, body, headers, options) do
     # This is a mock implementation - in real usage, you'd use HTTPoison, Finch, etc.
     # For demonstration purposes, we'll simulate HTTP requests with deterministic behavior
-
-    # Check for timeout scenarios first
     timeout = Keyword.get(options, :timeout, 30_000)
 
     cond do
       String.contains?(url, "/delay/") ->
-        # Extract delay seconds from URL pattern like /delay/5
-        delay_match = Regex.run(~r"/delay/(\d+)", url)
-
-        delay_seconds =
-          case delay_match do
-            [_, seconds_str] -> String.to_integer(seconds_str)
-            _ -> 0
-          end
-
-        # Convert to milliseconds and check against timeout
-        delay_ms = delay_seconds * 1000
-
-        if delay_ms > timeout do
-          {:error, :timeout}
-        else
-          Process.sleep(delay_ms)
-          response_body = create_mock_response_body(method, url, headers, body)
-          json_body = Jason.encode!(response_body)
-
-          response = %{
-            status_code: 200,
-            headers: [{"content-type", "application/json"}],
-            body: json_body
-          }
-
-          {:ok, response}
-        end
+        handle_delay_request(url, timeout, method, headers, body)
 
       String.contains?(url, "/status/") ->
-        # Extract status code from URL pattern like /status/404
-        status_match = Regex.run(~r"/status/(\d+)", url)
-
-        status_code =
-          case status_match do
-            [_, code_str] -> String.to_integer(code_str)
-            _ -> 200
-          end
-
-        # Simulate network latency
-        Process.sleep(Enum.random(10..100))
-
-        response_body = create_mock_response_body(method, url, headers, body)
-        json_body = Jason.encode!(response_body)
-
-        response = %{
-          status_code: status_code,
-          headers: [{"content-type", "application/json"}],
-          body: json_body
-        }
-
-        {:ok, response}
+        handle_status_request(url, method, headers, body)
 
       String.contains?(url, "/bytes/") ->
-        # Extract byte count from URL pattern like /bytes/10_000
-        bytes_match = Regex.run(~r"/bytes/(\d+)", url)
-
-        byte_count =
-          case bytes_match do
-            [_, count_str] -> String.to_integer(count_str)
-            _ -> 1024
-          end
-
-        # Simulate network latency
-        Process.sleep(Enum.random(10..100))
-
-        # Return raw bytes (not JSON)
-        response = %{
-          status_code: 200,
-          headers: [{"content-type", "application/octet-stream"}],
-          body: :crypto.strong_rand_bytes(byte_count)
-        }
-
-        {:ok, response}
+        handle_bytes_request(url)
 
       String.contains?(url, "/xml") ->
-        # Simulate network latency
-        Process.sleep(Enum.random(10..100))
-
-        xml_response = """
-        <?xml version="1.0" encoding="UTF-8"?>
-        <response>
-          <method>#{method}</method>
-          <url>#{url}</url>
-        </response>
-        """
-
-        response = %{
-          status_code: 200,
-          headers: [{"content-type", "application/xml"}],
-          body: xml_response
-        }
-
-        {:ok, response}
+        handle_xml_request(method, url)
 
       String.contains?(url, "/nonexistent") ->
-        # Simulate network latency
-        Process.sleep(Enum.random(10..100))
-
-        response_body = create_mock_response_body(method, url, headers, body)
-        json_body = Jason.encode!(response_body)
-
-        response = %{
-          status_code: 404,
-          headers: [{"content-type", "application/json"}],
-          body: json_body
-        }
-
-        {:ok, response}
+        handle_nonexistent_request(method, url, headers, body)
 
       String.contains?(url, "invalid://") ->
         {:error, :invalid_url}
@@ -396,21 +299,112 @@ defmodule Foundation.Infrastructure.PoolWorkers.HttpWorker do
         {:error, :timeout}
 
       true ->
-        # Simulate network latency
-        Process.sleep(Enum.random(10..100))
-
-        # Default success response - simulate httpbin.org behavior
-        response_body = create_httpbin_response(method, url, headers, body)
-        json_body = Jason.encode!(response_body)
-
-        response = %{
-          status_code: 200,
-          headers: [{"content-type", "application/json"}],
-          body: json_body
-        }
-
-        {:ok, response}
+        handle_default_request(method, url, headers, body)
     end
+  end
+
+  defp handle_delay_request(url, timeout, method, headers, body) do
+    delay_seconds = extract_delay_seconds(url)
+    delay_ms = delay_seconds * 1000
+
+    if delay_ms > timeout do
+      {:error, :timeout}
+    else
+      Process.sleep(delay_ms)
+      create_json_response(200, method, url, headers, body)
+    end
+  end
+
+  defp extract_delay_seconds(url) do
+    case Regex.run(~r"/delay/(\d+)", url) do
+      [_, seconds_str] -> String.to_integer(seconds_str)
+      _ -> 0
+    end
+  end
+
+  defp handle_status_request(url, method, headers, body) do
+    status_code = extract_status_code(url)
+    Process.sleep(Enum.random(10..100))
+    create_json_response(status_code, method, url, headers, body)
+  end
+
+  defp extract_status_code(url) do
+    case Regex.run(~r"/status/(\d+)", url) do
+      [_, code_str] -> String.to_integer(code_str)
+      _ -> 200
+    end
+  end
+
+  defp handle_bytes_request(url) do
+    byte_count = extract_byte_count(url)
+    Process.sleep(Enum.random(10..100))
+
+    response = %{
+      status_code: 200,
+      headers: [{"content-type", "application/octet-stream"}],
+      body: :crypto.strong_rand_bytes(byte_count)
+    }
+
+    {:ok, response}
+  end
+
+  defp extract_byte_count(url) do
+    case Regex.run(~r"/bytes/(\d+)", url) do
+      [_, count_str] -> String.to_integer(count_str)
+      _ -> 1024
+    end
+  end
+
+  defp handle_xml_request(method, url) do
+    Process.sleep(Enum.random(10..100))
+
+    xml_response = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <response>
+      <method>#{method}</method>
+      <url>#{url}</url>
+    </response>
+    """
+
+    response = %{
+      status_code: 200,
+      headers: [{"content-type", "application/xml"}],
+      body: xml_response
+    }
+
+    {:ok, response}
+  end
+
+  defp handle_nonexistent_request(method, url, headers, body) do
+    Process.sleep(Enum.random(10..100))
+    create_json_response(404, method, url, headers, body)
+  end
+
+  defp handle_default_request(method, url, headers, body) do
+    Process.sleep(Enum.random(10..100))
+    response_body = create_httpbin_response(method, url, headers, body)
+    json_body = Jason.encode!(response_body)
+
+    response = %{
+      status_code: 200,
+      headers: [{"content-type", "application/json"}],
+      body: json_body
+    }
+
+    {:ok, response}
+  end
+
+  defp create_json_response(status_code, method, url, headers, body) do
+    response_body = create_mock_response_body(method, url, headers, body)
+    json_body = Jason.encode!(response_body)
+
+    response = %{
+      status_code: status_code,
+      headers: [{"content-type", "application/json"}],
+      body: json_body
+    }
+
+    {:ok, response}
   end
 
   # Helper function to create httpbin.org-style response

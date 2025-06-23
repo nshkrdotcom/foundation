@@ -573,13 +573,20 @@ defmodule Foundation.Security.PrivilegeEscalationTest do
     final_process_count = :erlang.system_info(:process_count)
     process_diff = abs(final_process_count - initial_process_count)
 
-    if process_diff > 30 do
+    log_process_monitoring(operation_name, process_diff)
+    ensure_foundation_restart_if_needed(operation_name)
+    assert_security_result(result)
+  end
+
+  defp log_process_monitoring(operation_name, diff) do
+    if diff > 30 do
       Logger.warning(
-        "Significant process count change after operation: #{process_diff} for: #{operation_name}"
+        "Significant process count change after operation: #{diff} for: #{operation_name}"
       )
     end
+  end
 
-    # After the operation, check if Foundation needs to be restarted
+  defp ensure_foundation_restart_if_needed(operation_name) do
     unless Foundation.available?() do
       Logger.info(
         "ℹ Foundation application stopped during operation #{operation_name}, restarting..."
@@ -588,8 +595,9 @@ defmodule Foundation.Security.PrivilegeEscalationTest do
       {:ok, _} = Application.ensure_all_started(:foundation)
       Foundation.TestHelpers.wait_for_all_services_available(3000)
     end
+  end
 
-    # Assert that security operations are properly handled
+  defp assert_security_result(result) do
     case result do
       :security_blocked -> assert true, "Security properly blocked unauthorized operation"
       :contained_error -> assert true, "Security properly contained dangerous operation"
