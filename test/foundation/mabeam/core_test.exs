@@ -41,6 +41,7 @@ defmodule Foundation.MABEAM.CoreTest do
       assert status.service_config.coordination_timeout == 10000
     end
 
+    @tag :slow
     test "reports healthy status after startup" do
       assert {:ok, :healthy} = Core.health_check()
     end

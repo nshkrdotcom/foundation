@@ -296,6 +296,7 @@ defmodule Foundation.MABEAM.TypesTest do
   end
 
   describe "performance characteristics" do
+    @tag :slow
     test "constructor functions are fast" do
       {time_micro, _} =
         :timer.tc(fn ->
@@ -308,6 +309,7 @@ defmodule Foundation.MABEAM.TypesTest do
       assert time_micro < 1000
     end
 
+    @tag :slow
     test "validation is fast" do
       config = Types.new_agent_config(:test, GenServer, [])
 
