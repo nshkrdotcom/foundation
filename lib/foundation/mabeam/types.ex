@@ -1,64 +1,102 @@
 defmodule Foundation.MABEAM.Types do
   @moduledoc """
   Core data structures for Foundation MABEAM.
-  
+
   This module defines all serializable, distribution-ready types.
   Every type avoids non-serializable terms (PIDs, functions, references).
-  
+
   ## Design Philosophy
-  
-  - 100% serializable data structures  
+
+  - 100% serializable data structures
   - Distribution-ready architecture
   - Conflict resolution strategies for variables
   - Agent configuration with restart policies
   - Coordination request/response patterns
   """
 
-  @type agent_id :: atom()
+  @type agent_id :: atom() | String.t()
+  @type process_reference :: {:agent, agent_id()}
+
+  @type agent_type ::
+          :coordinator | :worker | :monitor | :resource_provider | :optimizer
+
+  @type restart_policy :: %{
+          strategy: :permanent | :temporary | :transient,
+          max_restarts: non_neg_integer(),
+          period_seconds: pos_integer(),
+          backoff_strategy: :linear | :exponential | :fixed
+        }
+
+  @type resource_spec :: %{
+          memory_mb: pos_integer(),
+          cpu_weight: float(),
+          network_priority: :low | :normal | :high,
+          custom_resources: map()
+        }
 
   @type agent_config :: %{
-    id: agent_id(),
-    module: module(),
-    args: list(),
-    type: atom(),
-    capabilities: [atom()],
-    metadata: map(),
-    restart_policy: atom(),
-    created_at: DateTime.t()
-  }
+          id: agent_id(),
+          module: module(),
+          args: [term()],
+          type: agent_type(),
+          capabilities: [atom()],
+          restart_policy: restart_policy(),
+          resource_requirements: resource_spec(),
+          metadata: map(),
+          created_at: DateTime.t()
+        }
+
+  @type conflict_resolution_strategy ::
+          :last_write_wins | :consensus | :priority_based | {:custom, module(), atom()}
+
+  @type access_permissions ::
+          :public | :restricted | {:agents, [agent_id()]} | {:capabilities, [atom()]}
 
   @type universal_variable :: %{
-    name: atom(),
-    value: term(),
-    version: pos_integer(),
-    last_modifier: agent_id() | :system,
-    conflict_resolution: atom() | tuple(),
-    metadata: map(),
-    last_modified: DateTime.t(),
-    created_at: DateTime.t(),
-    updated_at: DateTime.t(),
-    type: atom(),
-    access_mode: atom(),
-    constraints: map()
-  }
+          name: atom(),
+          value: term(),
+          version: pos_integer(),
+          last_modifier: agent_id(),
+          conflict_resolution: conflict_resolution_strategy(),
+          access_permissions: access_permissions(),
+          metadata: map(),
+          constraints: map(),
+          created_at: DateTime.t(),
+          updated_at: DateTime.t()
+        }
+
+  @type request_type ::
+          :consensus | :negotiation | :auction | :market | :resource_allocation
+
+  @type response_type ::
+          :success | :failure | :timeout | :partial
 
   @type coordination_request :: %{
-    protocol: atom(),
-    type: atom(),
-    params: map(),
-    correlation_id: binary(),
-    created_at: DateTime.t()
-  }
+          protocol: atom(),
+          type: request_type(),
+          params: map(),
+          timeout: pos_integer(),
+          correlation_id: binary(),
+          created_at: DateTime.t()
+        }
+
+  @type coordination_response :: %{
+          correlation_id: binary(),
+          response_type: response_type(),
+          data: term(),
+          confidence: float(),
+          metadata: map()
+        }
 
   @type auction_spec :: %{
-    type: atom(),
-    resource_id: term(),
-    participants: [agent_id()],
-    starting_price: number() | nil,
-    payment_rule: atom(),
-    auction_params: map(),
-    created_at: DateTime.t()
-  }
+          type: atom(),
+          resource_id: term(),
+          participants: [agent_id()],
+          starting_price: number() | nil,
+          payment_rule: atom(),
+          auction_params: map(),
+          created_at: DateTime.t()
+        }
 
   # Agent Config Functions
 
@@ -67,7 +105,7 @@ defmodule Foundation.MABEAM.Types do
     new_agent_config(id, module, args, [])
   end
 
-  @spec new_agent_config(agent_id(), module(), list(), keyword()) :: agent_config()
+  @spec new_agent_config(agent_id(), module(), [term()], keyword()) :: agent_config()
   def new_agent_config(id, module, args, opts) do
     %{
       id: id,
@@ -75,8 +113,21 @@ defmodule Foundation.MABEAM.Types do
       args: args,
       type: Keyword.get(opts, :type, :worker),
       capabilities: Keyword.get(opts, :capabilities, []),
+      restart_policy:
+        Keyword.get(opts, :restart_policy, %{
+          strategy: :permanent,
+          max_restarts: 3,
+          period_seconds: 60,
+          backoff_strategy: :exponential
+        }),
+      resource_requirements:
+        Keyword.get(opts, :resource_requirements, %{
+          memory_mb: 64,
+          cpu_weight: 1.0,
+          network_priority: :normal,
+          custom_resources: %{}
+        }),
       metadata: Keyword.get(opts, :metadata, %{}),
-      restart_policy: Keyword.get(opts, :restart_policy, :permanent),
       created_at: DateTime.utc_now()
     }
   end
@@ -92,6 +143,7 @@ defmodule Foundation.MABEAM.Types do
       error -> error
     end
   end
+
   def validate_agent_config(_), do: {:error, {:invalid_config, "must be a map"}}
 
   defp validate_agent_id(id) when is_atom(id) and not is_nil(id), do: {:ok, id}
@@ -108,37 +160,26 @@ defmodule Foundation.MABEAM.Types do
 
   # Universal Variable Functions
 
-  @spec new_variable(atom(), term(), agent_id() | :system) :: universal_variable()
+  @spec new_variable(atom(), term(), agent_id()) :: universal_variable()
   def new_variable(name, value, modifier) do
     new_variable(name, value, modifier, [])
   end
 
-  @spec new_variable(atom(), term(), agent_id() | :system, keyword()) :: universal_variable()
+  @spec new_variable(atom(), term(), agent_id(), keyword()) :: universal_variable()
   def new_variable(name, value, modifier, opts) do
     now = DateTime.utc_now()
-    custom_metadata = Keyword.get(opts, :metadata, %{})
-    
-    base_metadata = %{
-      tags: [],
-      created_by: modifier,
-      access_count: 0,
-      modification_count: 1,
-      conflict_count: 0
-    }
-    
+
     %{
       name: name,
       value: value,
       version: 1,
       last_modifier: modifier,
       conflict_resolution: Keyword.get(opts, :conflict_resolution, :last_write_wins),
-      type: :shared,
-      access_mode: :public,
+      access_permissions: Keyword.get(opts, :access_permissions, :public),
+      metadata: Keyword.get(opts, :metadata, %{}),
       constraints: Keyword.get(opts, :constraints, %{}),
-      last_modified: now,
       created_at: now,
-      updated_at: now,
-      metadata: Map.merge(base_metadata, custom_metadata)
+      updated_at: now
     }
   end
 
@@ -151,6 +192,7 @@ defmodule Foundation.MABEAM.Types do
       error -> error
     end
   end
+
   def validate_variable(_), do: {:error, {:invalid_variable, "must be a map"}}
 
   defp validate_variable_name(name) when is_atom(name) and not is_nil(name), do: {:ok, name}
@@ -161,18 +203,20 @@ defmodule Foundation.MABEAM.Types do
 
   # Coordination Request Functions
 
-  @spec new_coordination_request(atom(), atom(), map()) :: coordination_request()
-  def new_coordination_request(protocol, type, params) do
+  @spec new_coordination_request(atom(), request_type(), map(), keyword()) :: coordination_request()
+  def new_coordination_request(protocol, type, params, opts \\ []) do
     %{
       protocol: protocol,
       type: type,
       params: params,
+      timeout: Keyword.get(opts, :timeout, 5000),
       correlation_id: generate_correlation_id(),
       created_at: DateTime.utc_now()
     }
   end
 
-  @spec validate_coordination_request(coordination_request()) :: {:ok, coordination_request()} | {:error, term()}
+  @spec validate_coordination_request(coordination_request()) ::
+          {:ok, coordination_request()} | {:error, term()}
   def validate_coordination_request(request) when is_map(request) do
     with {:ok, _} <- validate_protocol(request[:protocol]),
          {:ok, _} <- validate_request_type(request[:type]),
@@ -182,6 +226,7 @@ defmodule Foundation.MABEAM.Types do
       error -> error
     end
   end
+
   def validate_coordination_request(_), do: {:error, {:invalid_request, "must be a map"}}
 
   defp validate_protocol(protocol) when is_atom(protocol), do: {:ok, protocol}
@@ -202,20 +247,23 @@ defmodule Foundation.MABEAM.Types do
 
   @spec new_auction_spec(atom(), term(), [agent_id()], keyword()) :: auction_spec()
   def new_auction_spec(type, resource_id, participants, opts) do
-    auction_params = case type do
-      :english ->
-        %{
-          increment: Keyword.get(opts, :increment),
-          max_rounds: Keyword.get(opts, :max_rounds)
-        }
-      :dutch ->
-        %{
-          decrement: Keyword.get(opts, :decrement),
-          min_price: Keyword.get(opts, :min_price)
-        }
-      _ ->
-        %{}
-    end
+    auction_params =
+      case type do
+        :english ->
+          %{
+            increment: Keyword.get(opts, :increment),
+            max_rounds: Keyword.get(opts, :max_rounds)
+          }
+
+        :dutch ->
+          %{
+            decrement: Keyword.get(opts, :decrement),
+            min_price: Keyword.get(opts, :min_price)
+          }
+
+        _ ->
+          %{}
+      end
 
     %{
       type: type,
@@ -237,12 +285,17 @@ defmodule Foundation.MABEAM.Types do
       error -> error
     end
   end
+
   def validate_auction_spec(_), do: {:error, {:invalid_auction_spec, "must be a map"}}
 
   defp validate_auction_type(type) when type in [:sealed_bid, :english, :dutch], do: {:ok, type}
-  defp validate_auction_type(_), do: {:error, {:invalid_auction_type, "must be :sealed_bid, :english, or :dutch"}}
 
-  defp validate_participants([]), do: {:error, {:no_participants, "must have at least one participant"}}
+  defp validate_auction_type(_),
+    do: {:error, {:invalid_auction_type, "must be :sealed_bid, :english, or :dutch"}}
+
+  defp validate_participants([]),
+    do: {:error, {:no_participants, "must have at least one participant"}}
+
   defp validate_participants(participants) when is_list(participants), do: {:ok, participants}
   defp validate_participants(_), do: {:error, {:invalid_participants, "must be a list"}}
 

@@ -12,6 +12,7 @@ defmodule Foundation.MABEAM.CoreTest do
 
     # Clean up any existing variables from previous tests
     {:ok, variables} = Core.list_orchestration_variables()
+
     for {id, _} <- variables do
       Core.unregister_orchestration_variable(id)
     end
@@ -34,7 +35,7 @@ defmodule Foundation.MABEAM.CoreTest do
         max_variables: 100,
         telemetry_enabled: true
       }
-      
+
       assert :ok = Core.update_configuration(config)
       {:ok, status} = Core.system_status()
       assert status.service_config.coordination_timeout == 10000
@@ -49,10 +50,10 @@ defmodule Foundation.MABEAM.CoreTest do
     test "registers valid orchestration variable successfully" do
       variable = create_valid_variable(:test_variable_1)
       assert :ok = Core.register_orchestration_variable(variable)
-      
+
       {:ok, status} = Core.system_status()
       assert Map.has_key?(status.variable_registry, :test_variable_1)
-      
+
       registered_variable = status.variable_registry[:test_variable_1]
       assert registered_variable.id == :test_variable_1
       assert registered_variable.scope == :local
@@ -61,13 +62,18 @@ defmodule Foundation.MABEAM.CoreTest do
 
     test "rejects invalid variable with missing required fields" do
       invalid_variables = [
-        %{},  # Empty map
-        %{id: :invalid},  # Missing other required fields
-        %{id: nil, scope: :local},  # Invalid ID
-        %{id: :test, scope: :invalid_scope},  # Invalid scope
-        %{id: :test, scope: :local, type: :invalid_type}  # Invalid type
+        # Empty map
+        %{},
+        # Missing other required fields
+        %{id: :invalid},
+        # Invalid ID
+        %{id: nil, scope: :local},
+        # Invalid scope
+        %{id: :test, scope: :invalid_scope},
+        # Invalid type
+        %{id: :test, scope: :local, type: :invalid_type}
       ]
-      
+
       for invalid_variable <- invalid_variables do
         assert {:error, _reason} = Core.register_orchestration_variable(invalid_variable)
       end
@@ -82,14 +88,11 @@ defmodule Foundation.MABEAM.CoreTest do
     test "allows variable updates for existing variables" do
       variable = create_valid_variable(:updatable_variable)
       assert :ok = Core.register_orchestration_variable(variable)
-      
-      updated_variable = %{variable | 
-        agents: [:new_agent_1, :new_agent_2],
-        scope: :global
-      }
-      
+
+      updated_variable = %{variable | agents: [:new_agent_1, :new_agent_2], scope: :global}
+
       assert :ok = Core.update_orchestration_variable(:updatable_variable, updated_variable)
-      
+
       {:ok, status} = Core.system_status()
       updated = status.variable_registry[:updatable_variable]
       assert updated.scope == :global
@@ -99,12 +102,12 @@ defmodule Foundation.MABEAM.CoreTest do
     test "unregisters variables successfully" do
       variable = create_valid_variable(:removable_variable)
       assert :ok = Core.register_orchestration_variable(variable)
-      
+
       {:ok, status} = Core.system_status()
       assert Map.has_key?(status.variable_registry, :removable_variable)
-      
+
       assert :ok = Core.unregister_orchestration_variable(:removable_variable)
-      
+
       {:ok, updated_status} = Core.system_status()
       assert not Map.has_key?(updated_status.variable_registry, :removable_variable)
     end
@@ -115,14 +118,14 @@ defmodule Foundation.MABEAM.CoreTest do
         create_valid_variable(:list_test_2),
         create_valid_variable(:list_test_3)
       ]
-      
+
       for variable <- variables do
         :ok = Core.register_orchestration_variable(variable)
       end
-      
+
       {:ok, variable_list} = Core.list_orchestration_variables()
       assert length(variable_list) >= 3
-      
+
       variable_ids = Enum.map(variable_list, fn {id, _var} -> id end)
       assert :list_test_1 in variable_ids
       assert :list_test_2 in variable_ids
@@ -134,21 +137,22 @@ defmodule Foundation.MABEAM.CoreTest do
     test "coordinates empty system successfully" do
       # Clear any existing variables
       {:ok, variables} = Core.list_orchestration_variables()
+
       for {id, _} <- variables do
         Core.unregister_orchestration_variable(id)
       end
-      
+
       assert {:ok, []} = Core.coordinate_system()
     end
 
     test "coordinates system with single variable" do
       variable = create_valid_variable(:single_coordination, [:test_agent_1])
       assert :ok = Core.register_orchestration_variable(variable)
-      
+
       assert {:ok, results} = Core.coordinate_system()
       assert is_list(results)
       assert length(results) == 1
-      
+
       [result] = results
       assert result.variable_id == :single_coordination
       assert Map.has_key?(result, :result)
@@ -161,14 +165,14 @@ defmodule Foundation.MABEAM.CoreTest do
         create_valid_variable(:multi_coord_2, [:agent_2]),
         create_valid_variable(:multi_coord_3, [:agent_3])
       ]
-      
+
       for variable <- variables do
         :ok = Core.register_orchestration_variable(variable)
       end
-      
+
       assert {:ok, results} = Core.coordinate_system()
       assert length(results) >= 3
-      
+
       variable_ids = Enum.map(results, fn result -> result.variable_id end)
       assert :multi_coord_1 in variable_ids
       assert :multi_coord_2 in variable_ids
@@ -178,19 +182,20 @@ defmodule Foundation.MABEAM.CoreTest do
     test "handles coordination timeouts gracefully" do
       variable = create_slow_variable(:timeout_test)
       assert :ok = Core.register_orchestration_variable(variable)
-      
+
       # Set a very short timeout for this test
       assert :ok = Core.update_configuration(%{coordination_timeout: 50})
-      
+
       assert {:ok, results} = Core.coordinate_system()
       [result] = results
-      
+
       # Should either succeed quickly or have some error due to timing
       case result.result do
-        {:ok, _} -> 
+        {:ok, _} ->
           # If it succeeds, duration might still be longer due to function execution time
           assert result.duration_ms >= 0
-        {:error, _} -> 
+
+        {:error, _} ->
           # Any error is acceptable for timeout scenarios
           assert result.duration_ms >= 0
       end
@@ -199,7 +204,7 @@ defmodule Foundation.MABEAM.CoreTest do
     test "coordinates specific variable by ID" do
       variable = create_valid_variable(:specific_coordination)
       assert :ok = Core.register_orchestration_variable(variable)
-      
+
       assert {:ok, result} = Core.coordinate_variable(:specific_coordination)
       assert result.variable_id == :specific_coordination
       assert Map.has_key?(result, :result)
@@ -213,14 +218,14 @@ defmodule Foundation.MABEAM.CoreTest do
   describe "performance metrics and monitoring" do
     test "tracks coordination performance metrics" do
       {:ok, initial_metrics} = Core.get_performance_metrics()
-      
+
       variable = create_valid_variable(:metrics_test)
       :ok = Core.register_orchestration_variable(variable)
-      
+
       {:ok, _result} = Core.coordinate_variable(:metrics_test)
-      
+
       {:ok, updated_metrics} = Core.get_performance_metrics()
-      
+
       assert updated_metrics.coordination_count > initial_metrics.coordination_count
       assert updated_metrics.variable_count >= initial_metrics.variable_count
       assert is_number(updated_metrics.avg_coordination_time_ms)
@@ -229,28 +234,34 @@ defmodule Foundation.MABEAM.CoreTest do
     test "maintains coordination history" do
       variable = create_valid_variable(:history_test)
       :ok = Core.register_orchestration_variable(variable)
-      
+
       {:ok, _result} = Core.coordinate_variable(:history_test)
-      
+
       {:ok, history} = Core.get_coordination_history()
       assert is_list(history)
       assert length(history) > 0
-      
+
       [latest_event | _] = history
-      assert latest_event.type in [:coordination_start, :coordination_complete, :variable_registered]
+
+      assert latest_event.type in [
+               :coordination_start,
+               :coordination_complete,
+               :variable_registered
+             ]
+
       assert is_list(latest_event.variables)
       assert %DateTime{} = latest_event.timestamp
     end
 
     test "provides system statistics" do
       {:ok, stats} = Core.get_system_statistics()
-      
+
       assert Map.has_key?(stats, :total_variables)
       assert Map.has_key?(stats, :total_coordinations)
       assert Map.has_key?(stats, :success_rate)
       assert Map.has_key?(stats, :avg_response_time_ms)
       assert Map.has_key?(stats, :uptime_seconds)
-      
+
       assert is_number(stats.total_variables)
       assert is_number(stats.total_coordinations)
       assert stats.success_rate >= 0.0 and stats.success_rate <= 1.0
@@ -261,10 +272,10 @@ defmodule Foundation.MABEAM.CoreTest do
     test "handles coordination function failures gracefully" do
       failing_variable = create_failing_variable(:failure_test)
       assert :ok = Core.register_orchestration_variable(failing_variable)
-      
+
       assert {:ok, results} = Core.coordinate_system()
       [result] = results
-      
+
       assert result.variable_id == :failure_test
       assert match?({:error, _}, result.result)
     end
@@ -275,29 +286,31 @@ defmodule Foundation.MABEAM.CoreTest do
         create_failing_variable(:failure_1),
         create_valid_variable(:success_2)
       ]
-      
+
       for variable <- variables do
         :ok = Core.register_orchestration_variable(variable)
       end
-      
+
       assert {:ok, results} = Core.coordinate_system()
       assert length(results) == 3
-      
-      successful_results = Enum.filter(results, fn result ->
-        match?({:ok, _}, result.result)
-      end)
-      
-      assert length(successful_results) >= 2  # At least the two valid ones should succeed
+
+      successful_results =
+        Enum.filter(results, fn result ->
+          match?({:ok, _}, result.result)
+        end)
+
+      # At least the two valid ones should succeed
+      assert length(successful_results) >= 2
     end
 
     test "recovers from invalid variable states" do
       # This would test recovery mechanisms if a variable becomes corrupted
       variable = create_valid_variable(:recovery_test)
       :ok = Core.register_orchestration_variable(variable)
-      
+
       # Simulate variable corruption by direct state manipulation
       # In a real scenario, this might happen due to network issues, etc.
-      
+
       assert {:ok, result} = Core.coordinate_variable(:recovery_test)
       # Should either succeed or provide a clear error
       assert is_map(result)
@@ -309,7 +322,7 @@ defmodule Foundation.MABEAM.CoreTest do
       # This test assumes ProcessRegistry is available and working
       variable = create_valid_variable(:integration_test, [:some_agent])
       assert :ok = Core.register_orchestration_variable(variable)
-      
+
       # The coordination should attempt to discover agents via ProcessRegistry
       assert {:ok, result} = Core.coordinate_variable(:integration_test)
       assert is_map(result)
@@ -319,7 +332,7 @@ defmodule Foundation.MABEAM.CoreTest do
       # Set up telemetry capture
       test_pid = self()
       events = [:coordination_start, :coordination_complete, :variable_registered]
-      
+
       for event <- events do
         :telemetry.attach(
           "test-#{event}",
@@ -330,20 +343,20 @@ defmodule Foundation.MABEAM.CoreTest do
           %{}
         )
       end
-      
+
       variable = create_valid_variable(:telemetry_test)
       :ok = Core.register_orchestration_variable(variable)
-      
+
       # Give telemetry time to register
       Process.sleep(10)
-      
+
       {:ok, _result} = Core.coordinate_variable(:telemetry_test)
-      
+
       # Should receive telemetry events
       assert_receive {:telemetry, :variable_registered}, 1000
       assert_receive {:telemetry, :coordination_start}, 1000
       assert_receive {:telemetry, :coordination_complete}, 1000
-      
+
       # Cleanup
       for event <- events do
         :telemetry.detach("test-#{event}")
@@ -353,16 +366,17 @@ defmodule Foundation.MABEAM.CoreTest do
 
   describe "concurrent operations and thread safety" do
     test "handles concurrent variable registrations" do
-      tasks = for i <- 1..10 do
-        Task.async(fn ->
-          variable = create_valid_variable(:"concurrent_reg_#{i}")
-          Core.register_orchestration_variable(variable)
-        end)
-      end
-      
+      tasks =
+        for i <- 1..10 do
+          Task.async(fn ->
+            variable = create_valid_variable(:"concurrent_reg_#{i}")
+            Core.register_orchestration_variable(variable)
+          end)
+        end
+
       results = Task.await_many(tasks, 5000)
       successful_registrations = Enum.count(results, fn result -> result == :ok end)
-      
+
       assert successful_registrations == 10
     end
 
@@ -370,21 +384,23 @@ defmodule Foundation.MABEAM.CoreTest do
       # Register a variable for coordination
       variable = create_valid_variable(:concurrent_coord_test)
       :ok = Core.register_orchestration_variable(variable)
-      
-      tasks = for _i <- 1..5 do
-        Task.async(fn ->
-          Core.coordinate_variable(:concurrent_coord_test)
-        end)
-      end
-      
+
+      tasks =
+        for _i <- 1..5 do
+          Task.async(fn ->
+            Core.coordinate_variable(:concurrent_coord_test)
+          end)
+        end
+
       results = Task.await_many(tasks, 10000)
-      
+
       # All coordinations should complete successfully
-      successful_coordinations = Enum.count(results, fn
-        {:ok, _result} -> true
-        _ -> false
-      end)
-      
+      successful_coordinations =
+        Enum.count(results, fn
+          {:ok, _result} -> true
+          _ -> false
+        end)
+
       assert successful_coordinations == 5
     end
   end
@@ -446,11 +462,12 @@ defmodule Foundation.MABEAM.CoreTest do
 
   defp test_coordination_function(agents, _context, _metadata) do
     # Simple test coordination that returns success with agent list
-    {:ok, %{
-      coordinated_agents: agents,
-      coordination_type: :test,
-      timestamp: DateTime.utc_now()
-    }}
+    {:ok,
+     %{
+       coordinated_agents: agents,
+       coordination_type: :test,
+       timestamp: DateTime.utc_now()
+     }}
   end
 
   defp slow_coordination_function(_agents, context, _metadata) do

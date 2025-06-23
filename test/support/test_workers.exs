@@ -2,7 +2,7 @@ defmodule Foundation.MABEAM.TestWorker do
   @moduledoc """
   Basic test worker for ProcessRegistry testing.
   """
-  
+
   use GenServer
 
   def start_link(args \\ []) do
@@ -16,6 +16,7 @@ defmodule Foundation.MABEAM.TestWorker do
       started_at: DateTime.utc_now(),
       messages: []
     }
+
     {:ok, state}
   end
 
@@ -45,7 +46,7 @@ defmodule Foundation.MABEAM.MLTestWorker do
   @moduledoc """
   ML-specific test worker with NLP and classification capabilities.
   """
-  
+
   use GenServer
 
   def start_link(args \\ []) do
@@ -61,6 +62,7 @@ defmodule Foundation.MABEAM.MLTestWorker do
       started_at: DateTime.utc_now(),
       processed_requests: 0
     }
+
     {:ok, state}
   end
 
@@ -78,7 +80,7 @@ defmodule Foundation.MABEAM.MLTestWorker do
       confidence: 0.85,
       model: state.model_type
     }
-    
+
     updated_state = %{state | processed_requests: state.processed_requests + 1}
     {:reply, {:ok, result}, updated_state}
   end
@@ -89,7 +91,7 @@ defmodule Foundation.MABEAM.MLTestWorker do
     entities = [
       %{type: :person, text: "test", start: 0, end: 4}
     ]
-    
+
     updated_state = %{state | processed_requests: state.processed_requests + 1}
     {:reply, {:ok, entities}, updated_state}
   end
@@ -100,6 +102,7 @@ defmodule Foundation.MABEAM.MLTestWorker do
       processed_requests: state.processed_requests,
       uptime: DateTime.diff(DateTime.utc_now(), state.started_at, :second)
     }
+
     {:reply, stats, state}
   end
 end
@@ -108,7 +111,7 @@ defmodule Foundation.MABEAM.CrashingTestWorker do
   @moduledoc """
   Test worker that crashes after a specified time for crash testing.
   """
-  
+
   use GenServer
 
   def start_link(args \\ []) do
@@ -118,15 +121,15 @@ defmodule Foundation.MABEAM.CrashingTestWorker do
   @impl true
   def init(args) do
     crash_after = Keyword.get(args, :crash_after, 1000)
-    
+
     # Schedule crash
     Process.send_after(self(), :crash, crash_after)
-    
+
     state = %{
       crash_after: crash_after,
       started_at: DateTime.utc_now()
     }
-    
+
     {:ok, state}
   end
 
@@ -147,7 +150,7 @@ defmodule Foundation.MABEAM.SlowTestWorker do
   @moduledoc """
   Test worker that responds slowly for timeout testing.
   """
-  
+
   use GenServer
 
   def start_link(args \\ []) do
@@ -160,6 +163,7 @@ defmodule Foundation.MABEAM.SlowTestWorker do
       delay: Keyword.get(args, :delay, 1000),
       started_at: DateTime.utc_now()
     }
+
     {:ok, state}
   end
 
@@ -190,11 +194,12 @@ defmodule TestResponder do
 
   @impl true
   def init(_args) do
-    {:ok, %{
-      state: %{},
-      sequence: [],
-      process_counts: %{}
-    }}
+    {:ok,
+     %{
+       state: %{},
+       sequence: [],
+       process_counts: %{}
+     }}
   end
 
   @impl true
@@ -217,9 +222,7 @@ defmodule TestResponder do
 
   def handle_call({:dedupe_test, request_id}, _from, state) do
     new_count = Map.get(state.process_counts, request_id, 0) + 1
-    new_state = %{state | 
-      process_counts: Map.put(state.process_counts, request_id, new_count)
-    }
+    new_state = %{state | process_counts: Map.put(state.process_counts, request_id, new_count)}
     {:reply, {:processed, new_count}, new_state}
   end
 
@@ -394,44 +397,123 @@ defmodule CoordinationTestAgent do
 
   @impl true
   def init(_args) do
-    {:ok, %{
-      responses: [],
-      consensus_preference: :random,
-      vote_history: []
-    }}
+    {:ok,
+     %{
+       responses: [],
+       consensus_preference: :random,
+       vote_history: []
+     }}
   end
 
   @impl true
   def handle_call({:mabeam_coordination_request, :consensus, params}, _from, state) do
-    response = case params do
-      %{question: _question, options: options} ->
-        # Simulate decision-making process
-        delay = Map.get(params, :delay, 0)
-        if delay > 0, do: Process.sleep(delay)
-        
-        case Map.get(params, :force_unanimous) do
-          true -> 
-            # For unanimous tests, always vote yes
-            {:ok, %{response: :yes, confidence: 1.0, reasoning: "Unanimous agreement"}}
-          _ ->
-            # Random choice for majority vote tests
-            choice = Enum.random(options)
-            confidence = :rand.uniform()
-            {:ok, %{response: choice, confidence: confidence, reasoning: "Random choice"}}
-        end
-        
-      %{simulate_failure: true} ->
-        {:error, :simulated_failure}
-        
-      _ ->
-        {:ok, %{response: :yes, confidence: 0.8, reasoning: "Default agreement"}}
-    end
-    
-    new_state = %{state | 
-      responses: [response | state.responses],
-      vote_history: [params | state.vote_history]
+    response =
+      case params do
+        %{question: _question, options: options} ->
+          # Simulate decision-making process
+          delay = Map.get(params, :delay, 0)
+          if delay > 0, do: Process.sleep(delay)
+
+          case Map.get(params, :force_unanimous) do
+            true ->
+              # For unanimous tests, always vote yes
+              {:ok, %{response: :yes, confidence: 1.0, reasoning: "Unanimous agreement"}}
+
+            _ ->
+              # Random choice for majority vote tests
+              choice = Enum.random(options)
+              confidence = :rand.uniform()
+              {:ok, %{response: choice, confidence: confidence, reasoning: "Random choice"}}
+          end
+
+        %{simulate_failure: true} ->
+          {:error, :simulated_failure}
+
+        _ ->
+          {:ok, %{response: :yes, confidence: 0.8, reasoning: "Default agreement"}}
+      end
+
+    new_state = %{
+      state
+      | responses: [response | state.responses],
+        vote_history: [params | state.vote_history]
     }
-    
+
+    {:reply, response, new_state}
+  end
+
+  def handle_call({:mabeam_coordination_request, :negotiation, params}, _from, state) do
+    # Handle negotiation requests for coordinator agents too
+    response =
+      case params do
+        %{resources: _resources, agent_requirements: requirements} ->
+          # Extract agent ID from string keys
+          agent_id_str = to_string(self() |> :erlang.pid_to_list() |> to_string())
+
+          # Try to find requirements for this agent (using coordinator_1, coordinator_2, etc.)
+          my_requirements = find_agent_requirements(requirements, agent_id_str)
+
+          {:ok,
+           %{
+             agent_id: agent_id_str,
+             requirements: my_requirements,
+             flexibility: 0.8,
+             alternative_proposals: []
+           }}
+
+        _ ->
+          {:ok,
+           %{
+             agent_id: :coordinator,
+             status: :ready_to_negotiate,
+             preferences: %{fairness: 0.8, efficiency: 0.6}
+           }}
+      end
+
+    new_state = %{
+      state
+      | responses: [response | state.responses],
+        vote_history: [params | state.vote_history]
+    }
+
+    {:reply, response, new_state}
+  end
+
+  def handle_call({:mabeam_coordination_request, :resource_allocation, params}, _from, state) do
+    # Handle resource allocation requests
+    response =
+      case params do
+        %{resources: _resources, agent_requirements: requirements} ->
+          # Extract agent ID for this instance
+          agent_id_str = extract_my_agent_id(requirements)
+
+          # Try to find requirements for this agent
+          my_requirements = find_agent_requirements(requirements, agent_id_str)
+
+          {:ok,
+           %{
+             agent_id: agent_id_str,
+             requirements: my_requirements,
+             flexibility: 0.8,
+             alternative_proposals: []
+           }}
+
+        _ ->
+          {:ok,
+           %{
+             agent_id: :coordinator,
+             requirements: %{cpu: 10, memory: 100},
+             flexibility: 0.5,
+             alternative_proposals: []
+           }}
+      end
+
+    new_state = %{
+      state
+      | responses: [response | state.responses],
+        vote_history: [params | state.vote_history]
+    }
+
     {:reply, response, new_state}
   end
 
@@ -455,6 +537,26 @@ defmodule CoordinationTestAgent do
   def handle_cast(_message, state) do
     {:noreply, state}
   end
+
+  # Helper function to find agent requirements
+  defp find_agent_requirements(requirements, _agent_id_str) do
+    # For test purposes, return requirements for coordinator_1 as default
+    case Map.get(requirements, "coordinator_1") do
+      nil -> Map.get(requirements, "coordinator_2", %{cpu: 10, memory: 100})
+      reqs -> reqs
+    end
+  end
+
+  # Helper function to extract agent ID for resource allocation
+  defp extract_my_agent_id(requirements) when is_map(requirements) do
+    # Try to determine which agent we are based on the requirements keys
+    keys = Map.keys(requirements)
+    # For testing, cycle through coordinator types
+    Enum.find(keys, fn key ->
+      String.contains?(to_string(key), "coordinator") or
+        String.contains?(to_string(key), "negotiator")
+    end) || List.first(keys) || "coordinator_1"
+  end
 end
 
 defmodule NegotiationTestAgent do
@@ -469,58 +571,61 @@ defmodule NegotiationTestAgent do
 
   @impl true
   def init(_args) do
-    {:ok, %{
-      current_offers: %{},
-      negotiation_history: [],
-      resource_preferences: %{},
-      allocation_satisfaction: 0.0
-    }}
+    {:ok,
+     %{
+       current_offers: %{},
+       negotiation_history: [],
+       resource_preferences: %{},
+       allocation_satisfaction: 0.0
+     }}
   end
 
   @impl true
   def handle_call({:mabeam_coordination_request, :negotiation, params}, _from, state) do
-    response = case params do
-      %{resource: resource, total_available: total, initial_offers: offers} ->
-        agent_id = get_agent_id_from_offers(offers)
-        my_offer = Map.get(offers, agent_id, total / 2)
-        
-        # Simple negotiation strategy: try to get 10% more than initial offer
-        desired_amount = min(my_offer * 1.1, total * 0.6)
-        
-        {:ok, %{
-          agent_id: agent_id,
-          resource: resource,
-          desired_amount: desired_amount,
-          flexibility: 0.2,
-          priority: :high
-        }}
-        
-      %{resources: resources, agent_requirements: requirements} ->
-        agent_id = extract_agent_id(requirements)
-        my_requirements = Map.get(requirements, agent_id, %{})
-        
-        # Calculate satisfaction based on requirements vs available
-        satisfaction = calculate_satisfaction(my_requirements, resources)
-        
-        {:ok, %{
-          agent_id: agent_id,
-          requirements: my_requirements,
-          flexibility: satisfaction,
-          alternative_proposals: generate_alternatives(my_requirements)
-        }}
-        
-      _ ->
-        {:ok, %{
-          agent_id: :unknown,
-          status: :ready_to_negotiate,
-          preferences: %{fairness: 0.8, efficiency: 0.6}
-        }}
-    end
-    
-    new_state = %{state | 
-      negotiation_history: [params | state.negotiation_history]
-    }
-    
+    response =
+      case params do
+        %{resource: resource, total_available: total, initial_offers: offers} ->
+          agent_id = get_agent_id_from_offers(offers)
+          my_offer = Map.get(offers, agent_id, total / 2)
+
+          # Simple negotiation strategy: try to get 10% more than initial offer
+          desired_amount = min(my_offer * 1.1, total * 0.6)
+
+          {:ok,
+           %{
+             agent_id: agent_id,
+             resource: resource,
+             desired_amount: desired_amount,
+             flexibility: 0.2,
+             priority: :high
+           }}
+
+        %{resources: resources, agent_requirements: requirements} ->
+          agent_id = extract_agent_id(requirements)
+          my_requirements = Map.get(requirements, agent_id, %{})
+
+          # Calculate satisfaction based on requirements vs available
+          satisfaction = calculate_satisfaction(my_requirements, resources)
+
+          {:ok,
+           %{
+             agent_id: agent_id,
+             requirements: my_requirements,
+             flexibility: satisfaction,
+             alternative_proposals: generate_alternatives(my_requirements)
+           }}
+
+        _ ->
+          {:ok,
+           %{
+             agent_id: :unknown,
+             status: :ready_to_negotiate,
+             preferences: %{fairness: 0.8, efficiency: 0.6}
+           }}
+      end
+
+    new_state = %{state | negotiation_history: [params | state.negotiation_history]}
+
     {:reply, response, new_state}
   end
 
@@ -568,10 +673,14 @@ defmodule NegotiationTestAgent do
 
   defp generate_alternatives(requirements) do
     # Generate some alternative proposals
-    base_alternative = requirements |> Enum.map(fn {resource, amount} ->
-      {resource, amount * 0.8}  # 20% reduction as alternative
-    end) |> Enum.into(%{})
-    
+    base_alternative =
+      requirements
+      |> Enum.map(fn {resource, amount} ->
+        # 20% reduction as alternative
+        {resource, amount * 0.8}
+      end)
+      |> Enum.into(%{})
+
     [base_alternative]
   end
 end

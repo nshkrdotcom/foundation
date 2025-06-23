@@ -27,5 +27,9 @@
   {"lib/foundation/mabeam/core.ex", :pattern_match},
   {"lib/foundation/mabeam/agent_registry.ex", :pattern_match},
   {"lib/foundation/mabeam/coordination.ex", :pattern_match},
-  {"lib/foundation/mabeam/telemetry.ex", :pattern_match}
+  {"lib/foundation/mabeam/telemetry.ex", :pattern_match},
+
+  # Legacy modules pattern_match warnings - legacy code with always-true conditions
+  {"lib/foundation/mabeam_legacy/agent_registry.ex", :pattern_match},
+  {"lib/foundation/mabeam_legacy/telemetry.ex", :pattern_match}
 ]

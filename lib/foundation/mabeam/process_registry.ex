@@ -1,13 +1,13 @@
 defmodule Foundation.MABEAM.ProcessRegistry do
   @moduledoc """
   Advanced process lifecycle management for MABEAM agents.
-  
+
   Provides fault-tolerant agent registration, lifecycle management, and discovery
   with pluggable backend storage. Designed for single-node deployment with
   future distribution readiness.
-  
+
   ## Features
-  
+
   - Agent registration with validation
   - Agent lifecycle management (start, stop, restart)
   - Capability-based agent discovery
@@ -15,19 +15,19 @@ defmodule Foundation.MABEAM.ProcessRegistry do
   - Pluggable backend storage
   - Fault-tolerant operations with OTP supervision
   - Telemetry integration
-  
+
   ## Usage
-  
+
       # Start the registry
       {:ok, pid} = ProcessRegistry.start_link([])
-      
+
       # Register an agent
       config = Types.new_agent_config(:worker, MyWorker, [])
       :ok = ProcessRegistry.register_agent(config)
-      
+
       # Start the agent
       {:ok, agent_pid} = ProcessRegistry.start_agent(:worker)
-      
+
       # Find agents by capability
       {:ok, agents} = ProcessRegistry.find_agents_by_capability([:nlp])
   """
@@ -114,12 +114,53 @@ defmodule Foundation.MABEAM.ProcessRegistry do
     GenServer.call(__MODULE__, {:find_agents_by_capability, capabilities})
   end
 
+  @spec find_by_capability([atom()]) :: [Types.agent_id()]
+  def find_by_capability(capabilities) when is_list(capabilities) do
+    case find_agents_by_capability(capabilities) do
+      {:ok, agent_ids} -> agent_ids
+      {:error, _} -> []
+    end
+  end
+
   @doc """
   Get agent statistics (if implemented).
   """
   @spec get_agent_stats(Types.agent_id()) :: {:ok, map()} | {:error, :not_implemented | :not_found}
   def get_agent_stats(agent_id) do
     GenServer.call(__MODULE__, {:get_agent_stats, agent_id})
+  end
+
+  @doc """
+  Get the PID of a running agent.
+  """
+  @spec get_agent_pid(Types.agent_id()) :: {:ok, pid()} | {:error, :not_found | :not_running}
+  def get_agent_pid(agent_id) do
+    GenServer.call(__MODULE__, {:get_agent_pid, agent_id})
+  end
+
+  @doc """
+  Restart a stopped or failed agent.
+  """
+  @spec restart_agent(Types.agent_id()) :: :ok | {:error, term()}
+  def restart_agent(agent_id) do
+    GenServer.call(__MODULE__, {:restart_agent, agent_id})
+  end
+
+  @doc """
+  Find agents by their type.
+  """
+  @spec find_agents_by_type(Types.agent_type()) :: {:ok, [Types.agent_id()]} | {:error, term()}
+  def find_agents_by_type(agent_type) do
+    GenServer.call(__MODULE__, {:find_agents_by_type, agent_type})
+  end
+
+  @doc """
+  Get the health status of an agent.
+  """
+  @spec get_agent_health(Types.agent_id()) ::
+          {:ok, :healthy | :degraded | :unhealthy} | {:error, term()}
+  def get_agent_health(agent_id) do
+    GenServer.call(__MODULE__, {:get_agent_health, agent_id})
   end
 
   # GenServer Callbacks
@@ -129,26 +170,30 @@ defmodule Foundation.MABEAM.ProcessRegistry do
     # Initialize backend
     backend_module = Keyword.get(opts, :backend, LocalETS)
     backend_opts = Keyword.get(opts, :backend_opts, [])
-    
+
     case backend_module.init(backend_opts) do
       {:ok, backend_state} ->
         # Start dynamic supervisor for agents
         supervisor_name = Module.concat(__MODULE__, DynamicSupervisor)
-        {:ok, supervisor_pid} = DynamicSupervisor.start_link(
-          name: supervisor_name,
-          strategy: :one_for_one
-        )
-        
+
+        {:ok, supervisor_pid} =
+          DynamicSupervisor.start_link(
+            name: supervisor_name,
+            strategy: :one_for_one
+          )
+
         state = %{
           backend: backend_module,
           backend_state: backend_state,
           supervisor: supervisor_pid,
-          agent_monitors: %{},  # pid -> {agent_id, monitor_ref}
-          agent_pids: %{}       # agent_id -> pid
+          # pid -> {agent_id, monitor_ref}
+          agent_monitors: %{},
+          # agent_id -> pid
+          agent_pids: %{}
         }
-        
+
         {:ok, state}
-        
+
       {:error, reason} ->
         {:stop, reason}
     end
@@ -160,7 +205,7 @@ defmodule Foundation.MABEAM.ProcessRegistry do
       {:ok, new_state} ->
         emit_telemetry(:registration, %{agent_id: config.id})
         {:reply, :ok, new_state}
-        
+
       {:error, reason} ->
         {:reply, {:error, reason}, state}
     end
@@ -172,7 +217,7 @@ defmodule Foundation.MABEAM.ProcessRegistry do
       {:ok, pid, new_state} ->
         emit_telemetry(:start, %{agent_id: agent_id, pid: pid})
         {:reply, {:ok, pid}, new_state}
-        
+
       {:error, reason} ->
         {:reply, {:error, reason}, state}
     end
@@ -184,7 +229,7 @@ defmodule Foundation.MABEAM.ProcessRegistry do
       {:ok, new_state} ->
         emit_telemetry(:stop, %{agent_id: agent_id})
         {:reply, :ok, new_state}
-        
+
       {:error, reason} ->
         {:reply, {:error, reason}, state}
     end
@@ -235,27 +280,141 @@ defmodule Foundation.MABEAM.ProcessRegistry do
   end
 
   @impl true
+  def handle_call({:get_agent_pid, agent_id}, _from, state) do
+    case Map.get(state.agent_pids, agent_id) do
+      nil ->
+        # Check if agent exists but not running
+        case state.backend.get_agent(agent_id) do
+          {:ok, _agent_entry} -> {:reply, {:error, :not_running}, state}
+          {:error, :not_found} -> {:reply, {:error, :not_found}, state}
+        end
+
+      pid ->
+        {:reply, {:ok, pid}, state}
+    end
+  end
+
+  @impl true
+  def handle_call({:restart_agent, agent_id}, _from, state) do
+    case state.backend.get_agent(agent_id) do
+      {:ok, agent_entry} ->
+        case agent_entry.status do
+          :running ->
+            # Stop first, then start
+            case stop_agent_process(agent_id, state) do
+              {:ok, intermediate_state} ->
+                case start_agent_process(agent_id, intermediate_state) do
+                  {:ok, _pid, new_state} ->
+                    emit_telemetry(:restart, %{agent_id: agent_id})
+                    {:reply, :ok, new_state}
+
+                  {:error, reason} ->
+                    {:reply, {:error, reason}, intermediate_state}
+                end
+
+              {:error, reason} ->
+                {:reply, {:error, reason}, state}
+            end
+
+          status when status in [:stopped, :failed] ->
+            case start_agent_process(agent_id, state) do
+              {:ok, _pid, new_state} ->
+                emit_telemetry(:restart, %{agent_id: agent_id})
+                {:reply, :ok, new_state}
+
+              {:error, reason} ->
+                {:reply, {:error, reason}, state}
+            end
+
+          :registered ->
+            {:reply, {:error, :not_started}, state}
+
+          other_status ->
+            {:reply, {:error, {:invalid_status, other_status}}, state}
+        end
+
+      {:error, :not_found} ->
+        {:reply, {:error, :not_found}, state}
+    end
+  end
+
+  @impl true
+  def handle_call({:find_agents_by_type, agent_type}, _from, state) do
+    agents = state.backend.list_all_agents()
+
+    matching_agents =
+      Enum.filter(agents, fn agent ->
+        agent.config.type == agent_type
+      end)
+
+    agent_ids = Enum.map(matching_agents, fn agent -> agent.id end)
+    {:reply, {:ok, agent_ids}, state}
+  end
+
+  @impl true
+  def handle_call({:get_agent_health, agent_id}, _from, state) do
+    case state.backend.get_agent(agent_id) do
+      {:ok, agent_entry} ->
+        health_status =
+          case agent_entry.status do
+            :running ->
+              case Map.get(state.agent_pids, agent_id) do
+                # Should be running but no PID
+                nil ->
+                  :unhealthy
+
+                pid ->
+                  if Process.alive?(pid) do
+                    :healthy
+                  else
+                    # Process died but not yet cleaned up
+                    :unhealthy
+                  end
+              end
+
+            # Not started yet but healthy
+            :registered ->
+              :healthy
+
+            # Intentionally stopped
+            :stopped ->
+              :degraded
+
+            # Failed state
+            :failed ->
+              :unhealthy
+
+            # Unknown state
+            _ ->
+              :degraded
+          end
+
+        {:reply, {:ok, health_status}, state}
+
+      {:error, :not_found} ->
+        {:reply, {:error, :not_found}, state}
+    end
+  end
+
+  @impl true
   def handle_info({:DOWN, monitor_ref, :process, pid, reason}, state) do
     case Map.get(state.agent_monitors, pid) do
       {agent_id, ^monitor_ref} ->
         Logger.info("Agent #{agent_id} crashed with reason: #{inspect(reason)}")
-        
+
         # Update agent status in backend
         state.backend.update_agent_status(agent_id, :failed, nil)
-        
+
         # Clean up monitoring state
         new_agent_monitors = Map.delete(state.agent_monitors, pid)
         new_agent_pids = Map.delete(state.agent_pids, agent_id)
-        
-        new_state = %{state | 
-          agent_monitors: new_agent_monitors,
-          agent_pids: new_agent_pids
-        }
-        
+
+        new_state = %{state | agent_monitors: new_agent_monitors, agent_pids: new_agent_pids}
+
         emit_telemetry(:crash, %{agent_id: agent_id, reason: reason})
-        
+
         {:noreply, new_state}
-        
+
       nil ->
         # Unknown process crashed
         {:noreply, state}
@@ -282,13 +441,13 @@ defmodule Foundation.MABEAM.ProcessRegistry do
             metadata: validated_config.metadata,
             node: node()
           }
-          
+
           # Register in backend
           case state.backend.register_agent(entry) do
             :ok -> {:ok, state}
             {:error, reason} -> {:error, reason}
           end
-          
+
         {:error, reason} ->
           {:error, reason}
       end
@@ -304,30 +463,31 @@ defmodule Foundation.MABEAM.ProcessRegistry do
               {:ok, pid} ->
                 # Update backend with new status and pid
                 state.backend.update_agent_status(agent_id, :running, pid)
-                
+
                 # Set up monitoring
                 monitor_ref = Process.monitor(pid)
                 new_agent_monitors = Map.put(state.agent_monitors, pid, {agent_id, monitor_ref})
                 new_agent_pids = Map.put(state.agent_pids, agent_id, pid)
-                
-                new_state = %{state |
-                  agent_monitors: new_agent_monitors,
-                  agent_pids: new_agent_pids
+
+                new_state = %{
+                  state
+                  | agent_monitors: new_agent_monitors,
+                    agent_pids: new_agent_pids
                 }
-                
+
                 {:ok, pid, new_state}
-                
+
               {:error, reason} ->
                 {:error, reason}
             end
-            
+
           :running ->
             {:error, :already_running}
-            
+
           other_status ->
             {:error, {:invalid_status, other_status}}
         end
-        
+
       {:error, :not_found} ->
         {:error, :not_found}
     end
@@ -337,10 +497,11 @@ defmodule Foundation.MABEAM.ProcessRegistry do
     child_spec = %{
       id: agent_entry.id,
       start: {agent_entry.config.module, :start_link, [agent_entry.config.args]},
-      restart: :temporary,  # We handle restarts at registry level
+      # We handle restarts at registry level
+      restart: :temporary,
       type: :worker
     }
-    
+
     DynamicSupervisor.start_child(state.supervisor, child_spec)
   end
 
@@ -352,30 +513,28 @@ defmodule Foundation.MABEAM.ProcessRegistry do
           {:ok, _agent_entry} -> {:error, :not_running}
           {:error, :not_found} -> {:error, :not_found}
         end
-        
+
       pid ->
         # Stop the process
         DynamicSupervisor.terminate_child(state.supervisor, pid)
-        
+
         # Update backend status
         state.backend.update_agent_status(agent_id, :stopped, nil)
-        
+
         # Clean up monitoring
         case Map.get(state.agent_monitors, pid) do
           {^agent_id, monitor_ref} ->
             Process.demonitor(monitor_ref, [:flush])
+
           _ ->
             :ok
         end
-        
+
         new_agent_monitors = Map.delete(state.agent_monitors, pid)
         new_agent_pids = Map.delete(state.agent_pids, agent_id)
-        
-        new_state = %{state |
-          agent_monitors: new_agent_monitors,
-          agent_pids: new_agent_pids
-        }
-        
+
+        new_state = %{state | agent_monitors: new_agent_monitors, agent_pids: new_agent_pids}
+
         {:ok, new_state}
     end
   end
@@ -384,15 +543,16 @@ defmodule Foundation.MABEAM.ProcessRegistry do
     cond do
       Keyword.has_key?(filters, :status) ->
         status = Keyword.get(filters, :status)
+
         case state.backend.get_agents_by_status(status) do
           {:ok, agents} -> {:ok, agents}
           {:error, reason} -> {:error, reason}
         end
-        
+
       Keyword.has_key?(filters, :metadata) ->
         # Metadata filtering not yet fully implemented in backend
         {:error, :not_supported}
-        
+
       true ->
         # No filters, return all agents
         agents = state.backend.list_all_agents()

@@ -48,7 +48,8 @@ Provides type definitions and utility functions for the MABEAM system. All struc
   capabilities: [atom()],              # What this agent can do
   restart_policy: restart_policy(),    # How to handle crashes
   resource_requirements: resource_spec(), # Resource needs
-  metadata: map()                      # Extensible metadata
+  metadata: map(),                     # Extensible metadata
+  created_at: DateTime.t()             # Timestamp when config was created
 }
 
 @type agent_type :: 
@@ -75,7 +76,10 @@ Provides type definitions and utility functions for the MABEAM system. All struc
   last_modifier: agent_id(),
   conflict_resolution: conflict_resolution_strategy(),
   access_permissions: access_permissions(),
-  metadata: map()
+  metadata: map(),
+  constraints: map(),                  # Variable constraints
+  created_at: DateTime.t(),            # Creation timestamp
+  updated_at: DateTime.t()             # Last update timestamp
 }
 
 @type conflict_resolution_strategy ::
@@ -89,7 +93,8 @@ Provides type definitions and utility functions for the MABEAM system. All struc
   type: request_type(),
   params: map(),
   timeout: pos_integer(),
-  correlation_id: binary()
+  correlation_id: binary(),
+  created_at: DateTime.t()             # Request creation timestamp
 }
 
 @type coordination_response :: %{
@@ -105,7 +110,16 @@ Provides type definitions and utility functions for the MABEAM system. All struc
 
 @type response_type ::
   :success | :failure | :timeout | :partial
-```
+
+@type auction_spec :: %{
+  type: atom(),                        # Auction type
+  resource_id: term(),                 # Resource being auctioned
+  participants: [agent_id()],          # Participating agents
+  starting_price: number() | nil,      # Starting price (if applicable)
+  payment_rule: atom(),                # Payment rule
+  auction_params: map(),               # Type-specific parameters
+  created_at: DateTime.t()             # Auction creation timestamp
+}
 
 #### Utility Functions
 
@@ -191,6 +205,45 @@ request = Foundation.MABEAM.Types.new_coordination_request(
 )
 ```
 
+##### `new_auction_spec/3` and `new_auction_spec/4`
+
+Creates an auction specification structure.
+
+```elixir
+@spec new_auction_spec(atom(), term(), [agent_id()]) :: auction_spec()
+@spec new_auction_spec(atom(), term(), [agent_id()], keyword()) :: auction_spec()
+```
+
+**Examples:**
+```elixir
+# Basic sealed-bid auction
+spec = Foundation.MABEAM.Types.new_auction_spec(
+  :sealed_bid,
+  :compute_resource_1,
+  [:agent1, :agent2, :agent3]
+)
+
+# English auction with parameters
+spec = Foundation.MABEAM.Types.new_auction_spec(
+  :english,
+  :premium_slot,
+  [:bidder1, :bidder2],
+  starting_price: 10,
+  increment: 1,
+  max_rounds: 10
+)
+
+# Dutch auction with parameters
+spec = Foundation.MABEAM.Types.new_auction_spec(
+  :dutch,
+  :urgent_task,
+  [:agent1],
+  starting_price: 100,
+  decrement: 5,
+  min_price: 20
+)
+```
+
 ---
 
 ## Process Registry
@@ -205,12 +258,15 @@ The ProcessRegistry uses a pluggable backend system for seamless evolution from 
 
 ```elixir
 defmodule Backend do
-  @callback init(opts :: keyword()) :: :ok | {:error, term()}
-  @callback register_agent(agent_entry()) :: :ok | {:error, term()}
+  @callback init(opts :: keyword()) :: {:ok, state :: term()} | {:error, reason :: term()}
+  @callback register_agent(agent_entry()) :: :ok | {:error, reason :: term()}
+  @callback update_agent_status(agent_id(), atom(), pid() | nil) :: :ok | {:error, reason :: term()}
   @callback get_agent(agent_id()) :: {:ok, agent_entry()} | {:error, :not_found}
-  @callback update_agent(agent_id(), agent_entry()) :: :ok | {:error, term()}
-  @callback list_agents() :: [agent_entry()]
-  @callback find_by_capability([atom()]) :: [agent_id()]
+  @callback unregister_agent(agent_id()) :: :ok | {:error, reason :: term()}
+  @callback list_all_agents() :: [agent_entry()]
+  @callback find_agents_by_capability([atom()]) :: {:ok, [agent_id()]} | {:error, reason :: term()}
+  @callback get_agents_by_status(atom()) :: {:ok, [agent_entry()]} | {:error, reason :: term()}
+  @callback cleanup_inactive_agents() :: {:ok, cleaned_count :: non_neg_integer()} | {:error, reason :: term()}
 end
 ```
 
@@ -324,12 +380,13 @@ Retrieves comprehensive agent information.
 }
 ```
 
-##### `list_agents/0`
+##### `list_agents/0` and `list_agents/1`
 
-Lists all registered agents.
+Lists all registered agents, optionally with filters.
 
 ```elixir
-@spec list_agents() :: {:ok, [agent_id()]} | {:error, term()}
+@spec list_agents() :: {:ok, [agent_info()]}
+@spec list_agents(keyword()) :: {:ok, [agent_info()]} | {:error, :not_supported}
 ```
 
 ##### `find_agents_by_capability/1`
@@ -364,7 +421,36 @@ Finds agents by type.
 Gets current health status of an agent.
 
 ```elixir
-@spec get_agent_health(agent_id()) :: {:ok, health_status()} | {:error, term()}
+@spec get_agent_health(agent_id()) :: {:ok, :healthy | :degraded | :unhealthy} | {:error, term()}
+```
+
+##### `get_agent_status/1`
+
+Gets the current status of an agent.
+
+```elixir
+@spec get_agent_status(agent_id()) :: {:ok, agent_status()} | {:error, :not_found}
+```
+
+##### `get_agent_pid/1`
+
+Gets the PID of a running agent.
+
+```elixir
+@spec get_agent_pid(agent_id()) :: {:ok, pid()} | {:error, :not_found | :not_running}
+```
+
+##### `get_agent_stats/1`
+
+Gets agent statistics.
+
+```elixir
+@spec get_agent_stats(agent_id()) :: {:ok, map()} | {:error, :not_implemented | :not_found}
+```
+
+**Agent Status Types:**
+```elixir
+@type agent_status :: :registered | :starting | :running | :stopping | :stopped | :failed
 ```
 
 ---
@@ -496,6 +582,40 @@ Gets the change history for a variable.
 
 ```elixir
 @spec get_variable_history(atom(), keyword()) :: {:ok, [variable_change()]} | {:error, term()}
+```
+
+##### `subscribe_to_variable/1`
+
+Subscribes to variable change notifications.
+
+```elixir
+@spec subscribe_to_variable(atom()) :: :ok | {:error, term()}
+```
+
+##### `unsubscribe_from_variable/1`
+
+Unsubscribes from variable change notifications.
+
+```elixir
+@spec unsubscribe_from_variable(atom()) :: :ok | {:error, term()}
+```
+
+##### `get_variable_statistics/1`
+
+Gets statistics for a specific variable.
+
+```elixir
+@spec get_variable_statistics(atom()) :: {:ok, map()} | {:error, term()}
+```
+
+**Returns:**
+```elixir
+%{
+  update_count: non_neg_integer(),
+  last_updated: DateTime.t(),
+  conflict_count: non_neg_integer(),
+  subscriber_count: non_neg_integer()
+}
 ```
 
 ---
@@ -651,6 +771,40 @@ Gets information about a registered protocol.
 @spec get_protocol_info(atom()) :: {:ok, coordination_protocol()} | {:error, term()}
 ```
 
+##### `update_protocol/2`
+
+Updates an existing coordination protocol.
+
+```elixir
+@spec update_protocol(atom(), coordination_protocol()) :: :ok | {:error, term()}
+```
+
+##### `unregister_protocol/1`
+
+Unregisters a coordination protocol.
+
+```elixir
+@spec unregister_protocol(atom()) :: :ok | {:error, term()}
+```
+
+##### `get_coordination_stats/0`
+
+Gets coordination system statistics.
+
+```elixir
+@spec get_coordination_stats() :: {:ok, coordination_stats()}
+```
+
+**Returns:**
+```elixir
+@type coordination_stats :: %{
+  total_coordinations: non_neg_integer(),
+  successful_coordinations: non_neg_integer(),
+  failed_coordinations: non_neg_integer(),
+  average_coordination_time: float()
+}
+```
+
 ---
 
 ## Auction Coordination
@@ -674,7 +828,39 @@ Starts the Auction coordination service.
 Runs an auction for resource allocation.
 
 ```elixir
-@spec run_auction(term(), [map()] | [agent_id()], keyword()) :: {:ok, auction_result()} | {:error, term()}
+@spec run_auction(auction_spec(), [agent_id()], keyword()) :: {:ok, auction_result()} | {:error, term()}
+```
+
+##### `sealed_bid_auction/3`
+
+Runs a sealed-bid auction.
+
+```elixir
+@spec sealed_bid_auction(auction_spec(), [agent_id()], keyword()) :: {:ok, auction_result()} | {:error, term()}
+```
+
+##### `open_bid_auction/3`
+
+Runs an open-bid auction.
+
+```elixir
+@spec open_bid_auction(auction_spec(), [agent_id()], keyword()) :: {:ok, auction_result()} | {:error, term()}
+```
+
+##### `dutch_auction/3`
+
+Runs a Dutch (descending price) auction.
+
+```elixir
+@spec dutch_auction(auction_spec(), [agent_id()], keyword()) :: {:ok, auction_result()} | {:error, term()}
+```
+
+##### `vickrey_auction/3`
+
+Runs a Vickrey (second-price sealed-bid) auction.
+
+```elixir
+@spec vickrey_auction(auction_spec(), [agent_id()], keyword()) :: {:ok, auction_result()} | {:error, term()}
 ```
 
 **Auction Types:**
@@ -769,26 +955,50 @@ Lists all currently active auctions.
 Gets the complete history of an auction.
 
 ```elixir
-@spec get_auction_history(auction_id()) :: {:ok, auction_history()} | {:error, term()}
+@spec get_auction_history(reference()) :: {:ok, map()} | {:error, term()}
+```
+
+##### `validate_economic_efficiency/1`
+
+Validates the economic efficiency of an auction result.
+
+```elixir
+@spec validate_economic_efficiency(auction_result()) :: {:ok, map()} | {:error, term()}
+```
+
+##### `get_auction_statistics/0`
+
+Gets auction system statistics.
+
+```elixir
+@spec get_auction_statistics() :: {:ok, map()} | {:error, term()}
+```
+
+**Returns:**
+```elixir
+%{
+  total_auctions: non_neg_integer(),
+  successful_auctions: non_neg_integer(),
+  failed_auctions: non_neg_integer(),
+  average_efficiency: float(),
+  total_value_traded: float()
+}
 ```
 
 **Auction Result Structure:**
 ```elixir
-%{
-  auction_id: binary(),
-  winner: agent_id() | [agent_id()],    # Single or multiple winners
-  winning_bid: number() | [number()],
-  payment: number() | [number()],
-  efficiency: float(),                   # Economic efficiency score (0.0-1.0)
-  participants: [agent_id()],
-  duration_ms: pos_integer(),
-  rounds: [round_info()],               # For multi-round auctions
-  economic_properties: %{
-    revenue: number(),
-    social_welfare: number(),
-    individual_rationality: boolean(),
-    incentive_compatibility: boolean()
-  },
+@type auction_result :: %{
+  winner: agent_id() | nil,
+  winning_bid: number() | nil,
+  all_bids: [bid()],
+  efficiency_score: float(),
+  auction_type: atom(),
+  metadata: map()
+}
+
+@type bid :: %{
+  agent_id: agent_id(),
+  amount: number(),
   metadata: map()
 }
 ```
@@ -811,12 +1021,24 @@ Starts the Market coordination service.
 @spec start_link(keyword()) :: GenServer.on_start()
 ```
 
-##### `create_market/2`
+##### `create_market/1`
 
 Creates a new market for resource trading.
 
 ```elixir
-@spec create_market(atom(), market_config()) :: {:ok, market_id()} | {:error, term()}
+@spec create_market(market_spec()) :: {:ok, reference()} | {:error, term()}
+```
+
+**Market Specification:**
+```elixir
+@type market_spec :: %{
+  name: atom(),
+  commodity: atom(),
+  market_type: :continuous | :call | :sealed_bid,
+  price_mechanism: :auction | :negotiation | :fixed,
+  participants: [agent_id()],
+  metadata: map()
+}
 ```
 
 **Market Configuration:**
@@ -858,12 +1080,39 @@ market_config = %{
 )
 ```
 
-##### `find_equilibrium/2`
+##### `find_equilibrium/1`
 
-Finds market equilibrium given supply and demand.
+Finds market equilibrium for a given market.
 
 ```elixir
-@spec find_equilibrium([supply_order()], [demand_order()]) :: {:ok, equilibrium_result()} | {:error, term()}
+@spec find_equilibrium(reference()) :: {:ok, market_equilibrium()} | {:error, term()}
+```
+
+##### `close_market/1`
+
+Closes a market and returns final results.
+
+```elixir
+@spec close_market(reference()) :: {:ok, market_result()} | {:error, term()}
+```
+
+##### `submit_order/2`
+
+Submits an order to a market.
+
+```elixir
+@spec submit_order(reference(), market_order()) :: :ok | {:error, term()}
+```
+
+**Market Order:**
+```elixir
+@type market_order :: %{
+  agent_id: agent_id(),
+  type: :buy | :sell,
+  quantity: number(),
+  price: number() | :market,
+  metadata: map()
+}
 ```
 
 **Examples:**
@@ -944,33 +1193,59 @@ Gets current market status and statistics.
 @spec get_market_status(market_id()) :: {:ok, market_status()} | {:error, term()}
 ```
 
-##### `get_price_history/2`
+##### `list_active_markets/0`
 
-Gets historical price data for a market.
+Lists all currently active markets.
 
 ```elixir
-@spec get_price_history(market_id(), time_range()) :: {:ok, [price_point()]} | {:error, term()}
+@spec list_active_markets() :: {:ok, [reference()]} | {:error, term()}
+```
+
+##### `get_market_statistics/0`
+
+Gets market system statistics.
+
+```elixir
+@spec get_market_statistics() :: {:ok, map()} | {:error, term()}
+```
+
+**Returns:**
+```elixir
+%{
+  total_markets: non_neg_integer(),
+  successful_markets: non_neg_integer(),
+  failed_markets: non_neg_integer(),
+  total_trades: non_neg_integer(),
+  total_volume: float(),
+  average_efficiency: float()
+}
 ```
 
 **Market Result Structures:**
 ```elixir
-@type equilibrium_result :: %{
-  price: number(),
-  quantity: number(),
-  efficiency: float(),
-  allocations: [allocation()],
-  surplus: %{consumer: number(), producer: number(), total: number()},
-  market_power: %{hhi: number(), concentration: float()}
+@type market_result :: %{
+  trades: [trade()],
+  clearing_price: number() | nil,
+  total_volume: number(),
+  market_efficiency: float(),
+  participants: [agent_id()],
+  metadata: map()
 }
 
-@type simulation_result :: %{
-  period_results: [period_result()],
-  average_efficiency: float(),
-  price_stability: float(),
-  volatility: float(),
-  learning_effects: map(),
-  agent_adaptations: [agent_adaptation()],
-  market_evolution: market_evolution()
+@type trade :: %{
+  buyer: agent_id(),
+  seller: agent_id(),
+  quantity: number(),
+  price: number(),
+  timestamp: DateTime.t()
+}
+
+@type market_equilibrium :: %{
+  equilibrium_price: number(),
+  equilibrium_quantity: number(),
+  consumer_surplus: number(),
+  producer_surplus: number(),
+  total_welfare: number()
 }
 ```
 
@@ -992,56 +1267,81 @@ Starts the Communication service.
 @spec start_link(keyword()) :: GenServer.on_start()
 ```
 
-##### `send_request/3`
+##### `request/2` and `request/3`
 
-Sends a request to an agent with automatic routing.
+Sends a request to an agent and waits for a response.
 
 ```elixir
-@spec send_request(agent_id(), term(), keyword()) :: {:ok, term()} | {:error, term()}
+@spec request(agent_id(), term()) :: {:ok, term()} | {:error, term()}
+@spec request(agent_id(), term(), timeout_ms()) :: {:ok, term()} | {:error, term()}
 ```
-
-**Options:**
-- `:timeout` - Request timeout (default: 5000ms)
-- `:retry_policy` - Retry configuration
-- `:priority` - Request priority (:low, :normal, :high)
-- `:correlation_id` - Custom correlation ID
 
 **Examples:**
 ```elixir
-# Simple request
-{:ok, response} = Foundation.MABEAM.Comms.send_request(
+# Simple request with default timeout
+{:ok, response} = Foundation.MABEAM.Comms.request(
   :worker_1,
-  {:process_task, %{data: [1, 2, 3]}},
-  timeout: 5000
+  {:process_task, %{data: [1, 2, 3]}}
 )
 
-# Request with retry policy
-{:ok, response} = Foundation.MABEAM.Comms.send_request(
+# Request with custom timeout
+{:ok, response} = Foundation.MABEAM.Comms.request(
   :remote_agent,
   {:compute, %{algorithm: :complex}},
-  timeout: 30_000,
-  retry_policy: %{
-    max_retries: 3, 
-    backoff: :exponential,
-    base_delay: 1000
-  }
+  30_000
 )
+```
 
-# High priority request
-{:ok, response} = Foundation.MABEAM.Comms.send_request(
-  :critical_service,
-  {:emergency_shutdown, %{reason: "system_overload"}},
-  priority: :high,
-  timeout: 10_000
+##### `send_request/3`
+
+Sends a request to an agent with automatic routing (wrapper around `request/3`).
+
+```elixir
+@spec send_request(agent_id(), term(), timeout_ms()) :: {:ok, term()} | {:error, term()}
+```
+
+##### `notify/2`
+
+Sends a fire-and-forget notification to an agent.
+
+```elixir
+@spec notify(agent_id(), term()) :: :ok | {:error, term()}
+```
+
+**Examples:**
+```elixir
+# Send notification
+:ok = Foundation.MABEAM.Comms.notify(
+  :worker_1,
+  {:update_state, %{key: "value"}}
 )
 ```
 
 ##### `send_async_request/3`
 
-Sends an asynchronous request (fire-and-forget).
+Sends an asynchronous request and returns a reference.
 
 ```elixir
-@spec send_async_request(agent_id(), term(), keyword()) :: :ok | {:error, term()}
+@spec send_async_request(agent_id(), term(), timeout_ms()) :: {:ok, reference()} | {:error, term()}
+```
+
+##### `coordination_request/4`
+
+Sends a coordination request to an agent.
+
+```elixir
+@spec coordination_request(agent_id(), atom(), map(), timeout_ms()) :: {:ok, term()} | {:error, term()}
+```
+
+**Examples:**
+```elixir
+# Send coordination request
+{:ok, result} = Foundation.MABEAM.Comms.coordination_request(
+  :agent_id,
+  :consensus,
+  %{question: "Proceed?", options: [:yes, :no]},
+  5000
+)
 ```
 
 ##### `broadcast/3`
@@ -1127,6 +1427,26 @@ Gets the current agent routing information.
 
 ```elixir
 @spec get_routing_table() :: {:ok, routing_table()} | {:error, term()}
+```
+
+##### `get_communication_stats/0`
+
+Gets communication statistics.
+
+```elixir
+@spec get_communication_stats() :: map()
+```
+
+**Returns:**
+```elixir
+%{
+  total_requests: non_neg_integer(),
+  successful_requests: non_neg_integer(),
+  failed_requests: non_neg_integer(),
+  total_notifications: non_neg_integer(),
+  coordination_requests: non_neg_integer(),
+  average_response_time: float()
+}
 ```
 
 ---

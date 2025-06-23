@@ -1,7 +1,7 @@
 defmodule Foundation.MABEAM.ProcessRegistry.Backend do
   @moduledoc """
   Behavior for ProcessRegistry storage backends.
-  
+
   Defines the interface for pluggable backends that can store and manage
   agent registration information. Backends must be distribution-ready and
   support concurrent access patterns.
@@ -10,15 +10,15 @@ defmodule Foundation.MABEAM.ProcessRegistry.Backend do
   alias Foundation.MABEAM.Types
 
   @type agent_entry :: %{
-    id: Types.agent_id(),
-    config: Types.agent_config(),
-    pid: pid() | nil,
-    status: :registered | :starting | :running | :stopping | :stopped | :failed,
-    started_at: DateTime.t() | nil,
-    stopped_at: DateTime.t() | nil,
-    metadata: map(),
-    node: node()
-  }
+          id: Types.agent_id(),
+          config: Types.agent_config(),
+          pid: pid() | nil,
+          status: :registered | :starting | :running | :stopping | :stopped | :failed,
+          started_at: DateTime.t() | nil,
+          stopped_at: DateTime.t() | nil,
+          metadata: map(),
+          node: node()
+        }
 
   @doc """
   Initialize the backend with the given options.
@@ -33,7 +33,8 @@ defmodule Foundation.MABEAM.ProcessRegistry.Backend do
   @doc """
   Update an agent's status and pid.
   """
-  @callback update_agent_status(Types.agent_id(), atom(), pid() | nil) :: :ok | {:error, reason :: term()}
+  @callback update_agent_status(Types.agent_id(), atom(), pid() | nil) ::
+              :ok | {:error, reason :: term()}
 
   @doc """
   Get agent information by ID.
@@ -53,7 +54,8 @@ defmodule Foundation.MABEAM.ProcessRegistry.Backend do
   @doc """
   Find agents by capability.
   """
-  @callback find_agents_by_capability([atom()]) :: {:ok, [Types.agent_id()]} | {:error, reason :: term()}
+  @callback find_agents_by_capability([atom()]) ::
+              {:ok, [Types.agent_id()]} | {:error, reason :: term()}
 
   @doc """
   Get agents with a specific status.
@@ -63,5 +65,6 @@ defmodule Foundation.MABEAM.ProcessRegistry.Backend do
   @doc """
   Cleanup stopped or failed agents.
   """
-  @callback cleanup_inactive_agents() :: {:ok, cleaned_count :: non_neg_integer()} | {:error, reason :: term()}
+  @callback cleanup_inactive_agents() ::
+              {:ok, cleaned_count :: non_neg_integer()} | {:error, reason :: term()}
 end
