@@ -116,7 +116,7 @@ defmodule Foundation.MABEAM.TelemetryHelpers do
   """
   @spec wait_for_telemetry_events([list()], non_neg_integer()) ::
           {:ok, [map()]} | {:error, :timeout}
-  def wait_for_telemetry_events(expected_events, timeout \\ 10000) do
+  def wait_for_telemetry_events(expected_events, timeout \\ 10_000) do
     deadline = System.monotonic_time(:millisecond) + timeout
     wait_for_events_loop(expected_events, [], deadline)
   end

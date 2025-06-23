@@ -127,7 +127,7 @@ defmodule Foundation.Services.EventStoreTest do
     end
 
     test "returns error for non-existent event" do
-      assert {:error, error} = EventStore.get(99999)
+      assert {:error, error} = EventStore.get(99_999)
       assert %Foundation.Types.Error{error_type: :not_found} = error
     end
   end

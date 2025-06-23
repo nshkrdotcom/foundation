@@ -31,14 +31,14 @@ defmodule Foundation.MABEAM.CoreTest do
 
     test "starts with custom configuration" do
       config = %{
-        coordination_timeout: 10000,
+        coordination_timeout: 10_000,
         max_variables: 100,
         telemetry_enabled: true
       }
 
       assert :ok = Core.update_configuration(config)
       {:ok, status} = Core.system_status()
-      assert status.service_config.coordination_timeout == 10000
+      assert status.service_config.coordination_timeout == 10_000
     end
 
     @tag :slow
@@ -393,7 +393,7 @@ defmodule Foundation.MABEAM.CoreTest do
           end)
         end
 
-      results = Task.await_many(tasks, 10000)
+      results = Task.await_many(tasks, 10_000)
 
       # All coordinations should complete successfully
       successful_coordinations =

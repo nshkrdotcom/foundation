@@ -60,7 +60,7 @@ defmodule Foundation.MABEAM.CoordinationHelpers do
       name: Keyword.get(opts, :name, :test_auction),
       type: :auction,
       auction_type: auction_type,
-      timeout: Keyword.get(opts, :timeout, 15000),
+      timeout: Keyword.get(opts, :timeout, 15_000),
       reserve_price: Keyword.get(opts, :reserve_price, 0),
       bid_increment: Keyword.get(opts, :bid_increment, 1),
       metadata: %{created_for: :testing, auction_type: auction_type}
@@ -151,7 +151,7 @@ defmodule Foundation.MABEAM.CoordinationHelpers do
           {:ok, %{result: term(), duration_ms: non_neg_integer(), session_id: binary()}}
           | {:error, term()}
   def run_coordination_session(protocol_name, agent_ids, context, opts \\ []) do
-    timeout = Keyword.get(opts, :timeout, 10000)
+    timeout = Keyword.get(opts, :timeout, 10_000)
 
     case start_coordination_session(protocol_name, agent_ids, context, opts) do
       {:ok, %{session_id: session_id, immediate_result: result}} ->
@@ -388,7 +388,7 @@ defmodule Foundation.MABEAM.CoordinationHelpers do
         session_count,
         opts \\ []
       ) do
-    timeout = Keyword.get(opts, :timeout, 10000)
+    timeout = Keyword.get(opts, :timeout, 10_000)
 
     start_time = System.monotonic_time(:millisecond)
 

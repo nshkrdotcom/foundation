@@ -572,7 +572,7 @@ defmodule Foundation.MABEAM.CoordinationTest do
       name: :test_negotiation,
       type: :negotiation,
       algorithm: :bilateral_bargaining,
-      timeout: 10000,
+      timeout: 10_000,
       retry_policy: %{max_retries: 5, backoff: :exponential}
     }
 
