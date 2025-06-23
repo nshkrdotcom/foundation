@@ -280,6 +280,14 @@ defmodule Foundation.BEAM.Processes do
   ## Private Functions
 
   defp validate_config(config) do
+    with :ok <- validate_config_structure(config),
+         :ok <- validate_coordinator_config(config),
+         :ok <- validate_workers_config(config) do
+      :ok
+    end
+  end
+
+  defp validate_config_structure(config) do
     cond do
       not is_map(config) ->
         {:error, "Configuration must be a map"}
@@ -290,9 +298,21 @@ defmodule Foundation.BEAM.Processes do
       not Map.has_key?(config, :workers) ->
         {:error, "Configuration must include :workers"}
 
-      not is_atom(config.coordinator) ->
-        {:error, "Coordinator must be a module name (atom)"}
+      true ->
+        :ok
+    end
+  end
 
+  defp validate_coordinator_config(config) do
+    if is_atom(config.coordinator) do
+      :ok
+    else
+      {:error, "Coordinator must be a module name (atom)"}
+    end
+  end
+
+  defp validate_workers_config(config) do
+    cond do
       not is_tuple(config.workers) or tuple_size(config.workers) != 2 ->
         {:error, "Workers must be a {module, options} tuple"}
 
