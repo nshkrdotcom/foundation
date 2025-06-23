@@ -197,7 +197,7 @@ defmodule Foundation.MABEAM.Comms do
   Get the current routing table.
   """
   @spec get_routing_table() :: {:ok, map()} | {:error, term()}
-  def get_routing_table() do
+  def get_routing_table do
     GenServer.call(__MODULE__, :get_routing_table)
   end
 

@@ -1,8 +1,8 @@
 defmodule Foundation.Logic.ConfigLogicTest do
   use ExUnit.Case, async: true
 
-  alias Foundation.Types.Config
   alias Foundation.Logic.ConfigLogic
+  alias Foundation.Types.Config
 
   describe "updatable_paths/0" do
     test "returns list of updatable configuration paths" do

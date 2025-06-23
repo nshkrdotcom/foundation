@@ -8,9 +8,8 @@ defmodule Foundation.Infrastructure.IntegrationTest do
 
   use ExUnit.Case, async: false
 
-  alias Foundation.Infrastructure.{CircuitBreaker, RateLimiter, ConnectionManager}
   alias Foundation.Infrastructure
-
+  alias Foundation.Infrastructure.{CircuitBreaker, ConnectionManager, RateLimiter}
   alias Foundation.Infrastructure.PoolWorkers.HttpWorker
 
   @moduletag integration: true

@@ -21,8 +21,8 @@ defmodule Foundation.Infrastructure.CircuitBreaker do
       status = CircuitBreaker.get_status(:my_service)
   """
 
-  alias Foundation.Types.Error
   alias Foundation.Telemetry
+  alias Foundation.Types.Error
 
   @type fuse_name :: atom()
   @type fuse_options :: [

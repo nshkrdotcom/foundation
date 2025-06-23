@@ -42,7 +42,7 @@ defmodule Foundation.Services.ServiceBehaviour do
   - `handle_config_change/2` - Called when configuration changes
   """
 
-  alias Foundation.{ProcessRegistry, ServiceRegistry, Telemetry, Events}
+  alias Foundation.{Events, ProcessRegistry, ServiceRegistry, Telemetry}
   # Note: Error alias removed as it's not used in this module
 
   @type service_state :: %{

@@ -9,7 +9,7 @@ defmodule Foundation.Events do
   @behaviour Foundation.Contracts.EventStore
 
   alias Foundation.Services.EventStore
-  alias Foundation.Types.{Event, Error}
+  alias Foundation.Types.{Error, Event}
 
   @type event_id :: Event.event_id()
   @type correlation_id :: Event.correlation_id()

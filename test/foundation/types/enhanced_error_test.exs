@@ -2,7 +2,7 @@
 defmodule Foundation.Types.EnhancedErrorTest do
   use ExUnit.Case, async: true
 
-  alias Foundation.Types.{Error, EnhancedError}
+  alias Foundation.Types.{EnhancedError, Error}
 
   describe "MABEAM error creation" do
     test "creates agent lifecycle error" do
@@ -162,7 +162,7 @@ defmodule Foundation.Types.EnhancedErrorTest do
 
     test "categorizes distributed errors correctly" do
       dist_error = EnhancedError.new_enhanced(:state_corruption)
-      assert dist_error.code >= 9000 and dist_error.code < 10000
+      assert dist_error.code >= 9000 and dist_error.code < 10_000
     end
   end
 

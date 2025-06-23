@@ -2,7 +2,7 @@ defmodule Foundation.ServiceRegistryTest do
   use ExUnit.Case, async: false
   @moduletag :foundation
 
-  alias Foundation.{ServiceRegistry, ProcessRegistry}
+  alias Foundation.{ProcessRegistry, ServiceRegistry}
   alias Foundation.Types.Error
 
   describe "register/3" do

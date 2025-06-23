@@ -190,12 +190,12 @@ defmodule Foundation.MABEAM.AgentRegistry do
   end
 
   @spec list_agents() :: {:ok, [{atom(), agent_entry()}]} | {:error, term()}
-  def list_agents() do
+  def list_agents do
     GenServer.call(__MODULE__, :list_agents)
   end
 
   @spec agent_count() :: {:ok, non_neg_integer()} | {:error, term()}
-  def agent_count() do
+  def agent_count do
     GenServer.call(__MODULE__, :agent_count)
   end
 
@@ -230,7 +230,7 @@ defmodule Foundation.MABEAM.AgentRegistry do
   end
 
   @spec get_resource_summary() :: {:ok, resource_summary()} | {:error, term()}
-  def get_resource_summary() do
+  def get_resource_summary do
     GenServer.call(__MODULE__, :get_resource_summary)
   end
 
@@ -245,7 +245,7 @@ defmodule Foundation.MABEAM.AgentRegistry do
   end
 
   @spec system_health() :: {:ok, system_health()} | {:error, term()}
-  def system_health() do
+  def system_health do
     GenServer.call(__MODULE__, :system_health)
   end
 

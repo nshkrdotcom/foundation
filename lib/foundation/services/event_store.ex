@@ -8,10 +8,10 @@ defmodule Foundation.Services.EventStore do
   use GenServer
   require Logger
 
-  alias Foundation.{Services.TelemetryService}
-  alias Foundation.Types.{Event, Error}
-  alias Foundation.Validation.EventValidator
   alias Foundation.Contracts.EventStore, as: EventStoreContract
+  alias Foundation.Services.TelemetryService
+  alias Foundation.Types.{Error, Event}
+  alias Foundation.Validation.EventValidator
 
   @behaviour EventStoreContract
 

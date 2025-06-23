@@ -122,12 +122,12 @@ defmodule Foundation.MABEAM.Coordination.Market do
   end
 
   @spec list_active_markets() :: {:ok, [reference()]} | {:error, term()}
-  def list_active_markets() do
+  def list_active_markets do
     GenServer.call(__MODULE__, :list_active_markets)
   end
 
   @spec get_market_statistics() :: {:ok, map()} | {:error, term()}
-  def get_market_statistics() do
+  def get_market_statistics do
     GenServer.call(__MODULE__, :get_statistics)
   end
 

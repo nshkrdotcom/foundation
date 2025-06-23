@@ -1,7 +1,7 @@
 defmodule Foundation.MABEAM.CoordinationTest do
   use ExUnit.Case, async: false
 
-  alias Foundation.MABEAM.{Coordination, ProcessRegistry, Comms, Types}
+  alias Foundation.MABEAM.{Comms, Coordination, ProcessRegistry, Types}
 
   setup do
     # Start all required services (handle already started services gracefully)
@@ -110,7 +110,7 @@ defmodule Foundation.MABEAM.CoordinationTest do
         name: :updatable,
         type: :consensus,
         algorithm: :unanimous,
-        timeout: 10000
+        timeout: 10_000
       }
 
       assert :ok = Coordination.register_protocol(:updatable, original_protocol)
@@ -119,7 +119,7 @@ defmodule Foundation.MABEAM.CoordinationTest do
       {:ok, protocols} = Coordination.list_protocols()
       {_, retrieved_protocol} = List.keyfind(protocols, :updatable, 0)
       assert retrieved_protocol.algorithm == :unanimous
-      assert retrieved_protocol.timeout == 10000
+      assert retrieved_protocol.timeout == 10_000
     end
   end
 
@@ -314,7 +314,7 @@ defmodule Foundation.MABEAM.CoordinationTest do
 
     test "cancels coordination session" do
       # Long timeout
-      protocol = create_consensus_protocol(%{timeout: 10000})
+      protocol = create_consensus_protocol(%{timeout: 10_000})
       :ok = Coordination.register_protocol(:cancellable, protocol)
 
       # Start long-running coordination
@@ -517,7 +517,7 @@ defmodule Foundation.MABEAM.CoordinationTest do
         end
 
       start_time = System.monotonic_time(:millisecond)
-      results = Task.await_many(tasks, 10000)
+      results = Task.await_many(tasks, 10_000)
       end_time = System.monotonic_time(:millisecond)
 
       # All should succeed

@@ -9,8 +9,8 @@ defmodule Foundation.Services.TelemetryService do
   use GenServer
   require Logger
 
-  alias Foundation.Types.Error
   alias Foundation.Contracts.Telemetry
+  alias Foundation.Types.Error
 
   @behaviour Telemetry
 

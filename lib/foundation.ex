@@ -74,7 +74,7 @@ defmodule Foundation do
       true
   """
   @spec available?() :: boolean()
-  def available?() do
+  def available? do
     Config.available?() and Events.available?() and Telemetry.available?()
   end
 

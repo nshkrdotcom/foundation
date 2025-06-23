@@ -43,7 +43,7 @@ defmodule Foundation.MABEAM.CoordinationHelpers do
       name: Keyword.get(opts, :name, :test_negotiation),
       type: :negotiation,
       algorithm: Keyword.get(opts, :algorithm, :bilateral_bargaining),
-      timeout: Keyword.get(opts, :timeout, 10000),
+      timeout: Keyword.get(opts, :timeout, 10_000),
       rounds: Keyword.get(opts, :rounds, 5),
       resource_type: Keyword.get(opts, :resource_type, :cpu),
       metadata: %{created_for: :testing}
@@ -131,7 +131,7 @@ defmodule Foundation.MABEAM.CoordinationHelpers do
   """
   @spec wait_for_coordination_result(binary(), non_neg_integer()) ::
           {:ok, %{result: term(), duration_ms: non_neg_integer()}} | {:error, :timeout}
-  def wait_for_coordination_result(session_id, timeout \\ 10000) do
+  def wait_for_coordination_result(session_id, timeout \\ 10_000) do
     start_time = System.monotonic_time(:millisecond)
 
     receive do
@@ -478,7 +478,7 @@ defmodule Foundation.MABEAM.CoordinationHelpers do
   Gets current coordination system state for testing.
   """
   @spec get_coordination_state() :: map()
-  def get_coordination_state() do
+  def get_coordination_state do
     {:ok, stats} = Coordination.get_coordination_stats()
     {:ok, protocols} = Coordination.list_protocols()
     {:ok, sessions} = Coordination.list_active_sessions()
@@ -535,7 +535,7 @@ defmodule Foundation.MABEAM.CoordinationHelpers do
   # Private Helper Functions
   # ============================================================================
 
-  defp generate_session_id() do
+  defp generate_session_id do
     :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
   end
 

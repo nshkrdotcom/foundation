@@ -8,8 +8,8 @@ defmodule Foundation.Property.EventCorrelationPropertiesTest do
 
   alias Foundation.Events
   alias Foundation.Services.EventStore
-  alias Foundation.Types.Event
   alias Foundation.TestHelpers
+  alias Foundation.Types.Event
 
   setup do
     :ok = TestHelpers.ensure_config_available()

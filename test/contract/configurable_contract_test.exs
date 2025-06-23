@@ -9,9 +9,9 @@ defmodule Foundation.Contract.ConfigurableContractTest do
   use ExUnit.Case, async: false
 
   alias Foundation.Contracts.Configurable
+  alias Foundation.ContractTestHelpers
   alias Foundation.Services.ConfigServer
   alias Foundation.Types.{Config, Error}
-  alias Foundation.ContractTestHelpers
 
   @moduletag :contract
 

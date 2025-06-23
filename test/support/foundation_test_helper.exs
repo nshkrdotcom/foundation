@@ -6,8 +6,8 @@ defmodule Foundation.TestHelpers do
   and creating test data for Foundation layer functionality.
   """
 
-  alias Foundation.{Config, ErrorContext, Events, Utils}
   alias Foundation.BEAM.Processes
+  alias Foundation.{Config, ErrorContext, Events, Utils}
   alias Foundation.Services.{ConfigServer, EventStore, TelemetryService}
   alias Foundation.Types.Error
 
@@ -165,7 +165,7 @@ defmodule Foundation.TestHelpers do
   Ensures the Foundation application is running and services are available.
   """
   @spec ensure_foundation_running() :: :ok
-  def ensure_foundation_running() do
+  def ensure_foundation_running do
     unless Application.started_applications()
            |> Enum.any?(fn {app, _, _} -> app == :foundation end) do
       # Start the Foundation application

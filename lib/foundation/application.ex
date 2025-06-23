@@ -47,8 +47,8 @@ defmodule Foundation.Application do
   use Application
   require Logger
 
-  alias Foundation.ProcessRegistry
   alias Foundation.Coordination.Primitives
+  alias Foundation.ProcessRegistry
 
   @type startup_phase ::
           :infrastructure | :foundation_services | :coordination | :application | :mabeam

@@ -168,8 +168,8 @@ defmodule Foundation.Infrastructure.RateLimiter do
     end
   end
 
-  alias Foundation.Types.Error
   alias Foundation.Telemetry
+  alias Foundation.Types.Error
 
   @type entity_id :: String.t() | atom() | integer()
   @type operation :: atom()

@@ -29,7 +29,7 @@ defmodule Foundation.MABEAM.Core do
   use GenServer
 
   # Aliases for Foundation services integration
-  alias Foundation.MABEAM.{ProcessRegistry, Coordination}
+  alias Foundation.MABEAM.{Coordination, ProcessRegistry}
 
   @type orchestrator_state :: %{
           variable_registry: %{atom() => orchestration_variable()},
@@ -110,7 +110,7 @@ defmodule Foundation.MABEAM.Core do
   - `{:ok, status}` - System status map with variables, history, and performance metrics
   """
   @spec system_status() :: {:ok, map()}
-  def system_status() do
+  def system_status do
     GenServer.call(__MODULE__, :system_status)
   end
 
@@ -124,7 +124,7 @@ defmodule Foundation.MABEAM.Core do
   - `{:ok, :unhealthy}` - System has critical issues
   """
   @spec health_check() :: {:ok, :healthy | :degraded | :unhealthy}
-  def health_check() do
+  def health_check do
     GenServer.call(__MODULE__, :health_check)
   end
 
@@ -168,7 +168,7 @@ defmodule Foundation.MABEAM.Core do
   end
 
   @spec list_variables() :: {:ok, [atom()]} | {:error, term()}
-  def list_variables() do
+  def list_variables do
     GenServer.call(__MODULE__, :list_variables)
   end
 
@@ -204,7 +204,7 @@ defmodule Foundation.MABEAM.Core do
   end
 
   @spec list_orchestration_variables() :: {:ok, [{atom(), orchestration_variable()}]}
-  def list_orchestration_variables() do
+  def list_orchestration_variables do
     GenServer.call(__MODULE__, :list_orchestration_variables)
   end
 
@@ -219,7 +219,7 @@ defmodule Foundation.MABEAM.Core do
   end
 
   @spec coordinate_system() :: {:ok, [coordination_result()]}
-  def coordinate_system() do
+  def coordinate_system do
     GenServer.call(__MODULE__, :coordinate_system, 30_000)
   end
 
@@ -229,22 +229,22 @@ defmodule Foundation.MABEAM.Core do
   end
 
   @spec get_performance_metrics() :: {:ok, performance_metrics()}
-  def get_performance_metrics() do
+  def get_performance_metrics do
     GenServer.call(__MODULE__, :get_performance_metrics)
   end
 
   @spec get_coordination_history() :: {:ok, [coordination_event()]}
-  def get_coordination_history() do
+  def get_coordination_history do
     GenServer.call(__MODULE__, :get_coordination_history)
   end
 
   @spec get_system_statistics() :: {:ok, map()}
-  def get_system_statistics() do
+  def get_system_statistics do
     GenServer.call(__MODULE__, :get_system_statistics)
   end
 
   @spec get_system_status() :: {:ok, map()} | {:error, term()}
-  def get_system_status() do
+  def get_system_status do
     GenServer.call(__MODULE__, :get_system_status)
   end
 
@@ -881,7 +881,7 @@ defmodule Foundation.MABEAM.Core do
     %{state | coordination_history: new_history}
   end
 
-  defp generate_event_id() do
+  defp generate_event_id do
     :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
   end
 

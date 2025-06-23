@@ -25,12 +25,12 @@ defmodule Foundation.Services.ConfigServer do
   use GenServer
   require Logger
 
-  alias Foundation.Types.{Config, Error}
-  alias Foundation.Logic.ConfigLogic
-  alias Foundation.Validation.ConfigValidator
-  alias Foundation.Contracts.Configurable
-  alias Foundation.Services.{EventStore, TelemetryService}
   alias Foundation.{ProcessRegistry, ServiceRegistry}
+  alias Foundation.Contracts.Configurable
+  alias Foundation.Logic.ConfigLogic
+  alias Foundation.Services.{EventStore, TelemetryService}
+  alias Foundation.Types.{Config, Error}
+  alias Foundation.Validation.ConfigValidator
 
   @behaviour Configurable
 

@@ -37,7 +37,7 @@ defmodule Foundation.MABEAM.SupportInfrastructureTest do
       opts = [
         name: :custom_negotiation,
         algorithm: :resource_allocation,
-        timeout: 15000,
+        timeout: 15_000,
         rounds: 10
       ]
 
@@ -45,7 +45,7 @@ defmodule Foundation.MABEAM.SupportInfrastructureTest do
 
       assert protocol.name == :custom_negotiation
       assert protocol.algorithm == :resource_allocation
-      assert protocol.timeout == 15000
+      assert protocol.timeout == 15_000
       assert protocol.rounds == 10
     end
 

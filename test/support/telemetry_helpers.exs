@@ -495,7 +495,7 @@ defmodule Foundation.MABEAM.TelemetryHelpers do
   # Private Helper Functions
   # ============================================================================
 
-  defp generate_handler_id() do
+  defp generate_handler_id do
     "test_handler_" <> (:crypto.strong_rand_bytes(8) |> Base.encode16(case: :lower))
   end
 

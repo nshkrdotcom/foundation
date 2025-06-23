@@ -189,7 +189,7 @@ defmodule Foundation.Infrastructure.CircuitBreakerTest do
       CircuitBreaker.execute(:service_c, fn -> raise "test failure" end)
       # This should blow it
       CircuitBreaker.execute(:service_c, fn -> raise "test failure" end)
-      # Test that service_c is protecting against failures  
+      # Test that service_c is protecting against failures
       test_result = CircuitBreaker.execute(:service_c, fn -> {:ok, :test} end)
 
       assert match?({:ok, {:ok, :test}}, test_result) or

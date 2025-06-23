@@ -19,7 +19,7 @@ defmodule Foundation.Validation.EventValidator do
       :ok
   """
 
-  alias Foundation.Types.{Event, Error}
+  alias Foundation.Types.{Error, Event}
 
   @typedoc "Maximum allowed size for event data in bytes"
   @type max_data_size :: 1_000_000

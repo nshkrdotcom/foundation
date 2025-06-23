@@ -24,7 +24,7 @@ defmodule Foundation.TestSupport.ConcurrentTestCase do
     quote do
       use ExUnit.Case, async: true
 
-      alias Foundation.{ServiceRegistry}
+      alias Foundation.ServiceRegistry
       alias Foundation.TestSupport.TestSupervisor
       alias Foundation.Services.{ConfigServer, EventStore}
 

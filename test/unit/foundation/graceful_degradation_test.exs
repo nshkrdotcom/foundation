@@ -1,10 +1,10 @@
 defmodule Foundation.GracefulDegradationTest do
   use ExUnit.Case, async: false
 
+  alias Foundation.Config
   alias Foundation.Config.GracefulDegradation, as: ConfigGD
   alias Foundation.Events.GracefulDegradation, as: EventsGD
-  alias Foundation.Config
-  alias Foundation.Types.{Event, Error}
+  alias Foundation.Types.{Error, Event}
   require Logger
 
   @fallback_table :config_fallback_cache

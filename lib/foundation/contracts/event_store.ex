@@ -6,7 +6,7 @@ defmodule Foundation.Contracts.EventStore do
   Supports different storage backends (memory, disk, distributed).
   """
 
-  alias Foundation.Types.{Event, Error}
+  alias Foundation.Types.{Error, Event}
 
   @type event_id :: Event.event_id()
   @type correlation_id :: Event.correlation_id()

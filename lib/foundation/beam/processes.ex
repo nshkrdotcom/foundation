@@ -30,8 +30,8 @@ defmodule Foundation.BEAM.Processes do
       end)
   """
 
-  alias Foundation.Types.Error
   alias Foundation.ErrorContext
+  alias Foundation.Types.Error
 
   @type ecosystem_config :: %{
           required(:coordinator) => module(),

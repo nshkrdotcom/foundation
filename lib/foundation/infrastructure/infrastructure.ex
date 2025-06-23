@@ -51,7 +51,7 @@ defmodule Foundation.Infrastructure do
 
   require Logger
 
-  alias Foundation.Infrastructure.{CircuitBreaker, RateLimiter, ConnectionManager}
+  alias Foundation.Infrastructure.{CircuitBreaker, ConnectionManager, RateLimiter}
   alias Foundation.Services.TelemetryService
   alias Foundation.Types.Error
 

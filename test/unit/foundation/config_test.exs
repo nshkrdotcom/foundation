@@ -4,8 +4,8 @@ defmodule Foundation.ConfigTest do
   @moduletag :foundation
 
   alias Foundation.Config, as: ConfigAPI
-  alias Foundation.Types.{Config, Error}
   alias Foundation.TestHelpers
+  alias Foundation.Types.{Config, Error}
 
   setup do
     # Ensure Config GenServer is available

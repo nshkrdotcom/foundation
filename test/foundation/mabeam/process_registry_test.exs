@@ -72,7 +72,7 @@ defmodule Foundation.MABEAM.ProcessRegistryTest do
                 hidden_size: 768
               },
               training_data: [
-                %{dataset: "imdb", size: 50000},
+                %{dataset: "imdb", size: 50_000},
                 %{dataset: "amazon_reviews", size: 100_000}
               ]
             },
