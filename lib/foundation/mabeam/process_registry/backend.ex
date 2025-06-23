@@ -20,6 +20,8 @@ defmodule Foundation.MABEAM.ProcessRegistry.Backend do
           node: node()
         }
 
+  @type t :: agent_entry()
+
   @doc """
   Initialize the backend with the given options.
   """
@@ -64,6 +66,14 @@ defmodule Foundation.MABEAM.ProcessRegistry.Backend do
 
   @doc """
   Cleanup stopped or failed agents.
+
+  Removes agent entries that are in :stopped or :failed status to prevent
+  memory growth and maintain registry cleanliness.
+
+  ## Returns
+
+  - `{:ok, cleaned_count}` - Number of agents cleaned up
+  - `{:error, reason}` - If cleanup operation fails
   """
   @callback cleanup_inactive_agents() ::
               {:ok, cleaned_count :: non_neg_integer()} | {:error, reason :: term()}

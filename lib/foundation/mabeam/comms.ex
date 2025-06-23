@@ -51,14 +51,28 @@ defmodule Foundation.MABEAM.Comms do
   @default_timeout 5000
 
   # Statistics tracking structure
-  defstruct total_requests: 0,
-            successful_requests: 0,
-            failed_requests: 0,
-            total_notifications: 0,
-            coordination_requests: 0,
-            average_response_time: 0.0,
-            start_time: nil,
-            active_requests: %{}
+  @enforce_keys [:start_time]
+  defstruct [
+    :start_time,
+    total_requests: 0,
+    successful_requests: 0,
+    failed_requests: 0,
+    total_notifications: 0,
+    coordination_requests: 0,
+    average_response_time: 0.0,
+    active_requests: %{}
+  ]
+
+  @type t :: %__MODULE__{
+          total_requests: non_neg_integer(),
+          successful_requests: non_neg_integer(),
+          failed_requests: non_neg_integer(),
+          total_notifications: non_neg_integer(),
+          coordination_requests: non_neg_integer(),
+          average_response_time: float(),
+          start_time: DateTime.t(),
+          active_requests: map()
+        }
 
   # Public API
 

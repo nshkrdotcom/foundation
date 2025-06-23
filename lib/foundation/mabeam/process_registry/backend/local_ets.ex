@@ -14,6 +14,11 @@ defmodule Foundation.MABEAM.ProcessRegistry.Backend.LocalETS do
   # Module-level table tracking for concurrent access
   @table_registry :ets_backend_tables
 
+  @type t :: %{
+          main_table: atom(),
+          capability_table: atom()
+        }
+
   # Backend API Implementation
 
   @impl true

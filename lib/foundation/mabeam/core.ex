@@ -43,8 +43,8 @@ defmodule Foundation.MABEAM.Core do
           scope: :local | :global | :cluster,
           type: :agent_selection | :resource_allocation | :communication_topology,
           agents: [atom()],
-          coordination_fn: function(),
-          adaptation_fn: function(),
+          coordination_fn: {module(), atom(), [term()]} | function(),
+          adaptation_fn: {module(), atom(), [term()]} | function(),
           constraints: [term()],
           resource_requirements: %{memory: number(), cpu: number()},
           fault_tolerance: %{strategy: atom(), max_restarts: non_neg_integer()},
@@ -84,21 +84,60 @@ defmodule Foundation.MABEAM.Core do
 
   ## Public API
 
+  @doc """
+  Start the Core orchestrator with optional configuration.
+
+  ## Options
+
+  - `:test_mode` - Enable test mode (default: false)
+
+  ## Examples
+
+      {:ok, pid} = Core.start_link([])
+      {:ok, pid} = Core.start_link(test_mode: true)
+  """
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
+  @doc """
+  Get comprehensive system status including variables, coordination history, and metrics.
+
+  ## Returns
+
+  - `{:ok, status}` - System status map with variables, history, and performance metrics
+  """
   @spec system_status() :: {:ok, map()}
   def system_status() do
     GenServer.call(__MODULE__, :system_status)
   end
 
+  @doc """
+  Perform a health check on the orchestrator service.
+
+  ## Returns
+
+  - `{:ok, :healthy}` - System is operating normally
+  - `{:ok, :degraded}` - System is operating but with reduced performance
+  - `{:ok, :unhealthy}` - System has critical issues
+  """
   @spec health_check() :: {:ok, :healthy | :degraded | :unhealthy}
   def health_check() do
     GenServer.call(__MODULE__, :health_check)
   end
 
+  @doc """
+  Update the service configuration.
+
+  ## Parameters
+
+  - `config` - Map of configuration values to update
+
+  ## Examples
+
+      :ok = Core.update_configuration(%{coordination_timeout: 10000})
+  """
   @spec update_configuration(map()) :: :ok
   def update_configuration(config) do
     GenServer.call(__MODULE__, {:update_configuration, config})
