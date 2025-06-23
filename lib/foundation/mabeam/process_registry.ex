@@ -300,21 +300,7 @@ defmodule Foundation.MABEAM.ProcessRegistry do
       {:ok, agent_entry} ->
         case agent_entry.status do
           :running ->
-            # Stop first, then start
-            case stop_agent_process(agent_id, state) do
-              {:ok, intermediate_state} ->
-                case start_agent_process(agent_id, intermediate_state) do
-                  {:ok, _pid, new_state} ->
-                    emit_telemetry(:restart, %{agent_id: agent_id})
-                    {:reply, :ok, new_state}
-
-                  {:error, reason} ->
-                    {:reply, {:error, reason}, intermediate_state}
-                end
-
-              {:error, reason} ->
-                {:reply, {:error, reason}, state}
-            end
+            restart_running_agent(agent_id, state)
 
           status when status in [:stopped, :failed] ->
             case start_agent_process(agent_id, state) do
@@ -356,38 +342,7 @@ defmodule Foundation.MABEAM.ProcessRegistry do
     case state.backend.get_agent(agent_id) do
       {:ok, agent_entry} ->
         health_status =
-          case agent_entry.status do
-            :running ->
-              case Map.get(state.agent_pids, agent_id) do
-                # Should be running but no PID
-                nil ->
-                  :unhealthy
-
-                pid ->
-                  if Process.alive?(pid) do
-                    :healthy
-                  else
-                    # Process died but not yet cleaned up
-                    :unhealthy
-                  end
-              end
-
-            # Not started yet but healthy
-            :registered ->
-              :healthy
-
-            # Intentionally stopped
-            :stopped ->
-              :degraded
-
-            # Failed state
-            :failed ->
-              :unhealthy
-
-            # Unknown state
-            _ ->
-              :degraded
-          end
+          determine_agent_health(agent_entry, state, agent_id)
 
         {:reply, {:ok, health_status}, state}
 
@@ -457,40 +412,52 @@ defmodule Foundation.MABEAM.ProcessRegistry do
   defp start_agent_process(agent_id, state) do
     case state.backend.get_agent(agent_id) do
       {:ok, agent_entry} ->
-        case agent_entry.status do
-          status when status in [:registered, :stopped] ->
-            case start_supervised_agent(agent_entry, state) do
-              {:ok, pid} ->
-                # Update backend with new status and pid
-                state.backend.update_agent_status(agent_id, :running, pid)
-
-                # Set up monitoring
-                monitor_ref = Process.monitor(pid)
-                new_agent_monitors = Map.put(state.agent_monitors, pid, {agent_id, monitor_ref})
-                new_agent_pids = Map.put(state.agent_pids, agent_id, pid)
-
-                new_state = %{
-                  state
-                  | agent_monitors: new_agent_monitors,
-                    agent_pids: new_agent_pids
-                }
-
-                {:ok, pid, new_state}
-
-              {:error, reason} ->
-                {:error, reason}
-            end
-
-          :running ->
-            {:error, :already_running}
-
-          other_status ->
-            {:error, {:invalid_status, other_status}}
-        end
+        handle_agent_start(agent_entry, agent_id, state)
 
       {:error, :not_found} ->
         {:error, :not_found}
     end
+  end
+
+  defp handle_agent_start(agent_entry, agent_id, state) do
+    case agent_entry.status do
+      status when status in [:registered, :stopped] ->
+        start_and_monitor_agent(agent_entry, agent_id, state)
+
+      :running ->
+        {:error, :already_running}
+
+      other_status ->
+        {:error, {:invalid_status, other_status}}
+    end
+  end
+
+  defp start_and_monitor_agent(agent_entry, agent_id, state) do
+    case start_supervised_agent(agent_entry, state) do
+      {:ok, pid} ->
+        setup_agent_monitoring(pid, agent_id, state)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp setup_agent_monitoring(pid, agent_id, state) do
+    # Update backend with new status and pid
+    state.backend.update_agent_status(agent_id, :running, pid)
+
+    # Set up monitoring
+    monitor_ref = Process.monitor(pid)
+    new_agent_monitors = Map.put(state.agent_monitors, pid, {agent_id, monitor_ref})
+    new_agent_pids = Map.put(state.agent_pids, agent_id, pid)
+
+    new_state = %{
+      state
+      | agent_monitors: new_agent_monitors,
+        agent_pids: new_agent_pids
+    }
+
+    {:ok, pid, new_state}
   end
 
   defp start_supervised_agent(agent_entry, state) do
@@ -508,35 +475,43 @@ defmodule Foundation.MABEAM.ProcessRegistry do
   defp stop_agent_process(agent_id, state) do
     case Map.get(state.agent_pids, agent_id) do
       nil ->
-        # Check if agent is registered but not running
-        case state.backend.get_agent(agent_id) do
-          {:ok, _agent_entry} -> {:error, :not_running}
-          {:error, :not_found} -> {:error, :not_found}
-        end
+        handle_stop_non_running_agent(agent_id, state)
 
       pid ->
-        # Stop the process
-        DynamicSupervisor.terminate_child(state.supervisor, pid)
-
-        # Update backend status
-        state.backend.update_agent_status(agent_id, :stopped, nil)
-
-        # Clean up monitoring
-        case Map.get(state.agent_monitors, pid) do
-          {^agent_id, monitor_ref} ->
-            Process.demonitor(monitor_ref, [:flush])
-
-          _ ->
-            :ok
-        end
-
-        new_agent_monitors = Map.delete(state.agent_monitors, pid)
-        new_agent_pids = Map.delete(state.agent_pids, agent_id)
-
-        new_state = %{state | agent_monitors: new_agent_monitors, agent_pids: new_agent_pids}
-
-        {:ok, new_state}
+        handle_stop_running_agent(agent_id, pid, state)
     end
+  end
+
+  defp handle_stop_non_running_agent(agent_id, state) do
+    # Check if agent is registered but not running
+    case state.backend.get_agent(agent_id) do
+      {:ok, _agent_entry} -> {:error, :not_running}
+      {:error, :not_found} -> {:error, :not_found}
+    end
+  end
+
+  defp handle_stop_running_agent(agent_id, pid, state) do
+    # Stop the process
+    DynamicSupervisor.terminate_child(state.supervisor, pid)
+
+    # Update backend status
+    state.backend.update_agent_status(agent_id, :stopped, nil)
+
+    # Clean up monitoring
+    case Map.get(state.agent_monitors, pid) do
+      {^agent_id, monitor_ref} ->
+        Process.demonitor(monitor_ref, [:flush])
+
+      _ ->
+        :ok
+    end
+
+    new_agent_monitors = Map.delete(state.agent_monitors, pid)
+    new_agent_pids = Map.delete(state.agent_pids, agent_id)
+
+    new_state = %{state | agent_monitors: new_agent_monitors, agent_pids: new_agent_pids}
+
+    {:ok, new_state}
   end
 
   defp apply_filters(filters, state) do
@@ -579,5 +554,62 @@ defmodule Foundation.MABEAM.ProcessRegistry do
       restart: :permanent,
       shutdown: 5000
     }
+  end
+
+  defp restart_running_agent(agent_id, state) do
+    # Stop first, then start
+    case stop_agent_process(agent_id, state) do
+      {:ok, intermediate_state} ->
+        case start_agent_process(agent_id, intermediate_state) do
+          {:ok, _pid, new_state} ->
+            emit_telemetry(:restart, %{agent_id: agent_id})
+            {:reply, :ok, new_state}
+
+          {:error, reason} ->
+            {:reply, {:error, reason}, intermediate_state}
+        end
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  defp determine_agent_health(agent_entry, state, agent_id) do
+    case agent_entry.status do
+      :running ->
+        check_running_agent_health(state, agent_id)
+
+      # Not started yet but healthy
+      :registered ->
+        :healthy
+
+      # Intentionally stopped
+      :stopped ->
+        :degraded
+
+      # Failed state
+      :failed ->
+        :unhealthy
+
+      # Unknown state
+      _ ->
+        :degraded
+    end
+  end
+
+  defp check_running_agent_health(state, agent_id) do
+    case Map.get(state.agent_pids, agent_id) do
+      # Should be running but no PID
+      nil ->
+        :unhealthy
+
+      pid ->
+        if Process.alive?(pid) do
+          :healthy
+        else
+          # Process died but not yet cleaned up
+          :unhealthy
+        end
+    end
   end
 end

@@ -364,9 +364,7 @@ defmodule Foundation.ConcurrentTestHelpers do
 
       :cpu_spike ->
         # Create temporary CPU spike
-        spawn(fn ->
-          Enum.each(1..10_000, fn _ -> :math.pow(2, 10) end)
-        end)
+        spawn_cpu_spike_process()
 
       _ ->
         :ignore
@@ -409,21 +407,12 @@ defmodule Foundation.ConcurrentTestHelpers do
     all_pids = [ecosystem.coordinator | ecosystem.workers]
 
     # Wait for all processes to terminate
-    case wait_for_condition(
-           fn ->
-             Enum.all?(all_pids, fn pid -> not Process.alive?(pid) end)
-           end,
-           timeout
-         ) do
+    case wait_for_all_processes_to_die(all_pids, timeout) do
       :ok ->
-        # Force garbage collection and verify memory cleanup
-        :erlang.garbage_collect()
-        :timer.sleep(100)
-        :ok
+        handle_successful_cleanup()
 
       {:error, :timeout} ->
-        alive_pids = Enum.filter(all_pids, &Process.alive?/1)
-        {:error, {:processes_still_alive, alive_pids}}
+        handle_cleanup_timeout(all_pids)
     end
   end
 
@@ -478,4 +467,31 @@ defmodule Foundation.ConcurrentTestHelpers do
   defp generate_test_message(:small), do: {:test_message, :rand.uniform(1000)}
   defp generate_test_message(:medium), do: {:test_message, :crypto.strong_rand_bytes(1000)}
   defp generate_test_message(:large), do: {:test_message, :crypto.strong_rand_bytes(100_000)}
+
+  defp spawn_cpu_spike_process() do
+    spawn(fn ->
+      Enum.each(1..10_000, fn _ -> :math.pow(2, 10) end)
+    end)
+  end
+
+  defp wait_for_all_processes_to_die(all_pids, timeout) do
+    wait_for_condition(
+      fn ->
+        Enum.all?(all_pids, fn pid -> not Process.alive?(pid) end)
+      end,
+      timeout
+    )
+  end
+
+  defp handle_successful_cleanup() do
+    # Force garbage collection and verify memory cleanup
+    :erlang.garbage_collect()
+    :timer.sleep(100)
+    :ok
+  end
+
+  defp handle_cleanup_timeout(all_pids) do
+    alive_pids = Enum.filter(all_pids, &Process.alive?/1)
+    {:error, {:processes_still_alive, alive_pids}}
+  end
 end

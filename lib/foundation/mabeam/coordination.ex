@@ -341,15 +341,7 @@ defmodule Foundation.MABEAM.Coordination do
         new_state = %{state | active_sessions: new_sessions}
 
         # Notify participants of cancellation
-        Enum.each(session.agents, fn agent_id ->
-          case ProcessRegistry.get_agent_pid(agent_id) do
-            {:ok, pid} ->
-              send(pid, {:coordination_cancelled, session_id})
-
-            _ ->
-              :ok
-          end
-        end)
+        notify_agents_of_cancellation(session.agents, session_id)
 
         {:reply, :ok, new_state}
     end
@@ -486,36 +478,7 @@ defmodule Foundation.MABEAM.Coordination do
         {:error, :timeout}
       else
         # Send coordination requests to agents
-        results =
-          Enum.map(agent_ids, fn agent_id ->
-            try do
-              request_result =
-                Comms.coordination_request(
-                  agent_id,
-                  protocol.type,
-                  context,
-                  timeout
-                )
-
-              case request_result do
-                {:ok, response} ->
-                  # Extract the actual response value from the coordination response
-                  actual_response =
-                    case response do
-                      %{response: value} -> value
-                      value -> value
-                    end
-
-                  %{agent_id: agent_id, response: actual_response, status: :success}
-
-                {:error, reason} ->
-                  %{agent_id: agent_id, error: reason, status: :error}
-              end
-            rescue
-              _error ->
-                %{agent_id: agent_id, error: :request_failed, status: :error}
-            end
-          end)
+        results = Enum.map(agent_ids, &send_coordination_request(&1, protocol, context, timeout))
 
         {:ok, results}
       end
@@ -572,16 +535,7 @@ defmodule Foundation.MABEAM.Coordination do
     else
       # Simple negotiation result processing
       # In a real implementation, this would involve complex negotiation algorithms
-      agent_responses =
-        Enum.map(successful_results, fn result ->
-          response =
-            case result.response do
-              {:ok, data} -> data
-              data -> data
-            end
-
-          {result.agent_id, response}
-        end)
+      agent_responses = Enum.map(successful_results, &extract_agent_response/1)
 
       %{
         agreement_reached: true,
@@ -612,14 +566,7 @@ defmodule Foundation.MABEAM.Coordination do
         end)
 
       # Check if allocations contain valid resource requirements
-      valid_allocations =
-        Enum.filter(allocations, fn {_agent_id, response} ->
-          case response do
-            %{requirements: reqs} when is_map(reqs) and map_size(reqs) > 0 -> true
-            %{resource: _resource, desired_amount: amount} when is_number(amount) -> true
-            _ -> false
-          end
-        end)
+      valid_allocations = Enum.filter(allocations, &is_valid_allocation?/1)
 
       allocation_successful = length(valid_allocations) >= total_results * 0.5
 
@@ -702,5 +649,65 @@ defmodule Foundation.MABEAM.Coordination do
     )
   rescue
     _ -> :ok
+  end
+
+  defp notify_agents_of_cancellation(agents, session_id) do
+    Enum.each(agents, fn agent_id ->
+      case ProcessRegistry.get_agent_pid(agent_id) do
+        {:ok, pid} ->
+          send(pid, {:coordination_cancelled, session_id})
+
+        _ ->
+          :ok
+      end
+    end)
+  end
+
+  defp send_coordination_request(agent_id, protocol, context, timeout) do
+    try do
+      request_result =
+        Comms.coordination_request(
+          agent_id,
+          protocol.type,
+          context,
+          timeout
+        )
+
+      case request_result do
+        {:ok, response} ->
+          # Extract the actual response value from the coordination response
+          actual_response =
+            case response do
+              %{response: value} -> value
+              value -> value
+            end
+
+          %{agent_id: agent_id, response: actual_response, status: :success}
+
+        {:error, reason} ->
+          %{agent_id: agent_id, error: reason, status: :error}
+      end
+    rescue
+      _error ->
+        %{agent_id: agent_id, error: :request_failed, status: :error}
+    end
+  end
+
+  defp is_valid_allocation?({_agent_id, response}) do
+    case response do
+      %{requirements: reqs} when is_map(reqs) and map_size(reqs) > 0 -> true
+      %{resource: _resource, desired_amount: amount} when is_number(amount) -> true
+      _ -> false
+    end
+  end
+
+  defp extract_agent_response(result) do
+    response =
+      case result.response do
+        {:ok, data} -> data
+        data -> data
+      end
+
+    {result.agent_id, response}
   end
 end

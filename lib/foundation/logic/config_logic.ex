@@ -266,22 +266,26 @@ defmodule Foundation.Logic.ConfigLogic do
     all_keys = MapSet.union(MapSet.new(Map.keys(old_map)), MapSet.new(Map.keys(new_map)))
 
     Enum.reduce(all_keys, %{}, fn key, acc ->
-      old_val = Map.get(old_map, key)
-      new_val = Map.get(new_map, key)
-      current_path = path ++ [key]
-
-      cond do
-        old_val == new_val ->
-          acc
-
-        is_map(old_val) and is_map(new_val) ->
-          nested_diff = create_diff(old_val, new_val, current_path)
-          if map_size(nested_diff) > 0, do: Map.put(acc, key, nested_diff), else: acc
-
-        true ->
-          Map.put(acc, key, %{old: old_val, new: new_val, path: current_path})
-      end
+      process_key_diff(old_map, new_map, key, path, acc)
     end)
+  end
+
+  defp process_key_diff(old_map, new_map, key, path, acc) do
+    old_val = Map.get(old_map, key)
+    new_val = Map.get(new_map, key)
+    current_path = path ++ [key]
+
+    cond do
+      old_val == new_val ->
+        acc
+
+      is_map(old_val) and is_map(new_val) ->
+        nested_diff = create_diff(old_val, new_val, current_path)
+        if map_size(nested_diff) > 0, do: Map.put(acc, key, nested_diff), else: acc
+
+      true ->
+        Map.put(acc, key, %{old: old_val, new: new_val, path: current_path})
+    end
   end
 
   defp create_diff(old_val, new_val, path) do

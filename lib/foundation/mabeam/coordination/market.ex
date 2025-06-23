@@ -227,12 +227,7 @@ defmodule Foundation.MABEAM.Coordination.Market do
             new_orders = [order | market_state.orders]
 
             # Try to match orders if it's a continuous market
-            {updated_orders, new_trades} =
-              if market_state.spec.market_type == :continuous do
-                match_orders(new_orders, market_state.trades)
-              else
-                {new_orders, market_state.trades}
-              end
+            {updated_orders, new_trades} = process_market_orders(market_state, new_orders)
 
             updated_market = %{market_state | orders: updated_orders, trades: new_trades}
 
@@ -769,6 +764,14 @@ defmodule Foundation.MABEAM.Coordination.Market do
       current_total = current_stats.average_efficiency * current_stats.total_markets
       new_total = current_total + market_result.market_efficiency
       new_total / (current_stats.total_markets + 1)
+    end
+  end
+
+  defp process_market_orders(market_state, new_orders) do
+    if market_state.spec.market_type == :continuous do
+      match_orders(new_orders, market_state.trades)
+    else
+      {new_orders, market_state.trades}
     end
   end
 end

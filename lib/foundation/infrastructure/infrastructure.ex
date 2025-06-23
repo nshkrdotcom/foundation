@@ -230,15 +230,15 @@ defmodule Foundation.Infrastructure do
   """
   @spec get_protection_config(protection_key()) :: {:ok, any()} | {:error, any()}
   def get_protection_config(protection_key) do
-    case ensure_config_agent_started() do
-      :ok ->
-        case Agent.get(@agent_name, fn state -> Map.get(state, protection_key) end) do
-          nil -> {:error, :not_found}
-          config -> {:ok, config}
-        end
+    with :ok <- ensure_config_agent_started() do
+      get_config_from_agent(protection_key)
+    end
+  end
 
-      {:error, reason} ->
-        {:error, reason}
+  defp get_config_from_agent(protection_key) do
+    case Agent.get(@agent_name, fn state -> Map.get(state, protection_key) end) do
+      nil -> {:error, :not_found}
+      config -> {:ok, config}
     end
   end
 
@@ -439,13 +439,17 @@ defmodule Foundation.Infrastructure do
         execute_with_connection_pool(options, fun)
 
       circuit_breaker_name ->
-        case CircuitBreaker.execute(circuit_breaker_name, fn ->
-               execute_with_connection_pool(options, fun)
-             end) do
-          {:ok, {:ok, result}} -> {:ok, result}
-          {:ok, {:error, reason}} -> {:error, reason}
-          other -> other
-        end
+        execute_with_named_circuit_breaker(circuit_breaker_name, options, fun)
+    end
+  end
+
+  defp execute_with_named_circuit_breaker(circuit_breaker_name, options, fun) do
+    case CircuitBreaker.execute(circuit_breaker_name, fn ->
+           execute_with_connection_pool(options, fun)
+         end) do
+      {:ok, {:ok, result}} -> {:ok, result}
+      {:ok, {:error, reason}} -> {:error, reason}
+      other -> other
     end
   end
 

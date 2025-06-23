@@ -481,18 +481,7 @@ defmodule Foundation.Coordination.Primitives do
 
     if acceptances >= majority do
       # Phase 2: Commit value
-      commit_requests =
-        Enum.map(nodes, fn node ->
-          if node == Node.self() do
-            :ok
-          else
-            try do
-              :rpc.call(node, __MODULE__, :handle_consensus_commit, [consensus_id, value], timeout)
-            catch
-              _, _ -> :error
-            end
-          end
-        end)
+      commit_requests = Enum.map(nodes, &handle_commit_request(&1, consensus_id, value, timeout))
 
       commit_successes = Enum.count(commit_requests, &(&1 == :ok))
 
@@ -1027,6 +1016,18 @@ defmodule Foundation.Coordination.Primitives do
       is_list(value) -> :list
       is_tuple(value) -> :tuple
       true -> :other
+    end
+  end
+
+  defp handle_commit_request(node, consensus_id, value, timeout) do
+    if node == Node.self() do
+      :ok
+    else
+      try do
+        :rpc.call(node, __MODULE__, :handle_consensus_commit, [consensus_id, value], timeout)
+      catch
+        _, _ -> :error
+      end
     end
   end
 end

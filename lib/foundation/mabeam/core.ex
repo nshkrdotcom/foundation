@@ -351,38 +351,8 @@ defmodule Foundation.MABEAM.Core do
       # Handle orchestration variables (legacy API)
       Map.has_key?(variable, :id) ->
         case validate_variable(variable) do
-          :ok ->
-            if Map.has_key?(state.variable_registry, variable.id) do
-              {:reply, {:error, :already_registered}, state}
-            else
-              new_registry = Map.put(state.variable_registry, variable.id, variable)
-              new_metrics = %{state.performance_metrics | variable_count: map_size(new_registry)}
-
-              new_state = %{
-                state
-                | variable_registry: new_registry,
-                  performance_metrics: new_metrics
-              }
-
-              emit_telemetry(:variable_registered, %{count: 1}, %{
-                variable_id: variable.id,
-                variable_type: variable.type,
-                scope: variable.scope
-              })
-
-              new_state_with_event =
-                add_coordination_event(
-                  new_state,
-                  :variable_registered,
-                  [variable.id],
-                  {:ok, :registered}
-                )
-
-              {:reply, :ok, new_state_with_event}
-            end
-
-          {:error, reason} ->
-            {:reply, {:error, reason}, state}
+          :ok -> register_orchestration_variable(variable, state)
+          {:error, reason} -> {:reply, {:error, reason}, state}
         end
 
       true ->
@@ -918,6 +888,37 @@ defmodule Foundation.MABEAM.Core do
       state.performance_metrics.success_rate < 0.5 -> :unhealthy
       state.performance_metrics.success_rate < 0.8 -> :degraded
       true -> :healthy
+    end
+  end
+
+  defp register_orchestration_variable(variable, state) do
+    if Map.has_key?(state.variable_registry, variable.id) do
+      {:reply, {:error, :already_registered}, state}
+    else
+      new_registry = Map.put(state.variable_registry, variable.id, variable)
+      new_metrics = %{state.performance_metrics | variable_count: map_size(new_registry)}
+
+      new_state = %{
+        state
+        | variable_registry: new_registry,
+          performance_metrics: new_metrics
+      }
+
+      emit_telemetry(:variable_registered, %{count: 1}, %{
+        variable_id: variable.id,
+        variable_type: variable.type,
+        scope: variable.scope
+      })
+
+      new_state_with_event =
+        add_coordination_event(
+          new_state,
+          :variable_registered,
+          [variable.id],
+          {:ok, :registered}
+        )
+
+      {:reply, :ok, new_state_with_event}
     end
   end
 

@@ -240,29 +240,15 @@ defmodule Foundation.MABEAM.Comms do
 
           key ->
             # Check if this request is already active or cached
-            case Map.get(state.active_requests, key) do
-              nil ->
-                # First time seeing this request, track it and process
-                result = send_request_to_agent(agent_pid, message, timeout)
-
-                # Cache the result for future duplicate requests
-                new_active = Map.put(state.active_requests, key, result)
-
-                new_state = %{
-                  state
-                  | total_requests: state.total_requests + 1,
-                    active_requests: new_active
-                }
-
-                final_state =
-                  update_stats_and_emit_telemetry(new_state, result, start_time, agent_id)
-
-                {:reply, result, final_state}
-
-              cached_result ->
-                # Duplicate request detected - return cached result without calling agent
-                {:reply, cached_result, state}
-            end
+            handle_deduplicated_request(
+              state,
+              key,
+              agent_pid,
+              message,
+              timeout,
+              start_time,
+              agent_id
+            )
         end
 
       {:error, :not_found} ->
@@ -541,5 +527,34 @@ defmodule Foundation.MABEAM.Comms do
       restart: :permanent,
       shutdown: 5000
     }
+  end
+
+  defp handle_deduplicated_request(state, key, agent_pid, message, timeout, start_time, agent_id) do
+    case Map.get(state.active_requests, key) do
+      nil ->
+        handle_new_request(state, key, agent_pid, message, timeout, start_time, agent_id)
+
+      cached_result ->
+        # Duplicate request detected - return cached result without calling agent
+        {:reply, cached_result, state}
+    end
+  end
+
+  defp handle_new_request(state, key, agent_pid, message, timeout, start_time, agent_id) do
+    # First time seeing this request, track it and process
+    result = send_request_to_agent(agent_pid, message, timeout)
+
+    # Cache the result for future duplicate requests
+    new_active = Map.put(state.active_requests, key, result)
+
+    new_state = %{
+      state
+      | total_requests: state.total_requests + 1,
+        active_requests: new_active
+    }
+
+    final_state = update_stats_and_emit_telemetry(new_state, result, start_time, agent_id)
+
+    {:reply, result, final_state}
   end
 end

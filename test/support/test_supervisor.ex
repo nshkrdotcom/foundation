@@ -152,17 +152,7 @@ defmodule Foundation.TestSupport.TestSupervisor do
     if map_size(services) > 0 do
       # Terminate each service through the DynamicSupervisor
       Enum.each(services, fn {_service_name, pid} ->
-        if Process.alive?(pid) do
-          case DynamicSupervisor.terminate_child(__MODULE__, pid) do
-            :ok ->
-              # No debug log for successful termination to reduce noise
-              :ok
-
-            {:error, :not_found} ->
-              # Process might have already died, try direct termination
-              Process.exit(pid, :shutdown)
-          end
-        end
+        terminate_child_process(pid)
       end)
 
       # Wait a moment for cleanup to complete
@@ -308,5 +298,19 @@ defmodule Foundation.TestSupport.TestSupervisor do
           {:halt, {:error, service}}
       end
     end)
+  end
+
+  defp terminate_child_process(pid) do
+    if Process.alive?(pid) do
+      case DynamicSupervisor.terminate_child(__MODULE__, pid) do
+        :ok ->
+          # No debug log for successful termination to reduce noise
+          :ok
+
+        {:error, :not_found} ->
+          # Process might have already died, try direct termination
+          Process.exit(pid, :shutdown)
+      end
+    end
   end
 end

@@ -549,62 +549,19 @@ defmodule Foundation.MABEAM.TelemetryHelpers do
 
   defp verify_event_measurements(actual, expected) do
     Enum.each(expected, fn {key, expected_value} ->
-      actual_value = Map.get(actual, key)
-
-      case expected_value do
-        :any ->
-          if is_nil(actual_value) do
-            raise "Expected measurement #{key} to be present"
-          end
-
-        value when is_function(value, 1) ->
-          if not value.(actual_value) do
-            raise "Measurement #{key} with value #{actual_value} failed validation"
-          end
-
-        ^actual_value ->
-          :ok
-
-        _ ->
-          raise "Expected measurement #{key} to be #{expected_value}, got #{actual_value}"
-      end
+      verify_single_measurement(actual, key, expected_value)
     end)
   end
 
   defp verify_event_metadata(actual, expected) do
     Enum.each(expected, fn {key, expected_value} ->
-      actual_value = Map.get(actual, key)
-
-      case expected_value do
-        :any ->
-          if is_nil(actual_value) do
-            raise "Expected metadata #{key} to be present"
-          end
-
-        value when is_function(value, 1) ->
-          if not value.(actual_value) do
-            raise "Metadata #{key} with value #{actual_value} failed validation"
-          end
-
-        ^actual_value ->
-          :ok
-
-        _ ->
-          raise "Expected metadata #{key} to be #{expected_value}, got #{actual_value}"
-      end
+      verify_single_metadata(actual, key, expected_value)
     end)
   end
 
   defp matches_pattern?(event, pattern) do
     Enum.all?(pattern, fn {key, expected_value} ->
-      actual_value = get_in(event, [key])
-
-      case expected_value do
-        :any -> not is_nil(actual_value)
-        value when is_function(value, 1) -> value.(actual_value)
-        ^actual_value -> true
-        _ -> false
-      end
+      check_pattern_match(event, key, expected_value)
     end)
   end
 
@@ -722,5 +679,60 @@ defmodule Foundation.MABEAM.TelemetryHelpers do
     :telemetry.execute([:foundation, :mabeam, :test, :event], %{counter: 1}, %{test: true})
     Process.sleep(10)
     generate_events_loop(end_time)
+  end
+
+  defp verify_single_measurement(actual, key, expected_value) do
+    actual_value = Map.get(actual, key)
+
+    case expected_value do
+      :any ->
+        if is_nil(actual_value) do
+          raise "Expected measurement #{key} to be present"
+        end
+
+      value when is_function(value, 1) ->
+        if not value.(actual_value) do
+          raise "Measurement #{key} with value #{actual_value} failed validation"
+        end
+
+      ^actual_value ->
+        :ok
+
+      _ ->
+        raise "Expected measurement #{key} to be #{expected_value}, got #{actual_value}"
+    end
+  end
+
+  defp check_pattern_match(event, key, expected_value) do
+    actual_value = get_in(event, [key])
+
+    case expected_value do
+      :any -> not is_nil(actual_value)
+      value when is_function(value, 1) -> value.(actual_value)
+      ^actual_value -> true
+      _ -> false
+    end
+  end
+
+  defp verify_single_metadata(actual, key, expected_value) do
+    actual_value = Map.get(actual, key)
+
+    case expected_value do
+      :any ->
+        if is_nil(actual_value) do
+          raise "Expected metadata #{key} to be present"
+        end
+
+      value when is_function(value, 1) ->
+        if not value.(actual_value) do
+          raise "Metadata #{key} with value #{actual_value} failed validation"
+        end
+
+      ^actual_value ->
+        :ok
+
+      _ ->
+        raise "Expected metadata #{key} to be #{expected_value}, got #{actual_value}"
+    end
   end
 end

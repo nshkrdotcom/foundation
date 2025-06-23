@@ -234,21 +234,7 @@ defmodule Foundation.BEAM.Processes do
 
     ErrorContext.with_context(context, fn ->
       # Check if coordinator was replaced by supervisor
-      current_coordinator =
-        if ecosystem.supervisor && Process.alive?(ecosystem.supervisor) do
-          case Process.info(ecosystem.supervisor, :dictionary) do
-            {:dictionary, dict} ->
-              case Keyword.get(dict, :current_coordinator) do
-                nil -> ecosystem.coordinator
-                new_coordinator -> new_coordinator
-              end
-
-            _ ->
-              ecosystem.coordinator
-          end
-        else
-          ecosystem.coordinator
-        end
+      current_coordinator = get_current_coordinator(ecosystem)
 
       coordinator_info = process_info_safe(current_coordinator)
 
@@ -383,22 +369,23 @@ defmodule Foundation.BEAM.Processes do
 
   defp spawn_workers(worker_module, count, coordinator_pid) do
     1..count
-    |> Enum.map(fn _i ->
-      if function_exported?(worker_module, :start_link, 1) do
-        case worker_module.start_link(coordinator: coordinator_pid) do
-          {:ok, pid} when is_pid(pid) ->
-            pid
+    |> Enum.map(fn _i -> spawn_single_worker(worker_module, coordinator_pid) end)
+  end
 
-          pid when is_pid(pid) ->
-            pid
+  defp spawn_single_worker(worker_module, coordinator_pid) do
+    if function_exported?(worker_module, :start_link, 1) do
+      start_worker_with_module(worker_module, coordinator_pid)
+    else
+      spawn(fn -> worker_loop() end)
+    end
+  end
 
-          _ ->
-            spawn(fn -> worker_loop() end)
-        end
-      else
-        spawn(fn -> worker_loop() end)
-      end
-    end)
+  defp start_worker_with_module(worker_module, coordinator_pid) do
+    case worker_module.start_link(coordinator: coordinator_pid) do
+      {:ok, pid} when is_pid(pid) -> pid
+      pid when is_pid(pid) -> pid
+      _ -> spawn(fn -> worker_loop() end)
+    end
   end
 
   defp setup_monitors(pids) do
@@ -509,6 +496,27 @@ defmodule Foundation.BEAM.Processes do
         # Clean up monitors
         Process.demonitor(monitor_ref, [:flush])
         :ok
+    end
+  end
+
+  defp get_current_coordinator(ecosystem) do
+    if ecosystem.supervisor && Process.alive?(ecosystem.supervisor) do
+      get_coordinator_from_supervisor(ecosystem)
+    else
+      ecosystem.coordinator
+    end
+  end
+
+  defp get_coordinator_from_supervisor(ecosystem) do
+    case Process.info(ecosystem.supervisor, :dictionary) do
+      {:dictionary, dict} ->
+        case Keyword.get(dict, :current_coordinator) do
+          nil -> ecosystem.coordinator
+          new_coordinator -> new_coordinator
+        end
+
+      _ ->
+        ecosystem.coordinator
     end
   end
 

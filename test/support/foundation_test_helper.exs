@@ -369,37 +369,12 @@ defmodule Foundation.TestHelpers do
     end
 
     # Wait for all processes to terminate
-    case wait_for_condition(
-           fn ->
-             Enum.all?(all_pids, fn pid -> not Process.alive?(pid) end)
-           end,
-           timeout
-         ) do
+    case wait_for_all_processes_to_die(all_pids, timeout) do
       :ok ->
-        # Force garbage collection and verify memory cleanup
-        :erlang.garbage_collect()
-        :timer.sleep(100)
-        :ok
+        handle_successful_cleanup()
 
       {:error, :timeout} ->
-        alive_pids = Enum.filter(all_pids, &Process.alive?/1)
-
-        # Force kill remaining processes
-        for pid <- alive_pids do
-          if Process.alive?(pid) do
-            Process.exit(pid, :kill)
-          end
-        end
-
-        # Final check
-        :timer.sleep(100)
-        final_alive = Enum.filter(all_pids, &Process.alive?/1)
-
-        if Enum.empty?(final_alive) do
-          :ok
-        else
-          {:error, {:processes_still_alive, final_alive}}
-        end
+        handle_cleanup_timeout_with_force_kill(all_pids)
     end
   end
 
@@ -449,6 +424,48 @@ defmodule Foundation.TestHelpers do
         Process.sleep(10)
         wait_for_condition_old(condition, deadline)
       end
+    end
+  end
+
+  defp wait_for_all_processes_to_die(all_pids, timeout) do
+    wait_for_condition(
+      fn ->
+        Enum.all?(all_pids, fn pid -> not Process.alive?(pid) end)
+      end,
+      timeout
+    )
+  end
+
+  defp handle_successful_cleanup() do
+    # Force garbage collection and verify memory cleanup
+    :erlang.garbage_collect()
+    :timer.sleep(100)
+    :ok
+  end
+
+  defp handle_cleanup_timeout(all_pids) do
+    alive_pids = Enum.filter(all_pids, &Process.alive?/1)
+    {:error, {:processes_still_alive, alive_pids}}
+  end
+
+  defp handle_cleanup_timeout_with_force_kill(all_pids) do
+    alive_pids = Enum.filter(all_pids, &Process.alive?/1)
+
+    # Force kill remaining processes
+    for pid <- alive_pids do
+      if Process.alive?(pid) do
+        Process.exit(pid, :kill)
+      end
+    end
+
+    # Final check
+    :timer.sleep(100)
+    final_alive = Enum.filter(all_pids, &Process.alive?/1)
+
+    if Enum.empty?(final_alive) do
+      :ok
+    else
+      {:error, {:processes_still_alive, final_alive}}
     end
   end
 end

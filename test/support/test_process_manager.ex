@@ -77,13 +77,7 @@ defmodule Foundation.TestProcessManager do
   @spec reset_all_service_states() :: :ok | [Error.t()]
   def reset_all_service_states do
     if Application.get_env(:foundation, :test_mode, false) do
-      errors =
-        Enum.reduce(@foundation_services, [], fn service_module, acc_errors ->
-          case reset_service_state(service_module) do
-            :ok -> acc_errors
-            {:error, error} -> [error | acc_errors]
-          end
-        end)
+      errors = collect_service_reset_errors()
 
       case errors do
         [] -> :ok
@@ -186,15 +180,7 @@ defmodule Foundation.TestProcessManager do
               :ok
 
             :timeout ->
-              {:error,
-               Error.new(
-                 code: 9002,
-                 error_type: :initialization_timeout,
-                 message: "Services failed to start within timeout",
-                 severity: :high,
-                 category: :test,
-                 subcategory: :initialization
-               )}
+              create_initialization_timeout_error()
           end
 
         {:error, _} = error ->
@@ -357,5 +343,26 @@ defmodule Foundation.TestProcessManager do
         {:error, _} = error -> {:halt, error}
       end
     end)
+  end
+
+  defp collect_service_reset_errors() do
+    Enum.reduce(@foundation_services, [], fn service_module, acc_errors ->
+      case reset_service_state(service_module) do
+        :ok -> acc_errors
+        {:error, error} -> [error | acc_errors]
+      end
+    end)
+  end
+
+  defp create_initialization_timeout_error() do
+    {:error,
+     Error.new(
+       code: 9002,
+       error_type: :initialization_timeout,
+       message: "Services failed to start within timeout",
+       severity: :high,
+       category: :test,
+       subcategory: :initialization
+     )}
   end
 end

@@ -238,19 +238,12 @@ defmodule Foundation.MABEAM.Coordination.Auction do
     case Map.get(state.active_auctions, auction_id) do
       nil ->
         # Check auction history for completed auctions
-        case Enum.find(state.auction_history, fn entry ->
-               Map.get(entry, :auction_id) == auction_id
-             end) do
+        case find_historical_auction(state.auction_history, auction_id) do
           nil ->
             {:reply, {:error, :auction_not_found}, state}
 
           historical_entry ->
-            status = %{
-              auction_id: auction_id,
-              status: :completed,
-              result: historical_entry,
-              completed_at: historical_entry.timestamp
-            }
+            status = build_completed_auction_status(auction_id, historical_entry)
 
             {:reply, {:ok, status}, state}
         end
@@ -365,18 +358,7 @@ defmodule Foundation.MABEAM.Coordination.Auction do
     bid_request = {:auction_bid_request, auction_spec}
 
     results =
-      Enum.map(participants, fn agent_id ->
-        case Comms.request(agent_id, bid_request, timeout) do
-          {:ok, bid_response} ->
-            case validate_bid(bid_response, agent_id, auction_spec) do
-              {:ok, bid} -> {:ok, bid}
-              {:error, reason} -> {:error, {agent_id, reason}}
-            end
-
-          {:error, reason} ->
-            {:error, {agent_id, reason}}
-        end
-      end)
+      Enum.map(participants, &collect_bid_from_agent(&1, bid_request, auction_spec, timeout))
 
     {successful_bids, errors} =
       Enum.split_with(results, fn
@@ -637,5 +619,33 @@ defmodule Foundation.MABEAM.Coordination.Auction do
     history_entry = Map.put(auction_result, :timestamp, DateTime.utc_now())
     new_history = [history_entry | state.auction_history] |> Enum.take(100)
     %{state | auction_history: new_history}
+  end
+
+  defp find_historical_auction(auction_history, auction_id) do
+    Enum.find(auction_history, fn entry ->
+      Map.get(entry, :auction_id) == auction_id
+    end)
+  end
+
+  defp build_completed_auction_status(auction_id, historical_entry) do
+    %{
+      auction_id: auction_id,
+      status: :completed,
+      result: historical_entry,
+      completed_at: historical_entry.timestamp
+    }
+  end
+
+  defp collect_bid_from_agent(agent_id, bid_request, auction_spec, timeout) do
+    case Comms.request(agent_id, bid_request, timeout) do
+      {:ok, bid_response} ->
+        case validate_bid(bid_response, agent_id, auction_spec) do
+          {:ok, bid} -> {:ok, bid}
+          {:error, reason} -> {:error, {agent_id, reason}}
+        end
+
+      {:error, reason} ->
+        {:error, {agent_id, reason}}
+    end
   end
 end

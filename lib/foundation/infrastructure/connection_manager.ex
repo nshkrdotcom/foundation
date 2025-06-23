@@ -287,30 +287,22 @@ defmodule Foundation.Infrastructure.ConnectionManager do
 
   @spec do_start_pool(pool_name(), pool_config()) :: {:ok, pid()} | {:error, term()}
   defp do_start_pool(pool_name, config) do
-    # Validate configuration values
-    case validate_pool_config(config) do
-      :ok ->
-        # Validate worker module exists before attempting to start pool
-        worker_module = Keyword.get(config, :worker_module)
-
-        case validate_worker_module(worker_module) do
-          :ok ->
-            {poolboy_config, worker_args} = build_poolboy_config(pool_name, config)
-
-            case :poolboy.start_link(poolboy_config, worker_args) do
-              {:ok, pid} -> {:ok, pid}
-              {:error, reason} -> {:error, reason}
-            end
-
-          {:error, reason} ->
-            {:error, reason}
-        end
-
-      {:error, reason} ->
-        {:error, reason}
+    with :ok <- validate_pool_config(config),
+         worker_module <- Keyword.get(config, :worker_module),
+         :ok <- validate_worker_module(worker_module) do
+      start_poolboy_pool(pool_name, config)
     end
   rescue
     error -> {:error, error}
+  end
+
+  defp start_poolboy_pool(pool_name, config) do
+    {poolboy_config, worker_args} = build_poolboy_config(pool_name, config)
+
+    case :poolboy.start_link(poolboy_config, worker_args) do
+      {:ok, pid} -> {:ok, pid}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @spec validate_pool_config(pool_config()) :: :ok | {:error, term()}

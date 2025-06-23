@@ -653,27 +653,24 @@ defmodule Foundation.Application do
   end
 
   defp check_service_dependencies(dependencies) do
-    missing_deps =
-      dependencies
-      |> Enum.filter(fn dep_service ->
-        case dep_service do
-          :process_registry ->
-            # Special case: check if ProcessRegistry itself is running
-            Process.whereis(ProcessRegistry) == nil
+    missing_deps = Enum.filter(dependencies, &is_service_missing?/1)
 
-          _ ->
-            # Normal case: look up through ProcessRegistry
-            case ProcessRegistry.lookup(:production, dep_service) do
-              {:ok, _pid} -> false
-              :error -> true
-            end
-        end
-      end)
+    case missing_deps do
+      [] -> :ok
+      deps -> {:error, deps}
+    end
+  end
 
-    if Enum.empty?(missing_deps) do
-      :ok
-    else
-      {:error, missing_deps}
+  defp is_service_missing?(:process_registry) do
+    # Special case: check if ProcessRegistry itself is running
+    Process.whereis(ProcessRegistry) == nil
+  end
+
+  defp is_service_missing?(dep_service) do
+    # Normal case: look up through ProcessRegistry
+    case ProcessRegistry.lookup(:production, dep_service) do
+      {:ok, _pid} -> false
+      :error -> true
     end
   end
 
