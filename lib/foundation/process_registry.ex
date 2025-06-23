@@ -89,10 +89,12 @@ defmodule Foundation.ProcessRegistry do
   - `namespace`: The namespace for service isolation
   - `service`: The service name to register
   - `pid`: The process PID to register
+  - `metadata`: Optional metadata map associated with the service
 
   ## Returns
   - `:ok` if registration succeeds
   - `{:error, {:already_registered, pid}}` if name already taken
+  - `{:error, :invalid_metadata}` if metadata is not a map
 
   ## Examples
 
@@ -101,9 +103,16 @@ defmodule Foundation.ProcessRegistry do
 
       iex> ProcessRegistry.register(:production, :config_server, self())
       {:error, {:already_registered, #PID<0.123.0>}}
+
+      iex> ProcessRegistry.register(:production, :worker, self(), %{type: :computation})
+      :ok
   """
   @spec register(namespace(), service_name(), pid()) :: :ok | {:error, {:already_registered, pid()}}
-  def register(namespace, service, pid) when is_pid(pid) do
+  @spec register(namespace(), service_name(), pid(), map()) ::
+          :ok | {:error, {:already_registered, pid()} | :invalid_metadata}
+  def register(namespace, service, pid, metadata \\ %{})
+
+  def register(namespace, service, pid, metadata) when is_pid(pid) and is_map(metadata) do
     registry_key = {namespace, service}
 
     # Always use the backup table for all registrations for consistency
@@ -115,13 +124,13 @@ defmodule Foundation.ProcessRegistry do
       require Logger
 
       Logger.debug(
-        "ProcessRegistry.register: attempting to register #{inspect(registry_key)} -> #{inspect(pid)}"
+        "ProcessRegistry.register: attempting to register #{inspect(registry_key)} -> #{inspect(pid)} with metadata #{inspect(metadata)}"
       )
     end
 
     # Check if already registered
     case :ets.lookup(:process_registry_backup, registry_key) do
-      [{^registry_key, existing_pid}] ->
+      [{^registry_key, existing_pid, _existing_metadata}] ->
         if Process.alive?(existing_pid) do
           if existing_pid == pid do
             if Application.get_env(:foundation, :debug_registry, false) do
@@ -147,7 +156,7 @@ defmodule Foundation.ProcessRegistry do
           end
         else
           # Dead process registered, replace with new one
-          :ets.insert(:process_registry_backup, {registry_key, pid})
+          :ets.insert(:process_registry_backup, {registry_key, pid, metadata})
 
           if Application.get_env(:foundation, :debug_registry, false) do
             require Logger
@@ -162,7 +171,7 @@ defmodule Foundation.ProcessRegistry do
 
       [] ->
         # Not registered, add new registration
-        :ets.insert(:process_registry_backup, {registry_key, pid})
+        :ets.insert(:process_registry_backup, {registry_key, pid, metadata})
 
         if Application.get_env(:foundation, :debug_registry, false) do
           require Logger
@@ -175,6 +184,9 @@ defmodule Foundation.ProcessRegistry do
         :ok
     end
   end
+
+  # Handle invalid metadata
+  def register(_namespace, _service, _pid, _metadata), do: {:error, :invalid_metadata}
 
   @doc """
   Look up a service in the given namespace.
@@ -214,6 +226,17 @@ defmodule Foundation.ProcessRegistry do
         ensure_backup_registry()
 
         case :ets.lookup(:process_registry_backup, registry_key) do
+          [{^registry_key, pid, _metadata}] ->
+            # Verify the process is still alive
+            if Process.alive?(pid) do
+              {:ok, pid}
+            else
+              # Clean up dead process and return error
+              :ets.delete(:process_registry_backup, registry_key)
+              :error
+            end
+
+          # Handle legacy 2-tuple format for backward compatibility
           [{^registry_key, pid}] ->
             # Verify the process is still alive
             if Process.alive?(pid) do
@@ -275,6 +298,175 @@ defmodule Foundation.ProcessRegistry do
   end
 
   @doc """
+  Get metadata for a registered service.
+
+  ## Parameters
+  - `namespace`: The namespace containing the service
+  - `service`: The service name to get metadata for
+
+  ## Returns
+  - `{:ok, metadata}` if service found
+  - `{:error, :not_found}` if service not found
+
+  ## Examples
+
+      iex> ProcessRegistry.get_metadata(:production, :config_server)
+      {:ok, %{type: :singleton, priority: :high}}
+
+      iex> ProcessRegistry.get_metadata(:production, :nonexistent)
+      {:error, :not_found}
+  """
+  @spec get_metadata(namespace(), service_name()) :: {:ok, map()} | {:error, :not_found}
+  def get_metadata(namespace, service) do
+    registry_key = {namespace, service}
+    ensure_backup_registry()
+
+    case :ets.lookup(:process_registry_backup, registry_key) do
+      [{^registry_key, pid, metadata}] ->
+        if Process.alive?(pid) do
+          {:ok, metadata}
+        else
+          # Clean up dead process and return error
+          :ets.delete(:process_registry_backup, registry_key)
+          {:error, :not_found}
+        end
+
+      # Handle legacy 2-tuple format - return empty metadata
+      [{^registry_key, pid}] ->
+        if Process.alive?(pid) do
+          {:ok, %{}}
+        else
+          # Clean up dead process and return error
+          :ets.delete(:process_registry_backup, registry_key)
+          {:error, :not_found}
+        end
+
+      [] ->
+        {:error, :not_found}
+    end
+  end
+
+  @doc """
+  Look up a service and its metadata together.
+
+  ## Parameters
+  - `namespace`: The namespace to search in
+  - `service`: The service name to lookup
+
+  ## Returns
+  - `{:ok, {pid, metadata}}` if service found
+  - `:error` if service not found
+
+  ## Examples
+
+      iex> ProcessRegistry.lookup_with_metadata(:production, :config_server)
+      {:ok, {#PID<0.123.0>, %{type: :singleton}}}
+
+      iex> ProcessRegistry.lookup_with_metadata(:production, :nonexistent)
+      :error
+  """
+  @spec lookup_with_metadata(namespace(), service_name()) :: {:ok, {pid(), map()}} | :error
+  def lookup_with_metadata(namespace, service) do
+    registry_key = {namespace, service}
+
+    # First try the native Registry lookup (for via_tuple registered services)
+    case Registry.lookup(__MODULE__, registry_key) do
+      [{pid, _value}] when is_pid(pid) ->
+        if Process.alive?(pid) do
+          # Services registered via via_tuple don't have metadata in our system
+          {:ok, {pid, %{}}}
+        else
+          :error
+        end
+
+      [] ->
+        # Fall back to backup table lookup
+        ensure_backup_registry()
+
+        case :ets.lookup(:process_registry_backup, registry_key) do
+          [{^registry_key, pid, metadata}] ->
+            if Process.alive?(pid) do
+              {:ok, {pid, metadata}}
+            else
+              # Clean up dead process and return error
+              :ets.delete(:process_registry_backup, registry_key)
+              :error
+            end
+
+          # Handle legacy 2-tuple format
+          [{^registry_key, pid}] ->
+            if Process.alive?(pid) do
+              {:ok, {pid, %{}}}
+            else
+              # Clean up dead process and return error
+              :ets.delete(:process_registry_backup, registry_key)
+              :error
+            end
+
+          [] ->
+            :error
+        end
+    end
+  end
+
+  @doc """
+  Update metadata for an existing service.
+
+  ## Parameters
+  - `namespace`: The namespace containing the service
+  - `service`: The service name to update metadata for
+  - `metadata`: New metadata map (replaces existing metadata completely)
+
+  ## Returns
+  - `:ok` if update succeeds
+  - `{:error, :not_found}` if service not found
+  - `{:error, :invalid_metadata}` if metadata is not a map
+
+  ## Examples
+
+      iex> ProcessRegistry.update_metadata(:production, :config_server, %{version: "2.0"})
+      :ok
+
+      iex> ProcessRegistry.update_metadata(:production, :nonexistent, %{})
+      {:error, :not_found}
+  """
+  @spec update_metadata(namespace(), service_name(), map()) ::
+          :ok | {:error, :not_found | :invalid_metadata}
+  def update_metadata(namespace, service, metadata) when is_map(metadata) do
+    registry_key = {namespace, service}
+    ensure_backup_registry()
+
+    case :ets.lookup(:process_registry_backup, registry_key) do
+      [{^registry_key, pid, _old_metadata}] ->
+        if Process.alive?(pid) do
+          :ets.insert(:process_registry_backup, {registry_key, pid, metadata})
+          :ok
+        else
+          # Clean up dead process and return error
+          :ets.delete(:process_registry_backup, registry_key)
+          {:error, :not_found}
+        end
+
+      # Handle legacy 2-tuple format - upgrade to 3-tuple
+      [{^registry_key, pid}] ->
+        if Process.alive?(pid) do
+          :ets.insert(:process_registry_backup, {registry_key, pid, metadata})
+          :ok
+        else
+          # Clean up dead process and return error
+          :ets.delete(:process_registry_backup, registry_key)
+          {:error, :not_found}
+        end
+
+      [] ->
+        {:error, :not_found}
+    end
+  end
+
+  # Handle invalid metadata
+  def update_metadata(_namespace, _service, _metadata), do: {:error, :invalid_metadata}
+
+  @doc """
   List all services registered in a namespace.
 
   ## Parameters
@@ -334,14 +526,99 @@ defmodule Foundation.ProcessRegistry do
     # Use tab2list to avoid match specification issues
     backup_services =
       :ets.tab2list(:process_registry_backup)
-      |> Enum.filter(fn {{entry_namespace, _service}, pid} ->
-        entry_namespace == namespace and Process.alive?(pid)
+      |> Enum.filter(fn
+        {{entry_namespace, _service}, pid, _metadata} ->
+          entry_namespace == namespace and Process.alive?(pid)
+
+        # Handle legacy 2-tuple format
+        {{entry_namespace, _service}, pid} ->
+          entry_namespace == namespace and Process.alive?(pid)
       end)
-      |> Enum.map(fn {{_namespace, service}, pid} -> {service, pid} end)
+      |> Enum.map(fn
+        {{_namespace, service}, pid, _metadata} -> {service, pid}
+        {{_namespace, service}, pid} -> {service, pid}
+      end)
       |> Enum.into(%{})
 
     # Merge both sources, with backup table taking precedence for conflicts
     Map.merge(registry_services, backup_services)
+  end
+
+  @doc """
+  Get all registered services with their metadata for a namespace.
+
+  ## Parameters
+  - `namespace`: The namespace to get services for
+
+  ## Returns
+  - Map of service_name => metadata
+
+  ## Examples
+
+      iex> ProcessRegistry.list_services_with_metadata(:production)
+      %{
+        config_server: %{type: :singleton, priority: :high},
+        event_store: %{type: :worker, priority: :medium},
+        test_service: %{}
+      }
+  """
+  @spec list_services_with_metadata(namespace()) :: %{service_name() => map()}
+  def list_services_with_metadata(namespace) do
+    ensure_backup_registry()
+
+    # Get all services from backup table with metadata
+    :ets.tab2list(:process_registry_backup)
+    |> Enum.filter(fn
+      {{entry_namespace, _service}, pid, _metadata} ->
+        entry_namespace == namespace and Process.alive?(pid)
+
+      # Handle legacy 2-tuple format
+      {{entry_namespace, _service}, pid} ->
+        entry_namespace == namespace and Process.alive?(pid)
+    end)
+    |> Enum.map(fn
+      {{_namespace, service}, _pid, metadata} -> {service, metadata}
+      {{_namespace, service}, _pid} -> {service, %{}}
+    end)
+    |> Enum.into(%{})
+  end
+
+  @doc """
+  Find services in a namespace that match a metadata predicate.
+
+  ## Parameters
+  - `namespace`: The namespace to search in
+  - `predicate_fn`: Function that takes metadata and returns true/false
+
+  ## Returns
+  - List of {service_name, pid, metadata} tuples for matching services
+
+  ## Examples
+
+      iex> workers = ProcessRegistry.find_services_by_metadata(:production, fn meta ->
+      ...>   meta[:type] == :worker
+      ...> end)
+      [{:worker1, #PID<0.123.0>, %{type: :worker, priority: :high}}]
+  """
+  @spec find_services_by_metadata(namespace(), (map() -> boolean())) :: [
+          {service_name(), pid(), map()}
+        ]
+  def find_services_by_metadata(namespace, predicate_fn) when is_function(predicate_fn, 1) do
+    ensure_backup_registry()
+
+    :ets.tab2list(:process_registry_backup)
+    |> Enum.filter(fn
+      {{entry_namespace, _service}, pid, metadata} ->
+        entry_namespace == namespace and Process.alive?(pid) and predicate_fn.(metadata)
+
+      # Handle legacy 2-tuple format
+      {{entry_namespace, _service}, pid} ->
+        entry_namespace == namespace and Process.alive?(pid) and predicate_fn.(%{})
+    end)
+    |> Enum.map(fn
+      {{_namespace, service}, pid, metadata} -> {service, pid, metadata}
+      {{_namespace, service}, pid} -> {service, pid, %{}}
+    end)
   end
 
   @doc """
@@ -446,10 +723,18 @@ defmodule Foundation.ProcessRegistry do
         _ ->
           # Use tab2list instead of select to avoid match specification issues
           :ets.tab2list(:process_registry_backup)
-          |> Enum.filter(fn {{entry_namespace, _service}, _pid} ->
-            entry_namespace == namespace
+          |> Enum.filter(fn
+            {{entry_namespace, _service}, _pid, _metadata} ->
+              entry_namespace == namespace
+
+            # Handle legacy 2-tuple format
+            {{entry_namespace, _service}, _pid} ->
+              entry_namespace == namespace
           end)
-          |> Enum.map(fn {{_namespace, _service}, pid} -> pid end)
+          |> Enum.map(fn
+            {{_namespace, _service}, pid, _metadata} -> pid
+            {{_namespace, _service}, pid} -> pid
+          end)
       end
 
     # Terminate each process more safely to avoid test process termination
@@ -495,13 +780,27 @@ defmodule Foundation.ProcessRegistry do
           all_entries = :ets.tab2list(:process_registry_backup)
 
           keys_to_delete =
-            for {{entry_namespace, service}, pid} <- all_entries,
-                entry_namespace == namespace do
-              # Only delete if process is actually dead
-              if Process.alive?(pid) do
-                nil
-              else
-                {entry_namespace, service}
+            for entry <- all_entries do
+              case entry do
+                {{entry_namespace, service}, pid, _metadata} when entry_namespace == namespace ->
+                  # Only delete if process is actually dead
+                  if Process.alive?(pid) do
+                    nil
+                  else
+                    {entry_namespace, service}
+                  end
+
+                # Handle legacy 2-tuple format
+                {{entry_namespace, service}, pid} when entry_namespace == namespace ->
+                  # Only delete if process is actually dead
+                  if Process.alive?(pid) do
+                    nil
+                  else
+                    {entry_namespace, service}
+                  end
+
+                _ ->
+                  nil
               end
             end
             |> Enum.reject(&is_nil/1)
@@ -569,11 +868,17 @@ defmodule Foundation.ProcessRegistry do
       |> Enum.map(fn {namespace, service} -> {namespace, service} end)
 
     # Get all entries from backup table using tab2list (simpler and more reliable)
-    # Backup table stores: {{namespace, service}, pid}
+    # Backup table stores: {{namespace, service}, pid, metadata} or {{namespace, service}, pid} (legacy)
     backup_services =
       :ets.tab2list(:process_registry_backup)
-      |> Enum.filter(fn {{_namespace, _service}, pid} -> Process.alive?(pid) end)
-      |> Enum.map(fn {{namespace, service}, _pid} -> {namespace, service} end)
+      |> Enum.filter(fn
+        {{_namespace, _service}, pid, _metadata} -> Process.alive?(pid)
+        {{_namespace, _service}, pid} -> Process.alive?(pid)
+      end)
+      |> Enum.map(fn
+        {{namespace, service}, _pid, _metadata} -> {namespace, service}
+        {{namespace, service}, _pid} -> {namespace, service}
+      end)
 
     # Combine services from both sources, removing duplicates
     all_services =
