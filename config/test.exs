@@ -2,7 +2,8 @@ import Config
 
 # Test environment configuration
 config :foundation,
-  test_mode: true,  # Enable test mode for test supervisor
+  environment: :test,   # Enable test environment checks
+  test_mode: true,      # Enable test mode for test supervisor
   debug_registry: false,
   ecto_repos: [],
   ai: [

@@ -876,11 +876,13 @@ defmodule Foundation.Application do
         }
       )
 
-      # Log health issues
-      if health_result.overall_health != :healthy do
-        Logger.warning("Application health: #{health_result.overall_health}")
-        Logger.warning("Failed services: #{inspect(health_result.failed_services)}")
-        Logger.warning("Degraded services: #{inspect(health_result.degraded_services)}")
+      # Log health issues (only in non-test environments to reduce noise)
+      unless Application.get_env(:foundation, :environment) == :test do
+        if health_result.overall_health != :healthy do
+          Logger.warning("Application health: #{health_result.overall_health}")
+          Logger.warning("Failed services: #{inspect(health_result.failed_services)}")
+          Logger.warning("Degraded services: #{inspect(health_result.degraded_services)}")
+        end
       end
     rescue
       error ->
@@ -897,7 +899,9 @@ defmodule Foundation.Application do
       unmet_dependencies = find_unmet_dependencies()
 
       if not Enum.empty?(unmet_dependencies) do
-        Logger.warning("Services with unmet dependencies: #{inspect(unmet_dependencies)}")
+        unless Application.get_env(:foundation, :environment) == :test do
+          Logger.warning("Services with unmet dependencies: #{inspect(unmet_dependencies)}")
+        end
 
         # Emit dependency warning
         Foundation.Telemetry.emit_counter(
