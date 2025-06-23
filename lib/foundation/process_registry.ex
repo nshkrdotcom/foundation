@@ -498,10 +498,10 @@ defmodule Foundation.ProcessRegistry do
             for {{entry_namespace, service}, pid} <- all_entries,
                 entry_namespace == namespace do
               # Only delete if process is actually dead
-              if not Process.alive?(pid) do
-                {entry_namespace, service}
-              else
+              if Process.alive?(pid) do
                 nil
+              else
+                {entry_namespace, service}
               end
             end
             |> Enum.reject(&is_nil/1)

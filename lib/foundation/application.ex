@@ -360,36 +360,38 @@ defmodule Foundation.Application do
   end
 
   defp initialize_infrastructure do
-    try do
-      # Initialize Hammer configuration for rate limiting
-      case Application.get_env(:hammer, :backend) do
-        nil ->
-          Application.put_env(:hammer, :backend, {Hammer.Backend.ETS,
-           [
-             # 2 hours
-             expiry_ms: 60_000 * 60 * 2,
-             # 10 minutes
-             cleanup_interval_ms: 60_000 * 10
-           ]})
+    do_initialize_infrastructure()
+  rescue
+    exception ->
+      {:error, {:infrastructure_init_exception, exception}}
+  end
 
-        _ ->
-          :ok
-      end
+  defp do_initialize_infrastructure do
+    # Initialize Hammer configuration for rate limiting
+    case Application.get_env(:hammer, :backend) do
+      nil ->
+        Application.put_env(:hammer, :backend, {Hammer.Backend.ETS,
+         [
+           # 2 hours
+           expiry_ms: 60_000 * 60 * 2,
+           # 10 minutes
+           cleanup_interval_ms: 60_000 * 10
+         ]})
 
-      # Ensure Fuse application is started for circuit breakers
-      case Application.ensure_all_started(:fuse) do
-        {:ok, _apps} -> :ok
-        {:error, reason} -> raise "Failed to start Fuse application: #{inspect(reason)}"
-      end
-
-      # Initialize coordination primitives infrastructure
-      Primitives.initialize_infrastructure()
-
-      :ok
-    rescue
-      exception ->
-        {:error, {:infrastructure_init_exception, exception}}
+      _ ->
+        :ok
     end
+
+    # Ensure Fuse application is started for circuit breakers
+    case Application.ensure_all_started(:fuse) do
+      {:ok, _apps} -> :ok
+      {:error, reason} -> raise "Failed to start Fuse application: #{inspect(reason)}"
+    end
+
+    # Initialize coordination primitives infrastructure
+    Primitives.initialize_infrastructure()
+
+    :ok
   end
 
   defp build_supervision_tree do

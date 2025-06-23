@@ -28,13 +28,11 @@ defmodule Foundation.Infrastructure.RateLimiter do
 
     # Serialize all rate limiting through GenServer to eliminate race conditions
     def hit(key, time_window_ms, limit, increment \\ 1) do
-      try do
-        GenServer.call(__MODULE__, {:check_rate, key, time_window_ms, limit, increment}, 5000)
-      rescue
-        _error ->
-          # Fallback to allow on any error
-          {:allow, 1}
-      end
+      GenServer.call(__MODULE__, {:check_rate, key, time_window_ms, limit, increment}, 5000)
+    rescue
+      _error ->
+        # Fallback to allow on any error
+        {:allow, 1}
     end
 
     defp ensure_table_exists(table_name) do
@@ -327,34 +325,32 @@ defmodule Foundation.Infrastructure.RateLimiter do
   """
   @spec reset(entity_id(), operation()) :: :ok | {:error, Error.t()}
   def reset(entity_id, operation) do
-    try do
-      # Emit telemetry for reset request
-      emit_telemetry(:bucket_reset, %{
-        entity_id: entity_id,
-        operation: operation
-      })
+    # Emit telemetry for reset request
+    emit_telemetry(:bucket_reset, %{
+      entity_id: entity_id,
+      operation: operation
+    })
 
-      # For now, we just log the reset attempt
-      # In a production implementation, you might want to use a different
-      # Hammer backend that supports bucket deletion
-      :ok
-    rescue
-      exception ->
-        error =
-          Error.new(
-            code: 6007,
-            error_type: :rate_limiter_exception,
-            message: "Exception resetting rate limiter: #{inspect(exception)}",
-            severity: :medium,
-            context: %{
-              entity_id: entity_id,
-              operation: operation,
-              exception: exception
-            }
-          )
+    # For now, we just log the reset attempt
+    # In a production implementation, you might want to use a different
+    # Hammer backend that supports bucket deletion
+    :ok
+  rescue
+    exception ->
+      error =
+        Error.new(
+          code: 6007,
+          error_type: :rate_limiter_exception,
+          message: "Exception resetting rate limiter: #{inspect(exception)}",
+          severity: :medium,
+          context: %{
+            entity_id: entity_id,
+            operation: operation,
+            exception: exception
+          }
+        )
 
-        {:error, error}
-    end
+      {:error, error}
   end
 
   @doc """
@@ -418,22 +414,20 @@ defmodule Foundation.Infrastructure.RateLimiter do
 
   @spec build_rate_key(entity_id(), operation()) :: String.t() | {:error, Error.t()}
   defp build_rate_key(entity_id, operation) do
-    try do
-      "foundation:#{entity_id}:#{operation}"
-    rescue
-      Protocol.UndefinedError ->
-        {:error,
-         Error.new(
-           code: 6008,
-           error_type: :validation_failed,
-           message: "Invalid entity_id or operation type",
-           severity: :medium,
-           context: %{
-             entity_id: entity_id,
-             operation: operation
-           }
-         )}
-    end
+    "foundation:#{entity_id}:#{operation}"
+  rescue
+    Protocol.UndefinedError ->
+      {:error,
+       Error.new(
+         code: 6008,
+         error_type: :validation_failed,
+         message: "Invalid entity_id or operation type",
+         severity: :medium,
+         context: %{
+           entity_id: entity_id,
+           operation: operation
+         }
+       )}
   end
 
   @spec emit_telemetry(atom(), map()) :: :ok

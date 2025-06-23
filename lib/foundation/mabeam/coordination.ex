@@ -663,44 +663,44 @@ defmodule Foundation.MABEAM.Coordination do
   end
 
   defp emit_coordination_start_event(protocol_name, agent_ids) do
-    try do
-      :telemetry.execute(
-        [:foundation, :mabeam, :coordination, :coordination_start],
-        %{count: 1},
-        %{protocol: protocol_name, agent_count: length(agent_ids)}
-      )
-    rescue
-      _ -> :ok
-    end
+    :telemetry.execute(
+      [:foundation, :mabeam, :coordination, :coordination_start],
+      %{count: 1},
+      %{protocol: protocol_name, agent_count: length(agent_ids)}
+    )
+  rescue
+    _ -> :ok
   end
 
   defp emit_telemetry_events(protocol_name, _agent_ids, result, duration) do
     # Emit coordination complete event
-    try do
-      :telemetry.execute(
-        [:foundation, :mabeam, :coordination, :coordination_complete],
-        %{duration: duration, count: 1},
-        %{protocol: protocol_name, result: elem(result, 0)}
-      )
-    rescue
-      _ -> :ok
-    end
+    :telemetry.execute(
+      [:foundation, :mabeam, :coordination, :coordination_complete],
+      %{duration: duration, count: 1},
+      %{protocol: protocol_name, result: elem(result, 0)}
+    )
+  rescue
+    _ -> :ok
+  end
 
+  defp emit_consensus_reached_event_if_success(result, protocol_name) do
     # Emit consensus reached event if applicable
     case result do
       {:ok, _} ->
-        try do
-          :telemetry.execute(
-            [:foundation, :mabeam, :coordination, :consensus_reached],
-            %{count: 1},
-            %{protocol: protocol_name}
-          )
-        rescue
-          _ -> :ok
-        end
+        emit_consensus_telemetry(protocol_name)
 
       _ ->
         :ok
     end
+  end
+
+  defp emit_consensus_telemetry(protocol_name) do
+    :telemetry.execute(
+      [:foundation, :mabeam, :coordination, :consensus_reached],
+      %{count: 1},
+      %{protocol: protocol_name}
+    )
+  rescue
+    _ -> :ok
   end
 end

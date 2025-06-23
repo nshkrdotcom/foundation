@@ -32,20 +32,18 @@ defmodule Foundation.Config.GracefulDegradation do
   Clean up the fallback system and remove ETS tables.
   """
   def cleanup_fallback_system do
-    try do
-      case :ets.info(@fallback_table) do
-        :undefined ->
-          :ok
+    case :ets.info(@fallback_table) do
+      :undefined ->
+        :ok
 
-        _ ->
-          :ets.delete(@fallback_table)
-          :ok
-      end
-    rescue
-      ArgumentError ->
-        # Table doesn't exist or already deleted
+      _ ->
+        :ets.delete(@fallback_table)
         :ok
     end
+  rescue
+    ArgumentError ->
+      # Table doesn't exist or already deleted
+      :ok
   end
 
   @doc """
@@ -169,31 +167,29 @@ defmodule Foundation.Config.GracefulDegradation do
   Get current cache statistics.
   """
   def get_cache_stats do
-    try do
-      size = :ets.info(@fallback_table, :size)
-      memory = :ets.info(@fallback_table, :memory)
+    size = :ets.info(@fallback_table, :size)
+    memory = :ets.info(@fallback_table, :memory)
 
-      # Count different types of entries
-      config_entries =
-        :ets.select_count(@fallback_table, [
-          {{{:config_cache, :"$1"}, :"$2", :"$3"}, [], [true]}
-        ])
+    # Count different types of entries
+    config_entries =
+      :ets.select_count(@fallback_table, [
+        {{{:config_cache, :"$1"}, :"$2", :"$3"}, [], [true]}
+      ])
 
-      pending_entries =
-        :ets.select_count(@fallback_table, [
-          {{{:pending_update, :"$1"}, :"$2", :"$3"}, [], [true]}
-        ])
+    pending_entries =
+      :ets.select_count(@fallback_table, [
+        {{{:pending_update, :"$1"}, :"$2", :"$3"}, [], [true]}
+      ])
 
-      %{
-        total_entries: size,
-        memory_words: memory,
-        config_cache_entries: config_entries,
-        pending_update_entries: pending_entries
-      }
-    catch
-      :error, :badarg ->
-        %{error: :table_not_found}
-    end
+    %{
+      total_entries: size,
+      memory_words: memory,
+      config_cache_entries: config_entries,
+      pending_update_entries: pending_entries
+    }
+  catch
+    :error, :badarg ->
+      %{error: :table_not_found}
   end
 
   # Private helper functions
@@ -255,37 +251,35 @@ defmodule Foundation.Events.GracefulDegradation do
   Create an event safely, handling problematic data.
   """
   def new_event_safe(event_type, data) do
-    try do
-      # Try normal event creation first
-      case Events.new_event(event_type, data) do
-        {:ok, event} ->
-          event
+    # Try normal event creation first
+    case Events.new_event(event_type, data) do
+      {:ok, event} ->
+        event
 
-        other ->
-          Logger.warning("Unexpected result from Events.new_event: #{inspect(other)}")
-          create_minimal_event(event_type, data)
-      end
-    rescue
-      error ->
-        Logger.warning("Primary event creation failed: #{Exception.message(error)}")
-        # Fallback: create event with sanitized data
-        sanitized_data = sanitize_data(data)
-
-        try do
-          case Events.new_event(event_type, sanitized_data) do
-            {:ok, event} -> event
-            _other -> create_minimal_event(event_type, data)
-          end
-        rescue
-          fallback_error ->
-            Logger.error(
-              "Fallback event creation also failed: #{Exception.message(fallback_error)}"
-            )
-
-            # Last resort: create minimal event
-            create_minimal_event(event_type, data)
-        end
+      other ->
+        Logger.warning("Unexpected result from Events.new_event: #{inspect(other)}")
+        create_minimal_event(event_type, data)
     end
+  rescue
+    error ->
+      Logger.warning("Primary event creation failed: #{Exception.message(error)}")
+      # Fallback: create event with sanitized data
+      create_fallback_event(event_type, data)
+  end
+
+  defp create_fallback_event(event_type, data) do
+    sanitized_data = sanitize_data(data)
+
+    case Events.new_event(event_type, sanitized_data) do
+      {:ok, event} -> event
+      _other -> create_minimal_event(event_type, data)
+    end
+  rescue
+    fallback_error ->
+      Logger.error("Fallback event creation also failed: #{Exception.message(fallback_error)}")
+
+      # Last resort: create minimal event
+      create_minimal_event(event_type, data)
   end
 
   @doc """
@@ -295,69 +289,61 @@ defmodule Foundation.Events.GracefulDegradation do
     Logger.debug("🚀 GracefulDegradation.serialize_safe called")
     Logger.debug("📥 Input event: #{inspect(event)}")
 
-    try do
-      # Try normal serialization first
-      case Events.serialize(event) do
-        {:ok, binary} ->
-          Logger.debug("✅ Events.serialize succeeded - binary size: #{byte_size(binary)}")
-          Logger.debug("📤 Final serialize_safe result: #{inspect(binary, limit: 50)}")
-          binary
+    # Try normal serialization first
+    case Events.serialize(event) do
+      {:ok, binary} ->
+        Logger.debug("✅ Events.serialize succeeded - binary size: #{byte_size(binary)}")
+        Logger.debug("📤 Final serialize_safe result: #{inspect(binary, limit: 50)}")
+        binary
 
-        {:error, _reason} ->
-          Logger.warning("Events.serialize returned error, using fallback")
-          fallback_serialize(event)
-      end
-    rescue
-      error ->
-        Logger.warning("Primary serialization failed: #{Exception.message(error)}")
-        # Fallback to JSON
+      {:error, _reason} ->
+        Logger.warning("Events.serialize returned error, using fallback")
         fallback_serialize(event)
     end
+  rescue
+    error ->
+      Logger.warning("Primary serialization failed: #{Exception.message(error)}")
+      # Fallback to JSON
+      fallback_serialize(event)
   end
 
   @doc """
   Deserialize event safely with fallback handling.
   """
   def deserialize_safe(binary) when is_binary(binary) do
-    try do
-      # Try normal deserialization first
-      Events.deserialize(binary)
-    rescue
-      error ->
-        Logger.warning("Primary deserialization failed: #{Exception.message(error)}")
-        # Try JSON fallback
-        fallback_deserialize(binary)
-    end
+    # Try normal deserialization first
+    Events.deserialize(binary)
+  rescue
+    error ->
+      Logger.warning("Primary deserialization failed: #{Exception.message(error)}")
+      # Try JSON fallback
+      fallback_deserialize(binary)
   end
 
   @doc """
   Store event safely with fallback mechanisms.
   """
   def store_safe(event) do
-    try do
-      # Try normal storage first
-      Events.store(event)
-    rescue
-      error ->
-        Logger.warning("Primary event storage failed: #{Exception.message(error)}")
-        # Fallback: store in memory buffer
-        store_in_fallback_buffer(event)
-    end
+    # Try normal storage first
+    Events.store(event)
+  rescue
+    error ->
+      Logger.warning("Primary event storage failed: #{Exception.message(error)}")
+      # Fallback: store in memory buffer
+      store_in_fallback_buffer(event)
   end
 
   @doc """
   Query events safely with graceful degradation.
   """
   def query_safe(query_params) do
-    try do
-      # Try normal query first
-      Events.query(query_params)
-    rescue
-      error ->
-        Logger.warning("Primary event query failed: #{Exception.message(error)}")
-        # Fallback: return empty results with warning
-        {:ok, [], %{warning: "Service temporarily unavailable"}}
-    end
+    # Try normal query first
+    Events.query(query_params)
+  rescue
+    error ->
+      Logger.warning("Primary event query failed: #{Exception.message(error)}")
+      # Fallback: return empty results with warning
+      {:ok, [], %{warning: "Service temporarily unavailable"}}
   end
 
   # Private helper functions
@@ -419,44 +405,40 @@ defmodule Foundation.Events.GracefulDegradation do
   end
 
   defp fallback_serialize(event) do
-    try do
-      # Convert to JSON-safe format
-      json_safe_event = make_json_safe(event)
-      json_data = Jason.encode!(json_safe_event)
-      :erlang.term_to_binary({:json_fallback, json_data})
-    rescue
-      json_error ->
-        Logger.error("JSON fallback serialization failed: #{Exception.message(json_error)}")
-        # Absolute fallback: minimal binary representation
-        minimal_data = %{
-          event_type: event.event_type,
-          timestamp: event.timestamp,
-          error: "Serialization failed"
-        }
+    # Convert to JSON-safe format
+    json_safe_event = make_json_safe(event)
+    json_data = Jason.encode!(json_safe_event)
+    :erlang.term_to_binary({:json_fallback, json_data})
+  rescue
+    json_error ->
+      Logger.error("JSON fallback serialization failed: #{Exception.message(json_error)}")
+      # Absolute fallback: minimal binary representation
+      minimal_data = %{
+        event_type: event.event_type,
+        timestamp: event.timestamp,
+        error: "Serialization failed"
+      }
 
-        :erlang.term_to_binary({:minimal_fallback, minimal_data})
-    end
+      :erlang.term_to_binary({:minimal_fallback, minimal_data})
   end
 
   defp fallback_deserialize(binary) do
-    try do
-      case :erlang.binary_to_term(binary) do
-        {:json_fallback, json_data} ->
-          event_data = Jason.decode!(json_data, keys: :atoms)
-          {:ok, struct(Event, event_data)}
+    case :erlang.binary_to_term(binary) do
+      {:json_fallback, json_data} ->
+        event_data = Jason.decode!(json_data, keys: :atoms)
+        {:ok, struct(Event, event_data)}
 
-        {:minimal_fallback, minimal_data} ->
-          {:ok, %{fallback_data: minimal_data, warning: "Minimal fallback used"}}
+      {:minimal_fallback, minimal_data} ->
+        {:ok, %{fallback_data: minimal_data, warning: "Minimal fallback used"}}
 
-        other ->
-          Logger.warning("Unknown fallback format: #{inspect(other)}")
-          {:error, :unknown_fallback_format}
-      end
-    rescue
-      error ->
-        Logger.error("Fallback deserialization failed: #{Exception.message(error)}")
-        {:error, :deserialization_failed}
+      other ->
+        Logger.warning("Unknown fallback format: #{inspect(other)}")
+        {:error, :unknown_fallback_format}
     end
+  rescue
+    error ->
+      Logger.error("Fallback deserialization failed: #{Exception.message(error)}")
+      {:error, :deserialization_failed}
   end
 
   defp make_json_safe(%Event{} = event) do

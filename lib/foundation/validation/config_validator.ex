@@ -17,9 +17,8 @@ defmodule Foundation.Validation.ConfigValidator do
          :ok <- validate_capture_config(config.capture),
          :ok <- validate_storage_config(config.storage),
          :ok <- validate_interface_config(config.interface),
-         :ok <- validate_dev_config(config.dev),
-         :ok <- validate_infrastructure_config(config.infrastructure) do
-      :ok
+         :ok <- validate_dev_config(config.dev) do
+      validate_infrastructure_config(config.infrastructure)
     end
   end
 
@@ -29,9 +28,8 @@ defmodule Foundation.Validation.ConfigValidator do
   @spec validate_ai_config(map()) :: :ok | {:error, Error.t()}
   def validate_ai_config(%{provider: provider} = config) do
     with :ok <- validate_provider(provider),
-         :ok <- validate_ai_analysis(config.analysis),
-         :ok <- validate_ai_planning(config.planning) do
-      :ok
+         :ok <- validate_ai_analysis(config.analysis) do
+      validate_ai_planning(config.planning)
     end
   end
 
@@ -41,9 +39,8 @@ defmodule Foundation.Validation.ConfigValidator do
   @spec validate_capture_config(map()) :: :ok | {:error, Error.t()}
   def validate_capture_config(%{ring_buffer: rb, processing: proc, vm_tracing: vt}) do
     with :ok <- validate_ring_buffer(rb),
-         :ok <- validate_processing(proc),
-         :ok <- validate_vm_tracing(vt) do
-      :ok
+         :ok <- validate_processing(proc) do
+      validate_vm_tracing(vt)
     end
   end
 
@@ -53,9 +50,8 @@ defmodule Foundation.Validation.ConfigValidator do
   @spec validate_storage_config(map()) :: :ok | {:error, Error.t()}
   def validate_storage_config(%{hot: hot, warm: warm, cold: cold}) do
     with :ok <- validate_hot_storage(hot),
-         :ok <- validate_warm_storage(warm),
-         :ok <- validate_cold_storage(cold) do
-      :ok
+         :ok <- validate_warm_storage(warm) do
+      validate_cold_storage(cold)
     end
   end
 
@@ -106,9 +102,8 @@ defmodule Foundation.Validation.ConfigValidator do
         connection_pool: connection_pool
       }) do
     with :ok <- validate_rate_limiting_config(rate_limiting),
-         :ok <- validate_circuit_breaker_config(circuit_breaker),
-         :ok <- validate_connection_pool_config(connection_pool) do
-      :ok
+         :ok <- validate_circuit_breaker_config(circuit_breaker) do
+      validate_connection_pool_config(connection_pool)
     end
   end
 

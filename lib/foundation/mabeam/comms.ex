@@ -442,21 +442,19 @@ defmodule Foundation.MABEAM.Comms do
   end
 
   defp send_request_to_agent(agent_pid, message, timeout) do
-    try do
-      response = GenServer.call(agent_pid, message, timeout)
+    response = GenServer.call(agent_pid, message, timeout)
 
-      case response do
-        {:error, reason} -> {:error, reason}
-        other -> {:ok, other}
-      end
-    rescue
-      _e -> {:error, :agent_crashed}
-    catch
-      :exit, {:timeout, _} -> {:error, :timeout}
-      :exit, {:noreply, _} -> {:error, :agent_crashed}
-      :exit, {reason, _} when reason in [:normal, :shutdown] -> {:error, :agent_crashed}
-      :exit, _reason -> {:error, :agent_crashed}
+    case response do
+      {:error, reason} -> {:error, reason}
+      other -> {:ok, other}
     end
+  rescue
+    _e -> {:error, :agent_crashed}
+  catch
+    :exit, {:timeout, _} -> {:error, :timeout}
+    :exit, {:noreply, _} -> {:error, :agent_crashed}
+    :exit, {reason, _} when reason in [:normal, :shutdown] -> {:error, :agent_crashed}
+    :exit, _reason -> {:error, :agent_crashed}
   end
 
   defp update_stats_and_emit_telemetry(state, result, start_time, agent_id) do

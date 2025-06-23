@@ -416,21 +416,19 @@ defmodule Foundation.Coordination.Primitives do
   """
   @spec increment_counter(term(), integer()) :: {:ok, integer()} | {:error, term()}
   def increment_counter(counter_id, increment \\ 1) do
-    try do
-      case do_increment_counter(counter_id, increment) do
-        {:ok, new_value} ->
-          emit_counter_incremented_event(counter_id, increment, new_value)
-          {:ok, new_value}
+    case do_increment_counter(counter_id, increment) do
+      {:ok, new_value} ->
+        emit_counter_incremented_event(counter_id, increment, new_value)
+        {:ok, new_value}
 
-        {:error, reason} ->
-          emit_counter_error_event(counter_id, reason)
-          {:error, reason}
-      end
-    rescue
-      error ->
-        emit_counter_exception_event(counter_id, error)
-        {:error, {:exception, error}}
+      {:error, reason} ->
+        emit_counter_error_event(counter_id, reason)
+        {:error, reason}
     end
+  rescue
+    error ->
+      emit_counter_exception_event(counter_id, error)
+      {:error, {:exception, error}}
   end
 
   @doc """
@@ -445,18 +443,16 @@ defmodule Foundation.Coordination.Primitives do
   """
   @spec get_counter(term()) :: {:ok, integer()} | {:error, term()}
   def get_counter(counter_id) do
-    try do
-      case do_get_counter(counter_id) do
-        {:ok, value} ->
-          {:ok, value}
+    case do_get_counter(counter_id) do
+      {:ok, value} ->
+        {:ok, value}
 
-        {:error, reason} ->
-          {:error, reason}
-      end
-    rescue
-      error ->
-        {:error, {:exception, error}}
+      {:error, reason} ->
+        {:error, reason}
     end
+  rescue
+    error ->
+      {:error, {:exception, error}}
   end
 
   ## Private Implementation Functions

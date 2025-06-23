@@ -45,9 +45,8 @@ defmodule Foundation.Validation.EventValidator do
   @spec validate(Event.t()) :: :ok | {:error, Error.t()}
   def validate(%Event{} = event) do
     with :ok <- validate_required_fields(event),
-         :ok <- validate_field_types(event),
-         :ok <- validate_data_size(event) do
-      :ok
+         :ok <- validate_field_types(event) do
+      validate_data_size(event)
     end
   end
 

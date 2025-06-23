@@ -425,9 +425,7 @@ defmodule Foundation.MABEAM.ProcessRegistry do
 
   defp validate_and_register_agent(config, state) do
     # Basic type check first
-    if not is_map(config) do
-      {:error, {:invalid_config, "must be a map"}}
-    else
+    if is_map(config) do
       case Types.validate_agent_config(config) do
         {:ok, validated_config} ->
           # Create agent entry
@@ -451,6 +449,8 @@ defmodule Foundation.MABEAM.ProcessRegistry do
         {:error, reason} ->
           {:error, reason}
       end
+    else
+      {:error, {:invalid_config, "must be a map"}}
     end
   end
 

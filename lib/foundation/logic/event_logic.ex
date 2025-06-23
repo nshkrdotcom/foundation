@@ -133,21 +133,19 @@ defmodule Foundation.Logic.EventLogic do
   """
   @spec deserialize_event(binary()) :: {:ok, Event.t()} | {:error, Error.t()}
   def deserialize_event(binary) when is_binary(binary) do
-    try do
-      event = :erlang.binary_to_term(binary)
+    event = :erlang.binary_to_term(binary)
 
-      case EventValidator.validate(event) do
-        :ok -> {:ok, event}
-        {:error, _} = error -> error
-      end
-    rescue
-      error ->
-        create_error(
-          :deserialization_failed,
-          "Failed to deserialize event",
-          %{original_error: error, binary_size: byte_size(binary)}
-        )
+    case EventValidator.validate(event) do
+      :ok -> {:ok, event}
+      {:error, _} = error -> error
     end
+  rescue
+    error ->
+      create_error(
+        :deserialization_failed,
+        "Failed to deserialize event",
+        %{original_error: error, binary_size: byte_size(binary)}
+      )
   end
 
   @doc """

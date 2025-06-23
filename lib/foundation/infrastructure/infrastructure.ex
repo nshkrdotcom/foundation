@@ -100,30 +100,28 @@ defmodule Foundation.Infrastructure do
   """
   @spec get_infrastructure_status() :: {:ok, map()} | {:error, term()}
   def get_infrastructure_status do
-    try do
-      fuse_status =
-        case Process.whereis(:fuse_sup) do
-          nil -> :not_started
-          pid when is_pid(pid) -> :running
-        end
+    fuse_status =
+      case Process.whereis(:fuse_sup) do
+        nil -> :not_started
+        pid when is_pid(pid) -> :running
+      end
 
-      hammer_status =
-        case Application.get_env(:hammer, :backend) do
-          nil -> :not_configured
-          _ -> :configured
-        end
+    hammer_status =
+      case Application.get_env(:hammer, :backend) do
+        nil -> :not_configured
+        _ -> :configured
+      end
 
-      status = %{
-        fuse: fuse_status,
-        hammer: hammer_status,
-        timestamp: System.system_time(:millisecond)
-      }
+    status = %{
+      fuse: fuse_status,
+      hammer: hammer_status,
+      timestamp: System.system_time(:millisecond)
+    }
 
-      {:ok, status}
-    rescue
-      exception ->
-        {:error, {:infrastructure_status_error, exception}}
-    end
+    {:ok, status}
+  rescue
+    exception ->
+      {:error, {:infrastructure_status_error, exception}}
   end
 
   @doc """
@@ -491,9 +489,8 @@ defmodule Foundation.Infrastructure do
   @spec validate_individual_configs(protection_config()) :: :ok | {:error, term()}
   defp validate_individual_configs(config) do
     with :ok <- validate_circuit_breaker_config(config.circuit_breaker),
-         :ok <- validate_rate_limiter_config(config.rate_limiter),
-         :ok <- validate_connection_pool_config(config.connection_pool) do
-      :ok
+         :ok <- validate_rate_limiter_config(config.rate_limiter) do
+      validate_connection_pool_config(config.connection_pool)
     end
   end
 
@@ -580,45 +577,43 @@ defmodule Foundation.Infrastructure do
 
   @spec initialize_all_infra_components(map()) :: {:ok, []} | {:error, term()}
   defp initialize_all_infra_components(config) do
-    try do
-      # Initialize Hammer configuration if not already done
-      case Application.get_env(:hammer, :backend) do
-        nil ->
-          Application.put_env(:hammer, :backend, {Hammer.Backend.ETS,
-           [
-             # 2 hours
-             expiry_ms: 60_000 * 60 * 2,
-             # 10 minutes
-             cleanup_interval_ms: 60_000 * 10
-           ]})
+    # Initialize Hammer configuration if not already done
+    case Application.get_env(:hammer, :backend) do
+      nil ->
+        Application.put_env(:hammer, :backend, {Hammer.Backend.ETS,
+         [
+           # 2 hours
+           expiry_ms: 60_000 * 60 * 2,
+           # 10 minutes
+           cleanup_interval_ms: 60_000 * 10
+         ]})
 
-        _ ->
-          :ok
-      end
-
-      # Ensure Fuse application is started
-      case Application.ensure_all_started(:fuse) do
-        {:ok, _apps} ->
-          :ok
-
-        {:error, reason} ->
-          raise "Failed to start Fuse application: #{inspect(reason)}"
-      end
-
-      emit_telemetry(
-        :infrastructure_initialized,
-        %{
-          config: config,
-          components: [:fuse, :hammer]
-        },
-        %{}
-      )
-
-      {:ok, []}
-    rescue
-      exception ->
-        {:error, {:infrastructure_init_failed, exception}}
+      _ ->
+        :ok
     end
+
+    # Ensure Fuse application is started
+    case Application.ensure_all_started(:fuse) do
+      {:ok, _apps} ->
+        :ok
+
+      {:error, reason} ->
+        raise "Failed to start Fuse application: #{inspect(reason)}"
+    end
+
+    emit_telemetry(
+      :infrastructure_initialized,
+      %{
+        config: config,
+        components: [:fuse, :hammer]
+      },
+      %{}
+    )
+
+    {:ok, []}
+  rescue
+    exception ->
+      {:error, {:infrastructure_init_failed, exception}}
   end
 
   # Helper functions for circuit breaker initialization
@@ -650,9 +645,8 @@ defmodule Foundation.Infrastructure do
 
   @spec validate_circuit_breaker_init_config(term()) :: :ok | {:error, Error.t()}
   defp validate_circuit_breaker_init_config(config) when is_map(config) do
-    with :ok <- validate_failure_threshold(config),
-         :ok <- validate_recovery_time(config) do
-      :ok
+    with :ok <- validate_failure_threshold(config) do
+      validate_recovery_time(config)
     end
   end
 

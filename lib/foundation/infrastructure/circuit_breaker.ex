@@ -312,39 +312,37 @@ defmodule Foundation.Infrastructure.CircuitBreaker do
   """
   @spec get_status(fuse_name()) :: :ok | :blown | {:error, Error.t()}
   def get_status(name) when is_atom(name) do
-    try do
-      case :fuse.ask(name, :sync) do
-        :ok ->
-          :ok
+    case :fuse.ask(name, :sync) do
+      :ok ->
+        :ok
 
-        :blown ->
-          :blown
+      :blown ->
+        :blown
 
-        {:error, :not_found} ->
-          error =
-            Error.new(
-              code: 5007,
-              error_type: :circuit_breaker_not_found,
-              message: "Circuit breaker #{name} not found",
-              severity: :medium,
-              context: %{fuse_name: name}
-            )
-
-          {:error, error}
-      end
-    rescue
-      exception ->
+      {:error, :not_found} ->
         error =
           Error.new(
-            code: 5008,
-            error_type: :circuit_breaker_exception,
-            message: "Exception checking circuit breaker status: #{inspect(exception)}",
+            code: 5007,
+            error_type: :circuit_breaker_not_found,
+            message: "Circuit breaker #{name} not found",
             severity: :medium,
-            context: %{fuse_name: name, exception: exception}
+            context: %{fuse_name: name}
           )
 
         {:error, error}
     end
+  rescue
+    exception ->
+      error =
+        Error.new(
+          code: 5008,
+          error_type: :circuit_breaker_exception,
+          message: "Exception checking circuit breaker status: #{inspect(exception)}",
+          severity: :medium,
+          context: %{fuse_name: name, exception: exception}
+        )
+
+      {:error, error}
   end
 
   def get_status(name) do
@@ -371,37 +369,35 @@ defmodule Foundation.Infrastructure.CircuitBreaker do
   """
   @spec reset(fuse_name()) :: :ok | {:error, Error.t()}
   def reset(name) when is_atom(name) do
-    try do
-      case :fuse.reset(name) do
-        :ok ->
-          emit_telemetry(:state_change, %{name: name, new_state: :reset})
-          :ok
+    case :fuse.reset(name) do
+      :ok ->
+        emit_telemetry(:state_change, %{name: name, new_state: :reset})
+        :ok
 
-        {:error, :not_found} ->
-          error =
-            Error.new(
-              code: 5013,
-              error_type: :circuit_breaker_not_found,
-              message: "Cannot reset circuit breaker #{name}: not found",
-              severity: :medium,
-              context: %{fuse_name: name}
-            )
-
-          {:error, error}
-      end
-    rescue
-      exception ->
+      {:error, :not_found} ->
         error =
           Error.new(
-            code: 5014,
-            error_type: :circuit_breaker_exception,
-            message: "Exception resetting circuit breaker: #{inspect(exception)}",
+            code: 5013,
+            error_type: :circuit_breaker_not_found,
+            message: "Cannot reset circuit breaker #{name}: not found",
             severity: :medium,
-            context: %{fuse_name: name, exception: exception}
+            context: %{fuse_name: name}
           )
 
         {:error, error}
     end
+  rescue
+    exception ->
+      error =
+        Error.new(
+          code: 5014,
+          error_type: :circuit_breaker_exception,
+          message: "Exception resetting circuit breaker: #{inspect(exception)}",
+          severity: :medium,
+          context: %{fuse_name: name, exception: exception}
+        )
+
+      {:error, error}
   end
 
   # Private helper functions

@@ -32,9 +32,8 @@ defmodule Foundation.MABEAM.TestHelpers do
       supervision: %{strategy: :one_for_one, max_restarts: 3, max_seconds: 60}
     }
 
-    with :ok <- AgentRegistry.register_agent(agent_id, config),
-         {:ok, pid} <- AgentRegistry.start_agent(agent_id) do
-      {:ok, pid}
+    with :ok <- AgentRegistry.register_agent(agent_id, config) do
+      AgentRegistry.start_agent(agent_id)
     end
   end
 

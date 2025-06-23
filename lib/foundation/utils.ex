@@ -106,22 +106,20 @@ defmodule Foundation.Utils do
   """
   @spec truncate_if_large(term(), pos_integer()) :: term()
   def truncate_if_large(data, max_size) do
-    try do
-      size = :erlang.external_size(data)
+    size = :erlang.external_size(data)
 
-      if size > max_size do
-        %{
-          truncated: true,
-          original_size: size,
-          preview: truncate_preview(data),
-          timestamp: DateTime.utc_now()
-        }
-      else
-        data
-      end
-    rescue
-      _ -> data
+    if size > max_size do
+      %{
+        truncated: true,
+        original_size: size,
+        preview: truncate_preview(data),
+        timestamp: DateTime.utc_now()
+      }
+    else
+      data
     end
+  rescue
+    _ -> data
   end
 
   @doc """
@@ -135,11 +133,9 @@ defmodule Foundation.Utils do
   """
   @spec deep_size(term()) :: non_neg_integer()
   def deep_size(term) do
-    try do
-      :erlang.external_size(term)
-    rescue
-      _ -> 0
-    end
+    :erlang.external_size(term)
+  rescue
+    _ -> 0
   end
 
   @doc """
@@ -155,11 +151,9 @@ defmodule Foundation.Utils do
   """
   @spec safe_inspect(term()) :: String.t()
   def safe_inspect(term) do
-    try do
-      inspect(term, limit: 100, printable_limit: 100)
-    rescue
-      _ -> "<uninspectable>"
-    end
+    inspect(term, limit: 100, printable_limit: 100)
+  rescue
+    _ -> "<uninspectable>"
   end
 
   @doc """

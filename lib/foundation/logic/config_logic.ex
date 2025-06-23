@@ -100,18 +100,7 @@ defmodule Foundation.Logic.ConfigLogic do
   @spec get_config_value(Config.t(), config_path()) :: {:ok, config_value()} | {:error, Error.t()}
   def get_config_value(config, path) when is_list(path) do
     # First validate path security
-    if not validate_path_security(path) do
-      {:error,
-       Error.new(
-         code: 1000,
-         error_type: :security_violation,
-         message: "Configuration path contains potentially malicious components: #{inspect(path)}",
-         context: %{path: path, reason: :malicious_path},
-         category: :config,
-         subcategory: :security,
-         severity: :high
-       )}
-    else
+    if validate_path_security(path) do
       try do
         # We need to check if the path exists, not just if the value is nil
         case get_nested_value(config, path) do
@@ -145,6 +134,17 @@ defmodule Foundation.Logic.ConfigLogic do
              severity: :medium
            )}
       end
+    else
+      {:error,
+       Error.new(
+         code: 1000,
+         error_type: :security_violation,
+         message: "Configuration path contains potentially malicious components: #{inspect(path)}",
+         context: %{path: path, reason: :malicious_path},
+         category: :config,
+         subcategory: :security,
+         severity: :high
+       )}
     end
   end
 

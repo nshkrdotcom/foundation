@@ -281,9 +281,8 @@ defmodule Foundation.BEAM.Processes do
 
   defp validate_config(config) do
     with :ok <- validate_config_structure(config),
-         :ok <- validate_coordinator_config(config),
-         :ok <- validate_workers_config(config) do
-      :ok
+         :ok <- validate_coordinator_config(config) do
+      validate_workers_config(config)
     end
   end
 
