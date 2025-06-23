@@ -7,6 +7,7 @@ defmodule Foundation.TestHelpers do
   """
 
   alias Foundation.{Config, ErrorContext, Events, Utils}
+  alias Foundation.BEAM.Processes
   alias Foundation.Services.{ConfigServer, EventStore, TelemetryService}
   alias Foundation.Types.Error
 
@@ -363,8 +364,8 @@ defmodule Foundation.TestHelpers do
         if Map.get(ecosystem, :supervisor), do: [ecosystem.supervisor], else: []
 
     # First, try to shutdown the ecosystem gracefully
-    if function_exported?(Foundation.BEAM.Processes, :shutdown_ecosystem, 1) do
-      Foundation.BEAM.Processes.shutdown_ecosystem(ecosystem)
+    if function_exported?(Processes, :shutdown_ecosystem, 1) do
+      Processes.shutdown_ecosystem(ecosystem)
     end
 
     # Wait for all processes to terminate

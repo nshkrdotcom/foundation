@@ -715,7 +715,7 @@ defmodule Foundation.Infrastructure do
 
   @spec ensure_circuit_breaker_not_exists(atom()) :: :ok | {:error, Error.t()}
   defp ensure_circuit_breaker_not_exists(name) do
-    case Foundation.Infrastructure.CircuitBreaker.get_status(name) do
+    case CircuitBreaker.get_status(name) do
       :ok ->
         {:error,
          Error.new(

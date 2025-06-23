@@ -48,6 +48,7 @@ defmodule Foundation.Application do
   require Logger
 
   alias Foundation.ProcessRegistry
+  alias Foundation.Coordination.Primitives
 
   @type startup_phase ::
           :infrastructure | :foundation_services | :coordination | :application | :mabeam
@@ -395,7 +396,7 @@ defmodule Foundation.Application do
       end
 
       # Initialize coordination primitives infrastructure
-      Foundation.Coordination.Primitives.initialize_infrastructure()
+      Primitives.initialize_infrastructure()
 
       :ok
     rescue
@@ -547,7 +548,7 @@ defmodule Foundation.Application do
 
     # Cleanup coordination primitive resources
     try do
-      Foundation.Coordination.Primitives.cleanup_infrastructure()
+      Primitives.cleanup_infrastructure()
     rescue
       _ -> :ok
     end

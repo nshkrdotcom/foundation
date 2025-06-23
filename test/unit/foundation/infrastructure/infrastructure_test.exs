@@ -2,6 +2,7 @@ defmodule Foundation.InfrastructureTest do
   use ExUnit.Case, async: false
 
   alias Foundation.Infrastructure
+  alias Foundation.Infrastructure.CircuitBreaker
   alias Foundation.Types.Error
 
   setup do
@@ -35,7 +36,7 @@ defmodule Foundation.InfrastructureTest do
   describe "execute_protected/4 with circuit breaker" do
     setup do
       # Install a test circuit breaker
-      :ok = Foundation.Infrastructure.CircuitBreaker.start_fuse_instance(:test_cb)
+      :ok = CircuitBreaker.start_fuse_instance(:test_cb)
       :ok
     end
 

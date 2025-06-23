@@ -412,8 +412,8 @@ defmodule Foundation.BEAM.ProcessesTest do
 
   defp cleanup_ecosystem(ecosystem) do
     # Use the new shutdown function if available
-    if function_exported?(Foundation.BEAM.Processes, :shutdown_ecosystem, 1) do
-      Foundation.BEAM.Processes.shutdown_ecosystem(ecosystem)
+    if function_exported?(Processes, :shutdown_ecosystem, 1) do
+      Processes.shutdown_ecosystem(ecosystem)
     else
       # Fallback to manual cleanup
       if Process.alive?(ecosystem.coordinator) do

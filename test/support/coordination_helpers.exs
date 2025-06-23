@@ -12,6 +12,7 @@ defmodule Foundation.MABEAM.CoordinationHelpers do
   """
 
   alias Foundation.MABEAM.Coordination
+  alias Foundation.MABEAM.ProcessRegistry
 
   # ============================================================================
   # Protocol Setup Helpers
@@ -183,7 +184,7 @@ defmodule Foundation.MABEAM.CoordinationHelpers do
   @spec setup_agent_behaviors([{atom(), map()}]) :: :ok
   def setup_agent_behaviors(agent_behaviors) do
     for {agent_id, behavior} <- agent_behaviors do
-      case Foundation.MABEAM.ProcessRegistry.get_agent_pid(agent_id) do
+      case ProcessRegistry.get_agent_pid(agent_id) do
         {:ok, pid} ->
           GenServer.cast(pid, {:set_coordination_behavior, behavior})
 

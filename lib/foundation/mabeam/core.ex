@@ -28,7 +28,8 @@ defmodule Foundation.MABEAM.Core do
 
   use GenServer
 
-  # Note: Keeping aliases for future use in integration
+  # Aliases for Foundation services integration
+  alias Foundation.MABEAM.{ProcessRegistry, Coordination}
 
   @type orchestrator_state :: %{
           variable_registry: %{atom() => orchestration_variable()},
@@ -894,7 +895,7 @@ defmodule Foundation.MABEAM.Core do
 
   # Helper functions for get_system_status
   defp get_active_agents() do
-    case Foundation.MABEAM.ProcessRegistry.list_agents() do
+    case ProcessRegistry.list_agents() do
       {:ok, agents} ->
         Enum.map(agents, fn agent ->
           case agent do
@@ -907,7 +908,7 @@ defmodule Foundation.MABEAM.Core do
   end
 
   defp get_active_coordination_sessions() do
-    case Foundation.MABEAM.Coordination.list_active_sessions() do
+    case Coordination.list_active_sessions() do
       {:ok, sessions} -> sessions
     end
   end

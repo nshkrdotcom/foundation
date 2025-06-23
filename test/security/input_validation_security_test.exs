@@ -11,6 +11,8 @@ defmodule Foundation.Security.InputValidationSecurityTest do
 
   require Logger
 
+  alias Foundation.Infrastructure.RateLimiter
+
   setup do
     # Ensure all services are available for security testing
     Foundation.TestHelpers.wait_for_all_services_available(5000)
@@ -346,7 +348,7 @@ defmodule Foundation.Security.InputValidationSecurityTest do
         # Test rate limiter with malicious key
         verify_safe_isolation(fn ->
           # Test rate limiter key validation (using existing API)
-          Foundation.Infrastructure.RateLimiter.check_rate(
+          RateLimiter.check_rate(
             :test_bucket,
             malicious_key,
             1,
