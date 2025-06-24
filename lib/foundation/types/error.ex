@@ -32,10 +32,34 @@ defmodule Foundation.Types.Error do
   @type stacktrace_info :: [map()]
 
   @typedoc "High-level error category"
-  @type error_category :: :config | :system | :data | :external
+  @type error_category ::
+          :config
+          | :system
+          | :data
+          | :external
+          | :agent
+          | :coordination
+          | :orchestration
+          | :service
+          | :distributed
 
   @typedoc "Specific error subcategory within a category"
-  @type error_subcategory :: :structure | :validation | :access | :runtime
+  @type error_subcategory ::
+          :structure
+          | :validation
+          | :access
+          | :runtime
+          | :lifecycle
+          | :registration
+          | :communication
+          | :consensus
+          | :negotiation
+          | :auction
+          | :market
+          | :variable
+          | :optimization
+          | :availability
+          | :network
 
   @typedoc "Error severity level"
   @type error_severity :: :low | :medium | :high | :critical
@@ -56,7 +80,18 @@ defmodule Foundation.Types.Error do
     :category,
     :subcategory,
     :retry_strategy,
-    :recovery_actions
+    :recovery_actions,
+    # Enhanced error fields for MABEAM and distributed systems
+    # Error chaining
+    :caused_by,
+    # Distributed system context
+    :distributed_context,
+    # Current retry attempt
+    :retry_count,
+    # Maximum retry attempts
+    :max_retries,
+    # Retry-specific metadata
+    :retry_context
   ]
 
   @type t :: %__MODULE__{
@@ -71,7 +106,13 @@ defmodule Foundation.Types.Error do
           category: error_category() | nil,
           subcategory: error_subcategory() | nil,
           retry_strategy: retry_strategy() | nil,
-          recovery_actions: [String.t()] | nil
+          recovery_actions: [String.t()] | nil,
+          # Enhanced error fields
+          caused_by: t() | nil,
+          distributed_context: map() | nil,
+          retry_count: non_neg_integer() | nil,
+          max_retries: pos_integer() | nil,
+          retry_context: map() | nil
         }
 
   @doc """

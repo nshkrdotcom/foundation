@@ -106,9 +106,17 @@ defmodule Foundation.MABEAM.Agent do
     with :ok <- validate_agent_config(config),
          metadata <- build_agent_metadata(config),
          agent_key <- agent_key(config.id) do
-      # Register in the unified registry with placeholder PID (not started yet)
-      # Use self() as placeholder to satisfy PID requirement
-      ProcessRegistry.register(:production, agent_key, self(), metadata)
+      # Register in the unified registry with a placeholder PID for unstarted agents
+      # Use a persistent placeholder process that waits for shutdown
+      placeholder_pid =
+        spawn(fn ->
+          receive do
+            :shutdown -> :ok
+          end
+        end)
+
+      updated_metadata = Map.put(metadata, :placeholder_pid, true)
+      ProcessRegistry.register(:production, agent_key, placeholder_pid, updated_metadata)
     end
   end
 
@@ -136,11 +144,16 @@ defmodule Foundation.MABEAM.Agent do
   def start_agent(agent_id) do
     agent_key = agent_key(agent_id)
 
-    with {:ok, metadata} <- ProcessRegistry.get_metadata(:production, agent_key),
-         :ok <- validate_agent_not_running(agent_key, metadata),
-         {:ok, pid} <- start_agent_process(metadata),
-         :ok <- update_agent_status(agent_key, pid, :running) do
-      {:ok, pid}
+    case ProcessRegistry.lookup_with_metadata(:production, agent_key) do
+      {:ok, {pid, metadata}} when is_pid(pid) ->
+        with :ok <- validate_agent_not_running(pid, metadata),
+             {:ok, new_pid} <- start_agent_process(metadata),
+             :ok <- update_agent_status(agent_key, new_pid, :running) do
+          {:ok, new_pid}
+        end
+
+      :error ->
+        {:error, :not_found}
     end
   end
 
@@ -174,14 +187,22 @@ defmodule Foundation.MABEAM.Agent do
     agent_key = agent_key(agent_id)
 
     case ProcessRegistry.lookup_with_metadata(:production, agent_key) do
-      {:ok, {pid, _metadata}} when is_pid(pid) ->
-        if Process.alive?(pid) do
-          with :ok <- stop_agent_process(pid),
-               :ok <- update_agent_status(agent_key, nil, :stopped) do
-            :ok
-          end
-        else
-          {:error, :not_running}
+      {:ok, {pid, metadata}} when is_pid(pid) ->
+        cond do
+          # Check if this is a placeholder PID (agent not actually started)
+          metadata[:placeholder_pid] == true ->
+            {:error, :not_running}
+
+          # Check if agent is actually running
+          metadata[:status] == :running and Process.alive?(pid) ->
+            with :ok <- stop_agent_process(pid),
+                 :ok <- create_new_placeholder(agent_key, metadata, :stopped) do
+              :ok
+            end
+
+          true ->
+            # Agent exists but is not running
+            {:error, :not_running}
         end
 
       :error ->
@@ -451,6 +472,15 @@ defmodule Foundation.MABEAM.Agent do
     # Stop the agent first if it's running
     _ = stop_agent(agent_id)
 
+    # Clean up placeholder process if it exists
+    case ProcessRegistry.lookup(:production, agent_key) do
+      {:ok, pid} when is_pid(pid) ->
+        send(pid, :shutdown)
+
+      _ ->
+        :ok
+    end
+
     # Remove from registry
     :ok = ProcessRegistry.unregister(:production, agent_key)
   end
@@ -529,29 +559,41 @@ defmodule Foundation.MABEAM.Agent do
   @spec agent_key(agent_id()) :: {:agent, agent_id()}
   defp agent_key(agent_id), do: {:agent, agent_id}
 
-  defp validate_agent_not_running(agent_key, metadata) do
-    # Check the status in metadata to determine if agent is actually running
-    case metadata[:status] do
-      :running ->
-        # Agent is marked as running, check if the PID is still alive
-        case ProcessRegistry.lookup(:production, agent_key) do
-          {:ok, pid} when is_pid(pid) ->
-            if Process.alive?(pid) do
-              {:error, :already_running}
-            else
-              # PID is dead but status is running, allow restart
-              :ok
-            end
+  defp validate_agent_not_running(pid, metadata) when is_pid(pid) do
+    # Check if this is a placeholder PID (dead process used during registration)
+    cond do
+      metadata[:placeholder_pid] == true ->
+        # This is a placeholder, safe to start
+        :ok
 
-          :error ->
-            # No registration found, allow start
-            :ok
-        end
+      metadata[:status] == :running and Process.alive?(pid) ->
+        # Agent is actively running
+        {:error, :already_running}
 
-      _ ->
-        # Agent is not running (registered, stopped, failed, etc.)
+      true ->
+        # Agent is registered but not running (dead process or not marked as running)
         :ok
     end
+  end
+
+  defp create_new_placeholder(agent_key, metadata, status) do
+    # Create a new placeholder PID and update the registration
+    placeholder_pid =
+      spawn(fn ->
+        receive do
+          :shutdown -> :ok
+        end
+      end)
+
+    updated_metadata =
+      metadata
+      |> Map.put(:status, status)
+      |> Map.put(:last_status_change, DateTime.utc_now())
+      |> Map.put(:placeholder_pid, true)
+
+    # Unregister the old entry and register with new placeholder
+    ProcessRegistry.unregister(:production, agent_key)
+    ProcessRegistry.register(:production, agent_key, placeholder_pid, updated_metadata)
   end
 
   defp start_agent_process(metadata) do
@@ -572,19 +614,18 @@ defmodule Foundation.MABEAM.Agent do
 
   defp stop_agent_process(pid) when is_pid(pid) do
     if Process.alive?(pid) do
-      try do
-        # Try graceful shutdown first with shorter timeout
-        GenServer.stop(pid, :shutdown, 1000)
-        :ok
-      catch
-        :exit, _reason ->
-          # If graceful stop fails, just mark as stopped without force kill
-          # This prevents killing test processes
-          :ok
-      end
+      # Use GenServer.stop with normal shutdown
+      GenServer.stop(pid, :normal, 1000)
+      :ok
     else
       :ok
     end
+  rescue
+    _error ->
+      :ok
+  catch
+    :exit, _reason ->
+      :ok
   end
 
   defp update_agent_status(agent_key, pid, status) do
@@ -594,13 +635,12 @@ defmodule Foundation.MABEAM.Agent do
           metadata
           |> Map.put(:status, status)
           |> Map.put(:last_status_change, DateTime.utc_now())
-
-        # Use self() as placeholder if pid is nil
-        registration_pid = if is_pid(pid), do: pid, else: self()
+          # Remove placeholder marker when using real PID
+          |> Map.delete(:placeholder_pid)
 
         # First unregister, then re-register to avoid already_registered error
         ProcessRegistry.unregister(:production, agent_key)
-        ProcessRegistry.register(:production, agent_key, registration_pid, updated_metadata)
+        ProcessRegistry.register(:production, agent_key, pid, updated_metadata)
 
       error ->
         error
@@ -608,22 +648,26 @@ defmodule Foundation.MABEAM.Agent do
   end
 
   defp determine_agent_status(pid, metadata) do
-    # Check if this is the actual agent process or just a placeholder
-    agent_status = metadata[:status] || :registered
-
     cond do
-      # If status is explicitly set and agent is supposed to be running
-      agent_status == :running and is_pid(pid) and Process.alive?(pid) -> :running
+      # Check if this is a placeholder PID (agent not actually started)
+      metadata[:placeholder_pid] == true ->
+        metadata[:status] || :registered
+
+      # If status is explicitly set and agent is supposed to be running with a live process
+      metadata[:status] == :running and is_pid(pid) and Process.alive?(pid) ->
+        :running
+
       # If status is running but process is dead, it failed
-      agent_status == :running and is_pid(pid) and not Process.alive?(pid) -> :failed
-      # For registered agents that haven't been started yet
-      agent_status == :registered -> :registered
+      metadata[:status] == :running and is_pid(pid) and not Process.alive?(pid) ->
+        :failed
+
       # Other explicit statuses
-      agent_status in [:stopped, :failed] -> agent_status
-      # If we have a live PID but status doesn't indicate running, check metadata
-      is_pid(pid) and Process.alive?(pid) -> agent_status
+      metadata[:status] in [:stopped, :failed, :registered] ->
+        metadata[:status]
+
       # Default case
-      true -> agent_status
+      true ->
+        metadata[:status] || :registered
     end
   end
 

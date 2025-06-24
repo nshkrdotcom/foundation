@@ -125,7 +125,7 @@ defmodule Foundation.MABEAM.AgentTest do
         capabilities: [:test]
       }
 
-      Agent.register_agent(config)
+      assert :ok = Agent.register_agent(config)
       %{agent_config: config}
     end
 
@@ -300,7 +300,7 @@ defmodule Foundation.MABEAM.AgentTest do
         restart_policy: :temporary
       }
 
-      Agent.register_agent(config)
+      assert :ok = Agent.register_agent(config)
       %{agent_config: config}
     end
 
@@ -358,7 +358,7 @@ defmodule Foundation.MABEAM.AgentTest do
         module: Foundation.TestHelpers.TestWorker
       }
 
-      Agent.register_agent(config)
+      assert :ok = Agent.register_agent(config)
       %{agent_config: config}
     end
 
@@ -465,6 +465,7 @@ defmodule Foundation.MABEAM.AgentTest do
                 "integration" <> _ -> safely_unregister_agent(id)
                 "metadata" <> _ -> safely_unregister_agent(id)
                 "minimal" <> _ -> safely_unregister_agent(id)
+                "migration_test_" <> _ -> safely_unregister_agent(id)
                 _ -> :ok
               end
 
