@@ -964,7 +964,7 @@ defmodule Foundation.ProcessRegistry do
       :ok = ProcessRegistry.register_with_indexing(:production, :worker1, self(), metadata)
   """
   @spec register_with_indexing(namespace(), service_name(), pid(), map()) ::
-          :ok | {:error, {:already_registered, pid()} | :invalid_metadata}
+          :ok | {:error, {:already_registered, pid()}}
   def register_with_indexing(namespace, service, pid, metadata \\ %{})
       when is_pid(pid) and is_map(metadata) do
     # Use the optimizations module's register_with_indexing function
@@ -1073,7 +1073,7 @@ defmodule Foundation.ProcessRegistry do
   @spec get_optimization_stats() :: %{
           metadata_index_size: non_neg_integer(),
           cache_size: non_neg_integer(),
-          cache_hit_rate: float() | nil
+          cache_hit_rate: nil
         }
   def get_optimization_stats do
     Optimizations.get_optimization_stats()

@@ -277,9 +277,9 @@ defmodule Foundation.ProcessRegistry.BackendMonitor do
   defp detect_available_backends do
     # Detect which backend modules are available
     potential_backends = [
-      {Foundation.ProcessRegistry.Backend.ETS, :ets},
-      {Foundation.ProcessRegistry.Backend.Registry, :registry},
-      {Foundation.ProcessRegistry.Backend.Horde, :horde}
+      {Backend.ETS, :ets},
+      {Backend.Registry, :registry},
+      {Backend.Horde, :horde}
     ]
 
     Enum.filter(potential_backends, fn {module, _type} ->
@@ -290,9 +290,9 @@ defmodule Foundation.ProcessRegistry.BackendMonitor do
 
   defp find_backend_module(backend_type, available_backends) do
     backend_map = %{
-      ets: Foundation.ProcessRegistry.Backend.ETS,
-      registry: Foundation.ProcessRegistry.Backend.Registry,
-      horde: Foundation.ProcessRegistry.Backend.Horde
+      ets: Backend.ETS,
+      registry: Backend.Registry,
+      horde: Backend.Horde
     }
 
     case Map.get(backend_map, backend_type) do

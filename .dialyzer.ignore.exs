@@ -23,13 +23,7 @@
   # telemetry_service.ex pattern_match warnings - test_mode conditional compilation
   {"lib/foundation/services/telemetry_service.ex", :pattern_match},
 
-  # MABEAM services pattern_match warnings - false positives from ServiceBehaviour macro expansion
-  {"lib/foundation/mabeam/core.ex", :pattern_match},
-  {"lib/foundation/mabeam/agent_registry.ex", :pattern_match},
-  {"lib/foundation/mabeam/coordination.ex", :pattern_match},
-  {"lib/foundation/mabeam/telemetry.ex", :pattern_match},
+  # Removed unused MABEAM pattern_match filters
 
-  # Legacy modules pattern_match warnings - legacy code with always-true conditions
-  {"lib/foundation/mabeam_legacy/agent_registry.ex", :pattern_match},
-  {"lib/foundation/mabeam_legacy/telemetry.ex", :pattern_match}
+  # Removed unused legacy pattern_match filters
 ]
