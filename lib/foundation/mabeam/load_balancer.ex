@@ -424,7 +424,7 @@ defmodule Foundation.MABEAM.LoadBalancer do
           end
 
         # Check if agent is not overloaded
-        not_overloaded = not is_agent_overloaded?(agent_data.metrics)
+        not_overloaded = not agent_overloaded?(agent_data.metrics)
 
         # Check if agent process is alive (or in test mode)
         process_alive =
@@ -508,7 +508,7 @@ defmodule Foundation.MABEAM.LoadBalancer do
     {:ok, agent_id, agent_data}
   end
 
-  defp is_agent_overloaded?(metrics) do
+  defp agent_overloaded?(metrics) do
     cpu_overloaded = (metrics[:cpu_usage] || 0.0) > 0.9
     # 1GB
     memory_overloaded = (metrics[:memory_usage] || 0) > 1024 * 1024 * 1024
@@ -532,7 +532,7 @@ defmodule Foundation.MABEAM.LoadBalancer do
 
     available_agents =
       Enum.count(agents, fn agent_data ->
-        not is_agent_overloaded?(agent_data.metrics)
+        not agent_overloaded?(agent_data.metrics)
       end)
 
     overloaded_agents = total_agents - available_agents

@@ -85,9 +85,8 @@ defmodule Foundation.Validation.EventValidator do
          :ok <- validate_wall_time(event.wall_time),
          :ok <- validate_node(event.node),
          :ok <- validate_pid(event.pid),
-         :ok <- validate_correlation_id(event.correlation_id),
-         :ok <- validate_parent_id(event.parent_id) do
-      :ok
+         :ok <- validate_correlation_id(event.correlation_id) do
+      validate_parent_id(event.parent_id)
     end
   end
 

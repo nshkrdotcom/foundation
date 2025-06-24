@@ -195,9 +195,8 @@ defmodule Foundation.MABEAM.Agent do
 
           # Check if agent is actually running
           metadata[:status] == :running and Process.alive?(pid) ->
-            with :ok <- stop_agent_process(pid),
-                 :ok <- create_new_placeholder(agent_key, metadata, :stopped) do
-              :ok
+            with :ok <- stop_agent_process(pid) do
+              create_new_placeholder(agent_key, metadata, :stopped)
             end
 
           true ->
@@ -262,7 +261,7 @@ defmodule Foundation.MABEAM.Agent do
 
       # Find all agents with computation capability
       agents = Agent.find_agents_by_capability([:computation])
-      
+
       # Find agents with multiple capabilities (intersection)
       agents = Agent.find_agents_by_capability([:nlp, :gpu_acceleration])
   """
@@ -516,9 +515,8 @@ defmodule Foundation.MABEAM.Agent do
     required_fields = [:id, :type, :module]
 
     with :ok <- validate_required_fields(config, required_fields),
-         :ok <- validate_agent_id(config.id),
-         :ok <- validate_module(config.module) do
-      :ok
+         :ok <- validate_agent_id(config.id) do
+      validate_module(config.module)
     end
   end
 

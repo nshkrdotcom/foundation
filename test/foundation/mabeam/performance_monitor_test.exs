@@ -283,13 +283,13 @@ defmodule Foundation.MABEAM.PerformanceMonitorTest do
       assert :ok = PerformanceMonitor.start_monitoring(:lifecycle_agent)
 
       # Verify monitoring is active
-      assert {:ok, true} = PerformanceMonitor.is_monitoring?(:lifecycle_agent)
+      assert {:ok, true} = PerformanceMonitor.monitoring?(:lifecycle_agent)
 
       # Stop monitoring
       assert :ok = PerformanceMonitor.stop_monitoring(:lifecycle_agent)
 
       # Verify monitoring is stopped
-      assert {:ok, false} = PerformanceMonitor.is_monitoring?(:lifecycle_agent)
+      assert {:ok, false} = PerformanceMonitor.monitoring?(:lifecycle_agent)
     end
 
     test "provides monitoring status for all agents" do

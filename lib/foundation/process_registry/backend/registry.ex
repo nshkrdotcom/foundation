@@ -100,9 +100,7 @@ defmodule Foundation.ProcessRegistry.Backend.Registry do
     registry_name = state.registry_name
 
     # Check if process is alive
-    unless Process.alive?(pid) do
-      {:error, {:dead_process, pid}}
-    else
+    if Process.alive?(pid) do
       # Registry can only register the calling process (self())
       if pid == self() do
         case Registry.register(registry_name, key, metadata) do
@@ -130,6 +128,8 @@ defmodule Foundation.ProcessRegistry.Backend.Registry do
          {:cannot_register_external_process,
           "Registry backend can only register calling process (self())"}}
       end
+    else
+      {:error, {:dead_process, pid}}
     end
   end
 

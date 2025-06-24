@@ -566,7 +566,7 @@ defmodule Foundation.MABEAM.Coordination do
         end)
 
       # Check if allocations contain valid resource requirements
-      valid_allocations = Enum.filter(allocations, &is_valid_allocation?/1)
+      valid_allocations = Enum.filter(allocations, &valid_allocation?/1)
 
       allocation_successful = length(valid_allocations) >= total_results * 0.5
 
@@ -672,7 +672,7 @@ defmodule Foundation.MABEAM.Coordination do
     end
   end
 
-  defp is_valid_allocation?({_agent_id, response}) do
+  defp valid_allocation?({_agent_id, response}) do
     case response do
       %{requirements: reqs} when is_map(reqs) and map_size(reqs) > 0 -> true
       %{resource: _resource, desired_amount: amount} when is_number(amount) -> true

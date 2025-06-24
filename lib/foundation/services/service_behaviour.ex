@@ -172,61 +172,27 @@ defmodule Foundation.Services.ServiceBehaviour do
         resource_monitoring: true
       }
 
+      unquote(genserver_callbacks())
+      unquote(service_helpers())
+    end
+  end
+
+  defp genserver_callbacks do
+    quote do
       # Enhanced GenServer callbacks with service behavior
       @impl GenServer
       def init(opts) do
-        service_name = __MODULE__
-        namespace = Keyword.get(opts, :namespace, :production)
-        config = Map.merge(@default_service_config, service_config())
-
-        # Initialize service state
-        service_state = %{
-          service_name: service_name,
-          config: config,
-          health_status: :starting,
-          last_health_check: nil,
-          startup_time: DateTime.utc_now(),
-          dependencies: config.dependencies,
-          dependency_status: %{},
-          metrics: initialize_metrics(),
-          namespace: namespace
-        }
-
-        # Merge with any user-defined state
-        user_state =
-          case apply(__MODULE__, :init_service, [opts]) do
-            {:ok, state} -> state
-            {:ok, state, _timeout} -> state
-            state -> state
-          end
-
-        final_state = Map.merge(service_state, user_state)
-
-        # Register with service registry
-        case ServiceRegistry.register(namespace, service_name, self()) do
-          :ok ->
-            # Start health checking
-            if config.health_check_interval > 0 do
-              schedule_health_check(config.health_check_interval)
-            end
-
-            # Check dependencies
-            check_dependencies(final_state)
-
-            # Emit service started event
-            emit_service_event(:started, final_state)
-
-            {:ok, final_state}
-
-          {:error, reason} ->
-            {:stop, {:service_registration_failed, reason}}
-        end
+        Foundation.Services.ServiceBehaviour.init_service_state(
+          __MODULE__,
+          opts,
+          @default_service_config
+        )
       end
 
       @impl GenServer
       def handle_info(:health_check, state) do
-        new_state = perform_health_check(state)
-        schedule_health_check(state.config.health_check_interval)
+        new_state = __service_perform_health_check(state)
+        __service_schedule_health_check(state.config.health_check_interval)
         {:noreply, new_state}
       end
 
@@ -247,7 +213,7 @@ defmodule Foundation.Services.ServiceBehaviour do
       @impl GenServer
       def handle_info(:shutdown, state) do
         # Graceful shutdown
-        emit_service_event(:stopping, state)
+        __service_emit_event(:stopping, state)
         {:stop, :shutdown, state}
       end
 
@@ -258,7 +224,7 @@ defmodule Foundation.Services.ServiceBehaviour do
 
       @impl GenServer
       def handle_call(:service_metrics, _from, state) do
-        metrics = calculate_current_metrics(state)
+        metrics = __service_calculate_current_metrics(state)
         {:reply, {:ok, metrics}, state}
       end
 
@@ -271,7 +237,7 @@ defmodule Foundation.Services.ServiceBehaviour do
 
       @impl GenServer
       def terminate(reason, state) do
-        emit_service_event(:stopped, state, %{reason: reason})
+        __service_emit_event(:stopped, state, %{reason: reason})
 
         # Call user-defined termination if exists
         if function_exported?(__MODULE__, :terminate_service, 2) do
@@ -293,212 +259,322 @@ defmodule Foundation.Services.ServiceBehaviour do
                      handle_dependency_lost: 2,
                      handle_config_change: 2,
                      init_service: 1
+    end
+  end
 
+  defp service_helpers do
+    quote do
       # Helper functions available to services
-      defp emit_service_event(event_type, state, extra_metadata \\ %{}) do
-        if state.config.telemetry_enabled do
-          metadata =
-            Map.merge(
-              %{
-                service: state.service_name,
-                health_status: state.health_status,
-                namespace: state.namespace
-              },
-              extra_metadata
-            )
+      defp __service_emit_event(event_type, state, extra_metadata \\ %{}) do
+        Foundation.Services.ServiceBehaviour.emit_service_event(event_type, state, extra_metadata)
+      end
 
-          Telemetry.emit_counter([:foundation, :service, event_type], metadata)
+      defp __service_perform_health_check(state) do
+        Foundation.Services.ServiceBehaviour.perform_health_check(__MODULE__, state)
+      end
 
-          # Also emit as structured event
-          Events.new_event(:"service_#{event_type}", metadata)
-          |> Events.store()
+      defp __service_schedule_health_check(interval) do
+        Foundation.Services.ServiceBehaviour.schedule_health_check(interval)
+      end
+
+      defp __service_check_dependencies(state) do
+        Foundation.Services.ServiceBehaviour.check_dependencies(state)
+      end
+
+      defp __service_initialize_metrics do
+        Foundation.Services.ServiceBehaviour.initialize_metrics()
+      end
+
+      defp __service_calculate_current_metrics(state) do
+        Foundation.Services.ServiceBehaviour.calculate_current_metrics(state)
+      end
+
+      defp __service_update_health_metrics(metrics, result) do
+        Foundation.Services.ServiceBehaviour.update_health_metrics(metrics, result)
+      end
+
+      defp __service_emit_health_check_success(state, start_time) do
+        Foundation.Services.ServiceBehaviour.emit_health_check_success(state, start_time)
+      end
+
+      defp __service_emit_health_check_degraded(state, start_time) do
+        Foundation.Services.ServiceBehaviour.emit_health_check_degraded(state, start_time)
+      end
+
+      defp __service_emit_health_check_failure(state, reason, start_time) do
+        Foundation.Services.ServiceBehaviour.emit_health_check_failure(state, reason, start_time)
+      end
+    end
+  end
+
+  # Public helper functions that can be called from the using modules
+  def init_service_state(module, opts, default_config) do
+    service_name = module
+    namespace = Keyword.get(opts, :namespace, :production)
+    config = Map.merge(default_config, apply(module, :service_config, []))
+
+    # Initialize service state
+    service_state = %{
+      service_name: service_name,
+      config: config,
+      health_status: :starting,
+      last_health_check: nil,
+      startup_time: DateTime.utc_now(),
+      dependencies: config.dependencies,
+      dependency_status: %{},
+      metrics: Foundation.Services.ServiceBehaviour.initialize_metrics(),
+      namespace: namespace
+    }
+
+    # Merge with any user-defined state
+    user_state =
+      case apply(module, :init_service, [opts]) do
+        {:ok, state} -> state
+        {:ok, state, _timeout} -> state
+        state -> state
+      end
+
+    final_state = Map.merge(service_state, user_state)
+
+    # Register with service registry
+    case ServiceRegistry.register(namespace, service_name, self()) do
+      :ok ->
+        # Start health checking
+        if config.health_check_interval > 0 do
+          Foundation.Services.ServiceBehaviour.schedule_health_check(config.health_check_interval)
         end
+
+        # Check dependencies
+        Foundation.Services.ServiceBehaviour.check_dependencies(final_state)
+
+        # Emit service started event
+        Foundation.Services.ServiceBehaviour.emit_service_event(:started, final_state)
+
+        {:ok, final_state}
+
+      {:error, reason} ->
+        {:stop, {:service_registration_failed, reason}}
+    end
+  end
+
+  def emit_service_event(event_type, state, extra_metadata \\ %{}) do
+    if state.config.telemetry_enabled do
+      metadata =
+        Map.merge(
+          %{
+            service: state.service_name,
+            health_status: state.health_status,
+            namespace: state.namespace
+          },
+          extra_metadata
+        )
+
+      Telemetry.emit_counter([:foundation, :service, event_type], metadata)
+
+      # Also emit as structured event
+      Events.new_event(:"service_#{event_type}", metadata)
+      |> Events.store()
+    end
+  end
+
+  def perform_health_check(module, state) do
+    start_time = System.monotonic_time()
+
+    try do
+      case apply(module, :handle_health_check, [state]) do
+        {:ok, :healthy, new_state} ->
+          Foundation.Services.ServiceBehaviour.emit_health_check_success(state, start_time)
+
+          %{
+            new_state
+            | health_status: :healthy,
+              last_health_check: DateTime.utc_now(),
+              metrics:
+                Foundation.Services.ServiceBehaviour.update_health_metrics(state.metrics, :success)
+          }
+
+        {:ok, :degraded, new_state} ->
+          Foundation.Services.ServiceBehaviour.emit_health_check_degraded(state, start_time)
+
+          %{
+            new_state
+            | health_status: :degraded,
+              last_health_check: DateTime.utc_now(),
+              metrics:
+                Foundation.Services.ServiceBehaviour.update_health_metrics(state.metrics, :degraded)
+          }
+
+        {:ok, :unhealthy, new_state} ->
+          Foundation.Services.ServiceBehaviour.emit_health_check_failure(
+            state,
+            :unhealthy,
+            start_time
+          )
+
+          %{
+            new_state
+            | health_status: :unhealthy,
+              last_health_check: DateTime.utc_now(),
+              metrics:
+                Foundation.Services.ServiceBehaviour.update_health_metrics(state.metrics, :failure)
+          }
+
+        {:ok, :healthy, new_state, _details} ->
+          Foundation.Services.ServiceBehaviour.emit_health_check_success(state, start_time)
+
+          %{
+            new_state
+            | health_status: :healthy,
+              last_health_check: DateTime.utc_now(),
+              metrics:
+                Foundation.Services.ServiceBehaviour.update_health_metrics(state.metrics, :success)
+          }
+
+        {:ok, :degraded, new_state, _details} ->
+          Foundation.Services.ServiceBehaviour.emit_health_check_degraded(state, start_time)
+
+          %{
+            new_state
+            | health_status: :degraded,
+              last_health_check: DateTime.utc_now(),
+              metrics:
+                Foundation.Services.ServiceBehaviour.update_health_metrics(state.metrics, :degraded)
+          }
+
+        {:ok, :unhealthy, new_state, _details} ->
+          Foundation.Services.ServiceBehaviour.emit_health_check_failure(
+            state,
+            :unhealthy,
+            start_time
+          )
+
+          %{
+            new_state
+            | health_status: :unhealthy,
+              last_health_check: DateTime.utc_now(),
+              metrics:
+                Foundation.Services.ServiceBehaviour.update_health_metrics(state.metrics, :failure)
+          }
+
+        {:error, reason, new_state} ->
+          Foundation.Services.ServiceBehaviour.emit_health_check_failure(state, reason, start_time)
+
+          %{
+            new_state
+            | health_status: :unhealthy,
+              last_health_check: DateTime.utc_now(),
+              metrics:
+                Foundation.Services.ServiceBehaviour.update_health_metrics(state.metrics, :failure)
+          }
       end
+    rescue
+      error ->
+        Foundation.Services.ServiceBehaviour.emit_health_check_failure(state, error, start_time)
 
-      defp perform_health_check(state) do
-        start_time = System.monotonic_time()
-
-        try do
-          case apply(__MODULE__, :handle_health_check, [state]) do
-            {:ok, :healthy, new_state} ->
-              emit_health_check_success(state, start_time)
-
-              %{
-                new_state
-                | health_status: :healthy,
-                  last_health_check: DateTime.utc_now(),
-                  metrics: update_health_metrics(state.metrics, :success)
-              }
-
-            {:ok, :degraded, new_state} ->
-              emit_health_check_degraded(state, start_time)
-
-              %{
-                new_state
-                | health_status: :degraded,
-                  last_health_check: DateTime.utc_now(),
-                  metrics: update_health_metrics(state.metrics, :degraded)
-              }
-
-            {:ok, :unhealthy, new_state} ->
-              emit_health_check_failure(state, :unhealthy, start_time)
-
-              %{
-                new_state
-                | health_status: :unhealthy,
-                  last_health_check: DateTime.utc_now(),
-                  metrics: update_health_metrics(state.metrics, :failure)
-              }
-
-            {:ok, :healthy, new_state, _details} ->
-              emit_health_check_success(state, start_time)
-
-              %{
-                new_state
-                | health_status: :healthy,
-                  last_health_check: DateTime.utc_now(),
-                  metrics: update_health_metrics(state.metrics, :success)
-              }
-
-            {:ok, :degraded, new_state, _details} ->
-              emit_health_check_degraded(state, start_time)
-
-              %{
-                new_state
-                | health_status: :degraded,
-                  last_health_check: DateTime.utc_now(),
-                  metrics: update_health_metrics(state.metrics, :degraded)
-              }
-
-            {:ok, :unhealthy, new_state, _details} ->
-              emit_health_check_failure(state, :unhealthy, start_time)
-
-              %{
-                new_state
-                | health_status: :unhealthy,
-                  last_health_check: DateTime.utc_now(),
-                  metrics: update_health_metrics(state.metrics, :failure)
-              }
-
-            {:error, reason, new_state} ->
-              emit_health_check_failure(state, reason, start_time)
-
-              %{
-                new_state
-                | health_status: :unhealthy,
-                  last_health_check: DateTime.utc_now(),
-                  metrics: update_health_metrics(state.metrics, :failure)
-              }
-          end
-        rescue
-          error ->
-            emit_health_check_failure(state, error, start_time)
-
-            %{
-              state
-              | health_status: :unhealthy,
-                last_health_check: DateTime.utc_now(),
-                metrics: update_health_metrics(state.metrics, :failure)
-            }
-        end
-      end
-
-      defp schedule_health_check(interval) when interval > 0 do
-        Process.send_after(self(), :health_check, interval)
-      end
-
-      defp check_dependencies(state) when is_map(state) do
-        if length(state.dependencies) > 0 do
-          Enum.each(state.dependencies, fn dependency ->
-            # For pragmatic implementation, assume dependencies are healthy if they're registered
-            is_healthy =
-              case ServiceRegistry.lookup(state.namespace, dependency) do
-                {:ok, _pid} -> true
-                {:error, _} -> false
-              end
-
-            send(self(), {:dependency_status, dependency, is_healthy})
-          end)
-        end
-      end
-
-      defp initialize_metrics do
         %{
-          health_checks: 0,
-          health_check_failures: 0,
-          uptime_ms: 0,
-          memory_usage: 0,
-          message_queue_length: 0
+          state
+          | health_status: :unhealthy,
+            last_health_check: DateTime.utc_now(),
+            metrics:
+              Foundation.Services.ServiceBehaviour.update_health_metrics(state.metrics, :failure)
         }
-      end
+    end
+  end
 
-      defp update_health_metrics(metrics, result) do
-        new_checks = metrics.health_checks + 1
+  def schedule_health_check(interval) when interval > 0 do
+    Process.send_after(self(), :health_check, interval)
+  end
 
-        new_failures =
-          case result do
-            :failure -> metrics.health_check_failures + 1
-            _ -> metrics.health_check_failures
+  def check_dependencies(state) when is_map(state) do
+    if length(state.dependencies) > 0 do
+      Enum.each(state.dependencies, fn dependency ->
+        # For pragmatic implementation, assume dependencies are healthy if they're registered
+        is_healthy =
+          case ServiceRegistry.lookup(state.namespace, dependency) do
+            {:ok, _pid} -> true
+            {:error, _} -> false
           end
 
-        %{metrics | health_checks: new_checks, health_check_failures: new_failures}
+        send(self(), {:dependency_status, dependency, is_healthy})
+      end)
+    end
+  end
+
+  def initialize_metrics do
+    %{
+      health_checks: 0,
+      health_check_failures: 0,
+      uptime_ms: 0,
+      memory_usage: 0,
+      message_queue_length: 0
+    }
+  end
+
+  def update_health_metrics(metrics, result) do
+    new_checks = metrics.health_checks + 1
+
+    new_failures =
+      case result do
+        :failure -> metrics.health_check_failures + 1
+        _ -> metrics.health_check_failures
       end
 
-      defp calculate_current_metrics(state) do
-        uptime_ms = DateTime.diff(DateTime.utc_now(), state.startup_time, :millisecond)
+    %{metrics | health_checks: new_checks, health_check_failures: new_failures}
+  end
 
-        process_info = Process.info(self(), [:memory, :message_queue_len])
-        memory_usage = Keyword.get(process_info, :memory, 0)
-        message_queue_length = Keyword.get(process_info, :message_queue_len, 0)
+  def calculate_current_metrics(state) do
+    uptime_ms = DateTime.diff(DateTime.utc_now(), state.startup_time, :millisecond)
 
-        %{
-          state.metrics
-          | uptime_ms: uptime_ms,
-            memory_usage: memory_usage,
-            message_queue_length: message_queue_length
-        }
-      end
+    process_info = Process.info(self(), [:memory, :message_queue_len])
+    memory_usage = Keyword.get(process_info, :memory, 0)
+    message_queue_length = Keyword.get(process_info, :message_queue_len, 0)
 
-      defp emit_health_check_success(state, start_time) do
-        duration = System.monotonic_time() - start_time
+    %{
+      state.metrics
+      | uptime_ms: uptime_ms,
+        memory_usage: memory_usage,
+        message_queue_length: message_queue_length
+    }
+  end
 
-        if state.config.telemetry_enabled do
-          Telemetry.emit_histogram(
-            [:foundation, :service, :health_check, :duration],
-            duration,
-            %{service: state.service_name, result: :success}
-          )
-        end
-      end
+  def emit_health_check_success(state, start_time) do
+    duration = System.monotonic_time() - start_time
 
-      defp emit_health_check_degraded(state, start_time) do
-        duration = System.monotonic_time() - start_time
+    if state.config.telemetry_enabled do
+      Telemetry.emit_histogram(
+        [:foundation, :service, :health_check, :duration],
+        duration,
+        %{service: state.service_name, result: :success}
+      )
+    end
+  end
 
-        if state.config.telemetry_enabled do
-          Telemetry.emit_histogram(
-            [:foundation, :service, :health_check, :duration],
-            duration,
-            %{service: state.service_name, result: :degraded}
-          )
-        end
-      end
+  def emit_health_check_degraded(state, start_time) do
+    duration = System.monotonic_time() - start_time
 
-      defp emit_health_check_failure(state, reason, start_time) do
-        duration = System.monotonic_time() - start_time
+    if state.config.telemetry_enabled do
+      Telemetry.emit_histogram(
+        [:foundation, :service, :health_check, :duration],
+        duration,
+        %{service: state.service_name, result: :degraded}
+      )
+    end
+  end
 
-        if state.config.telemetry_enabled do
-          Telemetry.emit_histogram(
-            [:foundation, :service, :health_check, :duration],
-            duration,
-            %{service: state.service_name, result: :failure}
-          )
+  def emit_health_check_failure(state, reason, start_time) do
+    duration = System.monotonic_time() - start_time
 
-          Telemetry.emit_counter(
-            [:foundation, :service, :health_check, :failures],
-            %{service: state.service_name, reason: inspect(reason)}
-          )
-        end
-      end
+    if state.config.telemetry_enabled do
+      Telemetry.emit_histogram(
+        [:foundation, :service, :health_check, :duration],
+        duration,
+        %{service: state.service_name, result: :failure}
+      )
+
+      Telemetry.emit_counter(
+        [:foundation, :service, :health_check, :failures],
+        %{service: state.service_name, reason: inspect(reason)}
+      )
     end
   end
 end

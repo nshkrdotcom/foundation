@@ -219,8 +219,8 @@ defmodule Foundation.MABEAM.PerformanceMonitor do
   ## Returns
   - `{:ok, boolean}` - Whether the agent is being monitored
   """
-  @spec is_monitoring?(agent_id()) :: {:ok, boolean()}
-  def is_monitoring?(agent_id) do
+  @spec monitoring?(agent_id()) :: {:ok, boolean()}
+  def monitoring?(agent_id) do
     GenServer.call(__MODULE__, {:is_monitoring, agent_id})
   end
 

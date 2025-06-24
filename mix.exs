@@ -189,6 +189,11 @@ defmodule Foundation.MixProject do
       {:excoveralls, "~> 0.18", only: :test},
       {:mix_test_watch, "~> 1.1", only: [:dev, :test], runtime: false},
 
+      # Dev and testing continued
+      {:ex_check, "~> 0.12", only: [:dev, :test]},
+      {:git_ops, "~> 2.5", only: [:dev, :test]},
+      {:mix_audit, ">= 0.0.0", only: [:dev, :test], runtime: false},
+
       # Enhanced testing dependencies
       {:benchee, "~> 1.2", only: [:dev, :test], runtime: false},
       {:benchee_html, "~> 1.0", only: [:dev, :test], runtime: false},

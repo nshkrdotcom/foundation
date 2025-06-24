@@ -369,30 +369,30 @@ defmodule Foundation.Logic.ConfigLogic do
       # Reject function values (potential code execution)
       is_function(value) -> false
       # Reject extremely large strings
-      is_dangerous_binary?(value) -> false
+      dangerous_binary?(value) -> false
       # Reject dangerous structs
-      is_dangerous_struct?(value) -> false
+      dangerous_struct?(value) -> false
       # Recursively validate
-      is_nested_structure?(value) -> validate_nested_value_security(value)
+      nested_structure?(value) -> validate_nested_value_security(value)
       # Allow primitive types
       true -> true
     end
   end
 
-  defp is_dangerous_binary?(value) do
+  defp dangerous_binary?(value) do
     is_binary(value) and byte_size(value) > 1_000_000
   end
 
-  defp is_dangerous_struct?(value) do
-    is_map(value) and Map.has_key?(value, :__struct__) and is_system_struct?(value)
+  defp dangerous_struct?(value) do
+    is_map(value) and Map.has_key?(value, :__struct__) and system_struct?(value)
   end
 
-  defp is_system_struct?(value) do
+  defp system_struct?(value) do
     struct_module = Map.get(value, :__struct__)
     struct_module in [System, File, Code, Process]
   end
 
-  defp is_nested_structure?(value) do
+  defp nested_structure?(value) do
     is_map(value) or is_list(value)
   end
 
