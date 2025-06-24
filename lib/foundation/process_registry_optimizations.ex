@@ -64,18 +64,38 @@ defmodule Foundation.ProcessRegistry.Optimizations do
           map()
         ) :: :ok | {:error, :invalid_metadata | {:already_registered, pid()}}
   def register_with_indexing(namespace, service, pid, metadata \\ %{}) do
-    case ProcessRegistry.register(namespace, service, pid, metadata) do
-      :ok ->
-        # Add to metadata index
+    # Use direct ETS operations to avoid circular dependency with ProcessRegistry
+    registry_key = {namespace, service}
+    
+    # Ensure backup registry exists
+    ensure_backup_registry()
+    
+    # Check if already registered
+    case :ets.lookup(:process_registry_backup, registry_key) do
+      [{^registry_key, existing_pid, _existing_metadata}] ->
+        if Process.alive?(existing_pid) do
+          if existing_pid == pid do
+            # Already registered correctly, just update indexing
+            add_to_metadata_index(namespace, service, pid, metadata)
+            invalidate_cache_entry(namespace, service)
+            :ok
+          else
+            {:error, {:already_registered, existing_pid}}
+          end
+        else
+          # Dead process, replace it
+          :ets.insert(:process_registry_backup, {registry_key, pid, metadata})
+          add_to_metadata_index(namespace, service, pid, metadata)
+          invalidate_cache_entry(namespace, service)
+          :ok
+        end
+
+      [] ->
+        # Not registered, add new registration
+        :ets.insert(:process_registry_backup, {registry_key, pid, metadata})
         add_to_metadata_index(namespace, service, pid, metadata)
-
-        # Invalidate cache for this service
         invalidate_cache_entry(namespace, service)
-
         :ok
-
-      error ->
-        error
     end
   end
 
@@ -223,19 +243,51 @@ defmodule Foundation.ProcessRegistry.Optimizations do
   end
 
   defp fresh_lookup_and_cache(namespace, service) do
-    case ProcessRegistry.lookup(namespace, service) do
-      {:ok, pid} ->
-        # Add to cache with timestamp
-        cache_key = {namespace, service}
-        timestamp = System.monotonic_time(:millisecond)
-        :ets.insert(:process_registry_cache, {cache_key, pid, timestamp})
+    # Use direct ETS lookup to avoid circular dependency
+    registry_key = {namespace, service}
+    ensure_backup_registry()
+    
+    case :ets.lookup(:process_registry_backup, registry_key) do
+      [{^registry_key, pid, _metadata}] ->
+        if Process.alive?(pid) do
+          # Add to cache with timestamp
+          cache_key = {namespace, service}
+          timestamp = System.monotonic_time(:millisecond)
+          :ets.insert(:process_registry_cache, {cache_key, pid, timestamp})
+          {:ok, pid}
+        else
+          # Clean up dead process and return error
+          :ets.delete(:process_registry_backup, registry_key)
+          :error
+        end
 
-        {:ok, pid}
+      # Handle legacy 2-tuple format for backward compatibility
+      [{^registry_key, pid}] ->
+        if Process.alive?(pid) do
+          cache_key = {namespace, service}
+          timestamp = System.monotonic_time(:millisecond)
+          :ets.insert(:process_registry_cache, {cache_key, pid, timestamp})
+          {:ok, pid}
+        else
+          :ets.delete(:process_registry_backup, registry_key)
+          :error
+        end
 
-      :error ->
+      [] ->
         :error
     end
   end
+
+  defp ensure_backup_registry do
+    case :ets.info(:process_registry_backup) do
+      :undefined ->
+        :ets.new(:process_registry_backup, [:named_table, :public, :set])
+        :ok
+      _ ->
+        :ok
+    end
+  end
+
 
   defp invalidate_cache_entry(namespace, service) do
     cache_key = {namespace, service}

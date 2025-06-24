@@ -39,6 +39,8 @@ defmodule Foundation.ProcessRegistry do
       {:ok, pid} = ProcessRegistry.lookup(:production, :config_server)
   """
 
+  alias Foundation.ProcessRegistry.Optimizations
+
   @type namespace :: :production | {:test, reference()}
   @type service_name ::
           :config_server
@@ -54,11 +56,15 @@ defmodule Foundation.ProcessRegistry do
   Start the ProcessRegistry.
   """
   def start_link(_opts \\ []) do
-    Registry.start_link(
-      keys: :unique,
-      name: __MODULE__,
-      partitions: System.schedulers_online()
-    )
+    with {:ok, pid} <- Registry.start_link(
+           keys: :unique,
+           name: __MODULE__,
+           partitions: System.schedulers_online()
+         ) do
+      # Initialize optimization features
+      Optimizations.initialize_optimizations()
+      {:ok, pid}
+    end
   end
 
   @doc """
@@ -928,6 +934,166 @@ defmodule Foundation.ProcessRegistry do
       memory_usage_bytes: memory_usage,
       ets_table_info: ets_info
     }
+  end
+
+  # Optimized operations
+
+  @doc """
+  Register a service with optimized metadata indexing.
+
+  This is an enhanced version of register/4 that adds metadata indexing
+  for faster searches. Use this for services that will be frequently
+  searched by metadata.
+
+  ## Parameters
+  - `namespace`: The namespace for service isolation
+  - `service`: The service name to register
+  - `pid`: The process PID to register
+  - `metadata`: Metadata map that will be indexed for fast searching
+
+  ## Returns
+  - `:ok` if registration succeeds
+  - `{:error, {:already_registered, pid}}` if name already taken
+  - `{:error, :invalid_metadata}` if metadata is not a map
+
+  ## Examples
+
+      # Register with indexing for fast metadata searches
+      metadata = %{type: :mabeam_agent, agent_type: :worker, capabilities: [:ml]}
+      :ok = ProcessRegistry.register_with_indexing(:production, :worker1, self(), metadata)
+  """
+  @spec register_with_indexing(namespace(), service_name(), pid(), map()) ::
+          :ok | {:error, {:already_registered, pid()} | :invalid_metadata}
+  def register_with_indexing(namespace, service, pid, metadata \\ %{}) 
+      when is_pid(pid) and is_map(metadata) do
+    # Use the optimizations module's register_with_indexing function
+    # This bypasses the circular dependency by calling the underlying registration directly
+    Optimizations.register_with_indexing(namespace, service, pid, metadata)
+  end
+
+  @doc """
+  Lookup a service with caching for improved performance.
+
+  This provides cached lookups for frequently accessed services.
+  The cache automatically invalidates when processes die.
+
+  ## Parameters
+  - `namespace`: The namespace to search in
+  - `service`: The service name to lookup
+
+  ## Returns
+  - `{:ok, pid}` if service found and cached
+  - `:error` if service not found
+
+  ## Examples
+
+      # Cached lookup for better performance
+      {:ok, pid} = ProcessRegistry.cached_lookup(:production, :frequently_used_service)
+  """
+  @spec cached_lookup(namespace(), service_name()) :: {:ok, pid()} | :error
+  def cached_lookup(namespace, service) do
+    Optimizations.cached_lookup(namespace, service)
+  end
+
+  @doc """
+  Register multiple services efficiently using bulk operations.
+
+  This optimizes the registration of many services by batching
+  operations and reducing overhead.
+
+  ## Parameters
+  - `registrations`: List of `{namespace, service, pid, metadata}` tuples
+
+  ## Returns
+  - List of `{result, service}` tuples where result is `:ok` or `{:error, reason}`
+
+  ## Examples
+
+      registrations = [
+        {:production, :worker1, self(), %{type: :worker}},
+        {:production, :worker2, self(), %{type: :worker}}
+      ]
+      results = ProcessRegistry.bulk_register(registrations)
+  """
+  @spec bulk_register([{namespace(), service_name(), pid(), map()}]) ::
+          [{:ok | {:error, term()}, service_name()}]
+  def bulk_register(registrations) when is_list(registrations) do
+    Optimizations.bulk_register(registrations)
+  end
+
+  @doc """
+  Find services by metadata using optimized indexing.
+
+  This provides much faster metadata searches for indexed fields compared
+  to scanning the entire registry. Only works for services registered with
+  register_with_indexing/4.
+
+  ## Parameters
+  - `namespace`: The namespace to search in
+  - `field`: The metadata field to search on (must be an atom)
+  - `value`: The value to match
+
+  ## Returns
+  - List of `{service_name, pid, metadata}` tuples for matching services
+
+  ## Examples
+
+      # Find all agents of type :worker (must be indexed field)
+      workers = ProcessRegistry.find_by_indexed_metadata(:production, :agent_type, :worker)
+
+      # Find all services with a specific capability
+      ml_agents = ProcessRegistry.find_by_indexed_metadata(:production, :capabilities, :ml)
+  """
+  @spec find_by_indexed_metadata(namespace(), atom(), term()) ::
+          [{service_name(), pid(), map()}]
+  def find_by_indexed_metadata(namespace, field, value) 
+      when is_atom(field) do
+    Optimizations.find_by_indexed_metadata(namespace, field, value)
+  end
+
+  @doc """
+  Get performance statistics for registry optimizations.
+
+  Returns information about the optimization features including cache
+  performance and index sizes.
+
+  ## Returns
+  - Map with optimization statistics
+
+  ## Examples
+
+      stats = ProcessRegistry.get_optimization_stats()
+      # => %{
+      #   metadata_index_size: 1250,
+      #   cache_size: 45,
+      #   cache_hit_rate: nil
+      # }
+  """
+  @spec get_optimization_stats() :: %{
+          metadata_index_size: non_neg_integer(),
+          cache_size: non_neg_integer(),
+          cache_hit_rate: float() | nil
+        }
+  def get_optimization_stats do
+    Optimizations.get_optimization_stats()
+  end
+
+  @doc """
+  Clean up optimization tables and resources.
+
+  This is typically called during application shutdown to clean up
+  the ETS tables used by the optimization features.
+
+  ## Returns
+  - `:ok` after cleanup is complete
+
+  ## Examples
+
+      ProcessRegistry.cleanup_optimizations()
+  """
+  @spec cleanup_optimizations() :: :ok
+  def cleanup_optimizations do
+    Optimizations.cleanup_optimizations()
   end
 
   # Private helper functions

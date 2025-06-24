@@ -70,6 +70,25 @@ config :foundation,
     debug_mode: false,
     verbose_logging: false,
     performance_monitoring: true
+  ],
+
+  # MABEAM Configuration
+  mabeam: [
+    # Feature flag for gradual migration to unified registry
+    use_unified_registry: true,
+    
+    # Legacy registry configuration (when use_unified_registry is false)
+    legacy_registry: [
+      backend: Foundation.MABEAM.ProcessRegistry.Backend.LocalETS,
+      auto_start: false
+    ],
+    
+    # Migration settings
+    migration: [
+      auto_migrate_on_start: false,
+      cleanup_legacy_on_migration: true,
+      validate_after_migration: true
+    ]
   ]
 
 
