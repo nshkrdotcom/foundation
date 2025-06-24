@@ -42,8 +42,10 @@ defmodule Foundation.ProcessRegistry.BackendMonitor do
 
   alias Foundation.ProcessRegistry.Backend
 
-  @default_check_interval 30_000  # 30 seconds
-  @default_performance_window 300_000  # 5 minutes
+  # 30 seconds
+  @default_check_interval 30_000
+  # 5 minutes
+  @default_performance_window 300_000
   @default_failure_threshold 3
 
   defstruct [
@@ -61,11 +63,11 @@ defmodule Foundation.ProcessRegistry.BackendMonitor do
   @type backend_type :: :ets | :registry | :horde
   @type health_status :: :healthy | :degraded | :unhealthy
   @type performance_metric :: %{
-    timestamp: integer(),
-    operation: atom(),
-    duration_ms: number(),
-    success: boolean()
-  }
+          timestamp: integer(),
+          operation: atom(),
+          duration_ms: number(),
+          success: boolean()
+        }
 
   # Public API
 
@@ -186,13 +188,13 @@ defmodule Foundation.ProcessRegistry.BackendMonitor do
     check_interval = Keyword.get(opts, :check_interval, @default_check_interval)
     performance_window = Keyword.get(opts, :performance_window, @default_performance_window)
     failure_threshold = Keyword.get(opts, :failure_threshold, @default_failure_threshold)
-    
+
     available_backends = detect_available_backends()
     active_backend = List.first(available_backends)
 
     if active_backend do
       Logger.info("BackendMonitor started with backend: #{inspect(active_backend)}")
-      
+
       state = %__MODULE__{
         active_backend: active_backend,
         available_backends: available_backends,
@@ -207,7 +209,7 @@ defmodule Foundation.ProcessRegistry.BackendMonitor do
 
       # Schedule the first health check
       schedule_health_check(check_interval)
-      
+
       {:ok, state}
     else
       {:stop, :no_backends_available}
@@ -263,10 +265,10 @@ defmodule Foundation.ProcessRegistry.BackendMonitor do
   @impl true
   def handle_info(:health_check, state) do
     {_health_result, new_state} = perform_health_check(state)
-    
+
     # Schedule the next health check
     schedule_health_check(state.check_interval)
-    
+
     {:noreply, new_state}
   end
 
@@ -294,7 +296,9 @@ defmodule Foundation.ProcessRegistry.BackendMonitor do
     }
 
     case Map.get(backend_map, backend_type) do
-      nil -> :error
+      nil ->
+        :error
+
       module ->
         if module in available_backends do
           {:ok, module}
@@ -306,7 +310,7 @@ defmodule Foundation.ProcessRegistry.BackendMonitor do
 
   defp perform_health_check(state) do
     start_time = System.monotonic_time(:millisecond)
-    
+
     try do
       case state.active_backend.health_check() do
         {:ok, backend_health} ->
@@ -321,10 +325,11 @@ defmodule Foundation.ProcessRegistry.BackendMonitor do
             backend_details: backend_health
           }
 
-          new_state = %{state | 
-            failure_count: 0,
-            last_check: DateTime.utc_now(),
-            health_status: :healthy
+          new_state = %{
+            state
+            | failure_count: 0,
+              last_check: DateTime.utc_now(),
+              health_status: :healthy
           }
 
           {{:ok, health_info}, new_state}
@@ -340,34 +345,37 @@ defmodule Foundation.ProcessRegistry.BackendMonitor do
 
   defp handle_backend_failure(state, reason) do
     new_failure_count = state.failure_count + 1
-    
-    Logger.warning("Backend health check failed: #{inspect(reason)} (failure #{new_failure_count}/#{state.failure_threshold})")
+
+    Logger.warning(
+      "Backend health check failed: #{inspect(reason)} (failure #{new_failure_count}/#{state.failure_threshold})"
+    )
 
     if new_failure_count >= state.failure_threshold do
       # Try to switch to another backend
       case attempt_backend_failover(state) do
         {:ok, new_backend, new_state} ->
           Logger.warning("Failed over to backend: #{inspect(new_backend)}")
+
           health_info = %{
             status: :degraded,
             backend: new_backend,
             last_check: DateTime.utc_now(),
             failover_reason: reason
           }
+
           {{:ok, health_info}, new_state}
 
         :error ->
           Logger.error("All backends failed, system degraded")
+
           error_info = %{
             status: :unhealthy,
             backend: state.active_backend,
             last_check: DateTime.utc_now(),
             failure_reason: reason
           }
-          new_state = %{state | 
-            failure_count: new_failure_count,
-            health_status: :unhealthy
-          }
+
+          new_state = %{state | failure_count: new_failure_count, health_status: :unhealthy}
           {{:error, error_info}, new_state}
       end
     else
@@ -379,10 +387,8 @@ defmodule Foundation.ProcessRegistry.BackendMonitor do
         failure_count: new_failure_count,
         failure_reason: reason
       }
-      new_state = %{state | 
-        failure_count: new_failure_count,
-        health_status: :degraded
-      }
+
+      new_state = %{state | failure_count: new_failure_count, health_status: :degraded}
       {{:error, error_info}, new_state}
     end
   end
@@ -390,14 +396,16 @@ defmodule Foundation.ProcessRegistry.BackendMonitor do
   defp attempt_backend_failover(state) do
     # Try other available backends
     other_backends = List.delete(state.available_backends, state.active_backend)
-    
+
     case find_healthy_backend(other_backends) do
       {:ok, new_backend} ->
-        new_state = %{state | 
-          active_backend: new_backend,
-          failure_count: 0,
-          health_status: :healthy
+        new_state = %{
+          state
+          | active_backend: new_backend,
+            failure_count: 0,
+            health_status: :healthy
         }
+
         {:ok, new_backend, new_state}
 
       :error ->
@@ -406,6 +414,7 @@ defmodule Foundation.ProcessRegistry.BackendMonitor do
   end
 
   defp find_healthy_backend([]), do: :error
+
   defp find_healthy_backend([backend | rest]) do
     try do
       case backend.health_check() do
@@ -429,8 +438,8 @@ defmodule Foundation.ProcessRegistry.BackendMonitor do
     else
       total_ops = length(state.performance_history)
       successful_ops = Enum.count(state.performance_history, & &1.success)
-      
-      avg_response_time = 
+
+      avg_response_time =
         state.performance_history
         |> Enum.map(& &1.duration_ms)
         |> Enum.sum()
@@ -439,7 +448,7 @@ defmodule Foundation.ProcessRegistry.BackendMonitor do
       # Calculate operations per second over the time window
       now = System.monotonic_time(:millisecond)
       window_start = now - state.performance_window
-      recent_ops = Enum.count(state.performance_history, & &1.timestamp >= window_start)
+      recent_ops = Enum.count(state.performance_history, &(&1.timestamp >= window_start))
       ops_per_second = recent_ops / (state.performance_window / 1000)
 
       %{
@@ -454,7 +463,7 @@ defmodule Foundation.ProcessRegistry.BackendMonitor do
 
   defp prune_old_metrics(metrics, window_ms) do
     cutoff = System.monotonic_time(:millisecond) - window_ms
-    Enum.filter(metrics, & &1.timestamp >= cutoff)
+    Enum.filter(metrics, &(&1.timestamp >= cutoff))
   end
 
   defp schedule_health_check(interval) do
@@ -462,7 +471,7 @@ defmodule Foundation.ProcessRegistry.BackendMonitor do
   end
 
   # Child spec for supervision
-  
+
   @doc false
   def child_spec(opts) do
     %{

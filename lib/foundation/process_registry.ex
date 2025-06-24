@@ -56,11 +56,12 @@ defmodule Foundation.ProcessRegistry do
   Start the ProcessRegistry.
   """
   def start_link(_opts \\ []) do
-    with {:ok, pid} <- Registry.start_link(
-           keys: :unique,
-           name: __MODULE__,
-           partitions: System.schedulers_online()
-         ) do
+    with {:ok, pid} <-
+           Registry.start_link(
+             keys: :unique,
+             name: __MODULE__,
+             partitions: System.schedulers_online()
+           ) do
       # Initialize optimization features
       Optimizations.initialize_optimizations()
       {:ok, pid}
@@ -964,7 +965,7 @@ defmodule Foundation.ProcessRegistry do
   """
   @spec register_with_indexing(namespace(), service_name(), pid(), map()) ::
           :ok | {:error, {:already_registered, pid()} | :invalid_metadata}
-  def register_with_indexing(namespace, service, pid, metadata \\ %{}) 
+  def register_with_indexing(namespace, service, pid, metadata \\ %{})
       when is_pid(pid) and is_map(metadata) do
     # Use the optimizations module's register_with_indexing function
     # This bypasses the circular dependency by calling the underlying registration directly
@@ -1046,7 +1047,7 @@ defmodule Foundation.ProcessRegistry do
   """
   @spec find_by_indexed_metadata(namespace(), atom(), term()) ::
           [{service_name(), pid(), map()}]
-  def find_by_indexed_metadata(namespace, field, value) 
+  def find_by_indexed_metadata(namespace, field, value)
       when is_atom(field) do
     Optimizations.find_by_indexed_metadata(namespace, field, value)
   end

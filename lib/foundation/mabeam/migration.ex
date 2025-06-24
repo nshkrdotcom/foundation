@@ -190,7 +190,7 @@ defmodule Foundation.MABEAM.Migration do
     case Application.get_env(:foundation, :mabeam, []) do
       mabeam_config when is_list(mabeam_config) ->
         Keyword.get(mabeam_config, :use_unified_registry, false)
-      
+
       _ ->
         false
     end
@@ -371,9 +371,11 @@ defmodule Foundation.MABEAM.Migration do
   defp validate_unified_agents(legacy_agents) do
     # Check that all legacy agents have been migrated to unified registry
     unified_agents = get_unified_mabeam_agents()
-    unified_ids = Enum.map(unified_agents, fn {service_key, _pid, _metadata} ->
-      extract_agent_id_from_service_key(service_key)
-    end)
+
+    unified_ids =
+      Enum.map(unified_agents, fn {service_key, _pid, _metadata} ->
+        extract_agent_id_from_service_key(service_key)
+      end)
 
     legacy_ids = Enum.map(legacy_agents, & &1.id)
 

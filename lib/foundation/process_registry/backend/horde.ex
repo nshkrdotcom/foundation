@@ -155,7 +155,7 @@ defmodule Foundation.ProcessRegistry.Backend.Horde do
   def health_check() do
     case ETS.health_check() do
       {:ok, ets_stats} ->
-        {:ok, 
+        {:ok,
          Map.merge(ets_stats, %{
            backend_type: :horde_placeholder,
            distribution_enabled: false,
@@ -231,13 +231,14 @@ defmodule Foundation.ProcessRegistry.Backend.Horde do
   """
   @spec cluster_topology() :: {:ok, map()} | {:error, term()}
   def cluster_topology do
-    {:ok, %{
-      nodes: [node()],
-      topology: :single_node,
-      partitions: [],
-      leader: node(),
-      distribution_enabled: false
-    }}
+    {:ok,
+     %{
+       nodes: [node()],
+       topology: :single_node,
+       partitions: [],
+       leader: node(),
+       distribution_enabled: false
+     }}
   end
 
   @doc """
@@ -257,11 +258,12 @@ defmodule Foundation.ProcessRegistry.Backend.Horde do
   """
   @spec process_distribution() :: {:ok, map()} | {:error, term()}
   def process_distribution do
-    {:ok, %{
-      total_processes: 0,
-      local_processes: 0,
-      distribution_strategy: :none,
-      load_balance_factor: 1.0
-    }}
+    {:ok,
+     %{
+       total_processes: 0,
+       local_processes: 0,
+       distribution_strategy: :none,
+       load_balance_factor: 1.0
+     }}
   end
 end

@@ -35,10 +35,12 @@ defmodule Foundation.ProcessRegistry.Properties do
     property "each service name can only be registered once per namespace", %{
       test_namespace: test_namespace
     } do
-      check all service_name <- atom(:alphanumeric),
-                pid1 <- pid_generator(),
-                pid2 <- pid_generator(),
-                pid1 != pid2 do
+      check all(
+              service_name <- atom(:alphanumeric),
+              pid1 <- pid_generator(),
+              pid2 <- pid_generator(),
+              pid1 != pid2
+            ) do
         # Register the first PID
         assert :ok = ProcessRegistry.register(test_namespace, service_name, pid1)
 
@@ -62,9 +64,11 @@ defmodule Foundation.ProcessRegistry.Properties do
     property "registering the same PID to the same service should succeed", %{
       test_namespace: test_namespace
     } do
-      check all service_name <- atom(:alphanumeric),
-                pid <- pid_generator(),
-                metadata <- metadata_generator() do
+      check all(
+              service_name <- atom(:alphanumeric),
+              pid <- pid_generator(),
+              metadata <- metadata_generator()
+            ) do
         # Register the service
         assert :ok = ProcessRegistry.register(test_namespace, service_name, pid, metadata)
 
@@ -79,11 +83,14 @@ defmodule Foundation.ProcessRegistry.Properties do
     property "dead processes can be replaced in registration", %{
       test_namespace: test_namespace
     } do
-      check all service_name <- atom(:alphanumeric),
-                metadata <- metadata_generator() do
+      check all(
+              service_name <- atom(:alphanumeric),
+              metadata <- metadata_generator()
+            ) do
         # Create and immediately kill a process
         dead_pid = spawn(fn -> :ok end)
-        Process.sleep(10)  # Ensure process is dead
+        # Ensure process is dead
+        Process.sleep(10)
         refute Process.alive?(dead_pid)
 
         # Register the dead process
@@ -108,8 +115,10 @@ defmodule Foundation.ProcessRegistry.Properties do
     property "concurrent registrations don't corrupt the registry", %{
       test_namespace: test_namespace
     } do
-      check all service_names <- list_of(atom(:alphanumeric), min_length: 5, max_length: 20),
-                max_runs: 10 do
+      check all(
+              service_names <- list_of(atom(:alphanumeric), min_length: 5, max_length: 20),
+              max_runs: 10
+            ) do
         # Create unique service names to avoid conflicts
         unique_services = Enum.uniq(service_names)
 
@@ -146,9 +155,11 @@ defmodule Foundation.ProcessRegistry.Properties do
     property "concurrent lookups return consistent results", %{
       test_namespace: test_namespace
     } do
-      check all service_name <- atom(:alphanumeric),
-                lookup_count <- integer(10..50),
-                max_runs: 5 do
+      check all(
+              service_name <- atom(:alphanumeric),
+              lookup_count <- integer(10..50),
+              max_runs: 5
+            ) do
         # Register a service
         pid = spawn(fn -> Process.sleep(:infinity) end)
         metadata = %{type: :concurrent_test}
@@ -181,8 +192,10 @@ defmodule Foundation.ProcessRegistry.Properties do
     property "metadata is preserved through registration and retrieval", %{
       test_namespace: test_namespace
     } do
-      check all service_name <- atom(:alphanumeric),
-                metadata <- metadata_generator() do
+      check all(
+              service_name <- atom(:alphanumeric),
+              metadata <- metadata_generator()
+            ) do
         pid = spawn(fn -> Process.sleep(:infinity) end)
 
         # Register with metadata
@@ -203,16 +216,18 @@ defmodule Foundation.ProcessRegistry.Properties do
     end
 
     property "metadata searches work correctly", %{test_namespace: test_namespace} do
-      check all agent_configs <- list_of(agent_config_generator(), min_length: 3, max_length: 10),
-                search_metadata <- metadata_generator(),
-                max_runs: 5 do
+      check all(
+              agent_configs <- list_of(agent_config_generator(), min_length: 3, max_length: 10),
+              search_metadata <- metadata_generator(),
+              max_runs: 5
+            ) do
         # Register agents with various metadata
         registered_agents =
           agent_configs
           |> Enum.with_index()
           |> Enum.map(fn {{service_name, metadata}, index} ->
             pid = spawn(fn -> Process.sleep(:infinity) end)
-            
+
             # Add search metadata to some agents randomly
             final_metadata =
               if rem(index, 2) == 0 do
@@ -252,9 +267,11 @@ defmodule Foundation.ProcessRegistry.Properties do
     end
 
     property "metadata updates work correctly", %{test_namespace: test_namespace} do
-      check all service_name <- atom(:alphanumeric),
-                initial_metadata <- metadata_generator(),
-                updated_metadata <- metadata_generator() do
+      check all(
+              service_name <- atom(:alphanumeric),
+              initial_metadata <- metadata_generator(),
+              updated_metadata <- metadata_generator()
+            ) do
         pid = spawn(fn -> Process.sleep(:infinity) end)
 
         # Register with initial metadata
@@ -280,7 +297,7 @@ defmodule Foundation.ProcessRegistry.Properties do
 
   describe "agent lifecycle properties" do
     property "agent registration/unregistration lifecycle", %{test_namespace: test_namespace} do
-      check all agent_configs <- list_of(agent_config_generator(), min_length: 1, max_length: 5) do
+      check all(agent_configs <- list_of(agent_config_generator(), min_length: 1, max_length: 5)) do
         registered_pids = []
 
         try do
@@ -325,14 +342,17 @@ defmodule Foundation.ProcessRegistry.Properties do
     end
 
     property "dead process cleanup works correctly", %{test_namespace: test_namespace} do
-      check all service_names <- list_of(atom(:alphanumeric), min_length: 2, max_length: 5),
-                max_runs: 3 do
+      check all(
+              service_names <- list_of(atom(:alphanumeric), min_length: 2, max_length: 5),
+              max_runs: 3
+            ) do
         unique_services = Enum.uniq(service_names)
 
         # Register services with processes that will die
         registered_services =
           for service_name <- unique_services do
-            pid = spawn(fn -> Process.sleep(100) end)  # Dies after 100ms
+            # Dies after 100ms
+            pid = spawn(fn -> Process.sleep(100) end)
             metadata = %{type: :temporary, service: service_name}
             assert :ok = ProcessRegistry.register(test_namespace, service_name, pid, metadata)
             {service_name, pid}
@@ -366,27 +386,35 @@ defmodule Foundation.ProcessRegistry.Properties do
 
   defp pid_generator do
     # Generate PIDs for testing (using spawn to create real PIDs)
-    gen all _x <- constant(:ok) do
+    gen all(_x <- constant(:ok)) do
       spawn(fn -> Process.sleep(:infinity) end)
     end
   end
 
   defp metadata_generator do
-    gen all type <- member_of([:mabeam_agent, :service, :worker, :coordinator]),
-            capabilities <- list_of(atom(:alphanumeric), max_length: 3),
-            priority <- integer(1..10),
-            custom_fields <- map_of(atom(:alphanumeric), one_of([integer(), string(:alphanumeric), boolean()])) do
-      Map.merge(%{
-        type: type,
-        capabilities: capabilities,
-        priority: priority
-      }, custom_fields)
+    gen all(
+          type <- member_of([:mabeam_agent, :service, :worker, :coordinator]),
+          capabilities <- list_of(atom(:alphanumeric), max_length: 3),
+          priority <- integer(1..10),
+          custom_fields <-
+            map_of(atom(:alphanumeric), one_of([integer(), string(:alphanumeric), boolean()]))
+        ) do
+      Map.merge(
+        %{
+          type: type,
+          capabilities: capabilities,
+          priority: priority
+        },
+        custom_fields
+      )
     end
   end
 
   defp agent_config_generator do
-    gen all service_name <- atom(:alphanumeric),
-            metadata <- metadata_generator() do
+    gen all(
+          service_name <- atom(:alphanumeric),
+          metadata <- metadata_generator()
+        ) do
       {service_name, metadata}
     end
   end

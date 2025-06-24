@@ -66,10 +66,10 @@ defmodule Foundation.ProcessRegistry.Optimizations do
   def register_with_indexing(namespace, service, pid, metadata \\ %{}) do
     # Use direct ETS operations to avoid circular dependency with ProcessRegistry
     registry_key = {namespace, service}
-    
+
     # Ensure backup registry exists
     ensure_backup_registry()
-    
+
     # Check if already registered
     case :ets.lookup(:process_registry_backup, registry_key) do
       [{^registry_key, existing_pid, _existing_metadata}] ->
@@ -246,7 +246,7 @@ defmodule Foundation.ProcessRegistry.Optimizations do
     # Use direct ETS lookup to avoid circular dependency
     registry_key = {namespace, service}
     ensure_backup_registry()
-    
+
     case :ets.lookup(:process_registry_backup, registry_key) do
       [{^registry_key, pid, _metadata}] ->
         if Process.alive?(pid) do
@@ -283,11 +283,11 @@ defmodule Foundation.ProcessRegistry.Optimizations do
       :undefined ->
         :ets.new(:process_registry_backup, [:named_table, :public, :set])
         :ok
+
       _ ->
         :ok
     end
   end
-
 
   defp invalidate_cache_entry(namespace, service) do
     cache_key = {namespace, service}
