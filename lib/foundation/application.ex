@@ -163,6 +163,30 @@ defmodule Foundation.Application do
       startup_phase: :mabeam,
       health_check_interval: 30_000,
       restart_strategy: :permanent
+    },
+    mabeam_agent_supervisor: %{
+      module: Foundation.MABEAM.AgentSupervisor,
+      args: [],
+      dependencies: [:mabeam_agent_registry],
+      startup_phase: :mabeam,
+      health_check_interval: 30_000,
+      restart_strategy: :permanent
+    },
+    mabeam_load_balancer: %{
+      module: Foundation.MABEAM.LoadBalancer,
+      args: [],
+      dependencies: [:mabeam_agent_registry],
+      startup_phase: :mabeam,
+      health_check_interval: 45_000,
+      restart_strategy: :permanent
+    },
+    mabeam_performance_monitor: %{
+      module: Foundation.MABEAM.PerformanceMonitor,
+      args: [],
+      dependencies: [:mabeam_agent_registry],
+      startup_phase: :mabeam,
+      health_check_interval: 60_000,
+      restart_strategy: :permanent
     }
   }
 
@@ -391,6 +415,9 @@ defmodule Foundation.Application do
     # Initialize coordination primitives infrastructure
     Primitives.initialize_infrastructure()
 
+    # Initialize ProcessRegistry optimizations for large agent systems
+    Foundation.ProcessRegistry.Optimizations.initialize_optimizations()
+
     :ok
   end
 
@@ -538,6 +565,13 @@ defmodule Foundation.Application do
     # Cleanup coordination primitive resources
     try do
       Primitives.cleanup_infrastructure()
+    rescue
+      _ -> :ok
+    end
+
+    # Cleanup ProcessRegistry optimizations
+    try do
+      Foundation.ProcessRegistry.Optimizations.cleanup_optimizations()
     rescue
       _ -> :ok
     end

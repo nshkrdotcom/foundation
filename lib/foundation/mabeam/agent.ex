@@ -148,7 +148,7 @@ defmodule Foundation.MABEAM.Agent do
       {:ok, {pid, metadata}} when is_pid(pid) ->
         with :ok <- validate_agent_not_running(pid, metadata),
              {:ok, new_pid} <- start_agent_process(metadata),
-             :ok <- update_agent_status(agent_key, new_pid, :running) do
+             :ok <- update_agent_status_internal(agent_key, new_pid, :running) do
           {:ok, new_pid}
         end
 
@@ -450,6 +450,24 @@ defmodule Foundation.MABEAM.Agent do
   end
 
   @doc """
+  Update agent status directly (for internal use by supervisors).
+
+  ## Parameters
+  - `agent_id` - The ID of the agent
+  - `pid` - The agent process PID or nil
+  - `status` - The new status
+
+  ## Returns
+  - `:ok` - Status updated successfully
+  - `{:error, reason}` - Update failed
+  """
+  @spec update_agent_status(agent_id(), pid() | nil, agent_status()) :: :ok | {:error, term()}
+  def update_agent_status(agent_id, pid, status) do
+    agent_key = agent_key(agent_id)
+    update_agent_status_internal(agent_key, pid, status)
+  end
+
+  @doc """
   Remove an agent registration.
 
   Stops the agent if running and removes it from the registry.
@@ -628,7 +646,7 @@ defmodule Foundation.MABEAM.Agent do
       :ok
   end
 
-  defp update_agent_status(agent_key, pid, status) do
+  defp update_agent_status_internal(agent_key, pid, status) do
     case ProcessRegistry.get_metadata(:production, agent_key) do
       {:ok, metadata} ->
         updated_metadata =
