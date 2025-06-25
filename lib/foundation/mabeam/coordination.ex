@@ -3814,7 +3814,9 @@ defmodule Foundation.MABEAM.Coordination do
     all_sessions = Map.values(state.active_sessions) ++ state.coordination_history
 
     Enum.reduce(all_sessions, %{}, fn session, acc ->
-      Map.update(acc, session.type, 1, &(&1 + 1))
+      # Handle sessions that might not have a :type field (legacy basic coordination sessions)
+      session_type = Map.get(session, :type, :basic_coordination)
+      Map.update(acc, session_type, 1, &(&1 + 1))
     end)
   end
 

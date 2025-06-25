@@ -26,25 +26,25 @@ defmodule Foundation.MABEAM.CoordinationAdvancedTest do
 
     # Create test agents
     agent_configs = [
-      Types.new_agent_config(:byzantine_agent_1, CoordinationTestAgent, [],
+      Types.new_agent_config(:byzantine_agent_1, AdvancedTestAgent, [],
         capabilities: [:consensus, :voting]
       ),
-      Types.new_agent_config(:byzantine_agent_2, CoordinationTestAgent, [],
+      Types.new_agent_config(:byzantine_agent_2, AdvancedTestAgent, [],
         capabilities: [:consensus, :voting]
       ),
-      Types.new_agent_config(:byzantine_agent_3, CoordinationTestAgent, [],
+      Types.new_agent_config(:byzantine_agent_3, AdvancedTestAgent, [],
         capabilities: [:consensus, :voting]
       ),
-      Types.new_agent_config(:byzantine_agent_4, CoordinationTestAgent, [],
+      Types.new_agent_config(:byzantine_agent_4, AdvancedTestAgent, [],
         capabilities: [:consensus, :voting]
       ),
-      Types.new_agent_config(:expert_agent, CoordinationTestAgent, [],
+      Types.new_agent_config(:expert_agent, AdvancedTestAgent, [],
         capabilities: [:consensus, :expertise]
       ),
-      Types.new_agent_config(:intermediate_agent, CoordinationTestAgent, [],
+      Types.new_agent_config(:intermediate_agent, AdvancedTestAgent, [],
         capabilities: [:consensus]
       ),
-      Types.new_agent_config(:novice_agent, CoordinationTestAgent, [], capabilities: [:consensus])
+      Types.new_agent_config(:novice_agent, AdvancedTestAgent, [], capabilities: [:consensus])
     ]
 
     # Register agents
@@ -438,8 +438,8 @@ defmodule Foundation.MABEAM.CoordinationAdvancedTest do
   end
 end
 
-# Test agent module for coordination tests
-defmodule CoordinationTestAgent do
+# Simple test agent for advanced coordination tests
+defmodule AdvancedTestAgent do
   use GenServer
 
   def start_link(args) do
