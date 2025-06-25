@@ -50,7 +50,7 @@ defmodule Foundation.MABEAM.Integration.StressTest do
               id: agent_id,
               type: :worker,
               module: Foundation.MABEAM.StressTestAgent,
-              config: %{agent_id: i},
+              config: [agent_id: i],
               supervision: %{strategy: :one_for_one, max_restarts: 3, max_seconds: 60}
             }
 

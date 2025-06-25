@@ -10,7 +10,7 @@ defmodule Foundation.ProcessRegistryTest do
       spec = ProcessRegistry.child_spec([])
 
       assert %{
-               id: Registry,
+               id: Foundation.ProcessRegistry,
                start: {Registry, :start_link, _},
                type: :supervisor,
                restart: :permanent,
@@ -74,7 +74,7 @@ defmodule Foundation.ProcessRegistryTest do
 
     test "requires valid PID parameter", %{namespace: namespace, service: service} do
       # With metadata support, invalid PIDs now return error instead of raising
-      assert {:error, :invalid_metadata} = ProcessRegistry.register(namespace, service, "not_a_pid")
+      assert {:error, :invalid_pid} = ProcessRegistry.register(namespace, service, "not_a_pid")
     end
 
     test "supports production namespace" do

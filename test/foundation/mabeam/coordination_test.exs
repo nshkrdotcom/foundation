@@ -79,8 +79,9 @@ defmodule Foundation.MABEAM.CoordinationTest do
         %{name: nil, type: :consensus}
       ]
 
-      for invalid_protocol <- invalid_protocols do
-        assert {:error, _reason} = Coordination.register_protocol(:invalid, invalid_protocol)
+      for {invalid_protocol, index} <- Enum.with_index(invalid_protocols) do
+        protocol_name = :"invalid_#{index}"
+        assert {:error, _reason} = Coordination.register_protocol(protocol_name, invalid_protocol)
       end
     end
 
@@ -289,11 +290,13 @@ defmodule Foundation.MABEAM.CoordinationTest do
       {:ok, initial_sessions} = Coordination.list_active_sessions()
       initial_count = length(initial_sessions)
 
-      # Start coordination in background
-      task =
-        Task.async(fn ->
-          Coordination.coordinate(:session_tracking, [:coordinator_1], %{question: "Long running?"})
-        end)
+      # Start coordination - use async version to immediately return session ID
+      # Add some delay to keep session active longer for testing
+      {:ok, session_id} =
+        Coordination.coordinate_async(:session_tracking, [:coordinator_1], %{
+          question: "Long running?",
+          delay: 100
+        })
 
       # Check that session is tracked as active
       # Give time for session to start
@@ -302,8 +305,8 @@ defmodule Foundation.MABEAM.CoordinationTest do
       {:ok, active_sessions} = Coordination.list_active_sessions()
       assert length(active_sessions) > initial_count
 
-      # Wait for completion
-      {:ok, _results} = Task.await(task)
+      # Wait for session completion
+      wait_for_session_completion(session_id)
 
       # Session should be cleaned up after some time
       # Wait longer than cleanup delay
@@ -577,5 +580,28 @@ defmodule Foundation.MABEAM.CoordinationTest do
     }
 
     Map.merge(defaults, overrides)
+  end
+
+  defp wait_for_session_completion(session_id, max_attempts \\ 50) do
+    wait_for_session_completion(session_id, 0, max_attempts)
+  end
+
+  defp wait_for_session_completion(_session_id, attempts, max_attempts)
+       when attempts >= max_attempts do
+    :timeout
+  end
+
+  defp wait_for_session_completion(session_id, attempts, max_attempts) do
+    case Coordination.get_session_results(session_id) do
+      {:ok, _results} ->
+        :ok
+
+      {:error, :session_active} ->
+        Process.sleep(100)
+        wait_for_session_completion(session_id, attempts + 1, max_attempts)
+
+      {:error, _} ->
+        :error
+    end
   end
 end

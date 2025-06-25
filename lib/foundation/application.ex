@@ -156,6 +156,14 @@ defmodule Foundation.Application do
       health_check_interval: 30_000,
       restart_strategy: :permanent
     },
+    mabeam_economics: %{
+      module: Foundation.MABEAM.Economics,
+      args: [],
+      dependencies: [:mabeam_agent_registry, :mabeam_coordination],
+      startup_phase: :mabeam,
+      health_check_interval: 30_000,
+      restart_strategy: :permanent
+    },
     mabeam_telemetry: %{
       module: Foundation.MABEAM.Telemetry,
       args: [],

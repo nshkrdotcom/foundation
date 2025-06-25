@@ -9,8 +9,20 @@ defmodule Foundation.Coordination.PrimitivesTest do
     # Clean up any existing ETS tables
     cleanup_coordination_tables()
 
-    # Start telemetry for event verification
-    start_supervised!({Foundation.Services.TelemetryService, [namespace: :test]})
+    # Start ProcessRegistry if not already started (required dependency)
+    case start_supervised({Foundation.ProcessRegistry, []}, restart: :transient) do
+      {:ok, _} -> :ok
+      {:error, {:already_started, _}} -> :ok
+    end
+
+    # Start telemetry service with proper registration for event verification
+    # Use production namespace so telemetry events are emitted properly
+    case start_supervised({Foundation.Services.TelemetryService, [namespace: :production]},
+           restart: :transient
+         ) do
+      {:ok, _} -> :ok
+      {:error, {:already_started, _}} -> :ok
+    end
 
     :ok
   end

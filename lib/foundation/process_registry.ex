@@ -48,6 +48,7 @@ defmodule Foundation.ProcessRegistry do
           | :telemetry_service
           | :test_supervisor
           | {:agent, atom()}
+          | {:mabeam, atom()}
           | atom()
 
   @type registry_key :: {namespace(), service_name()}
@@ -73,7 +74,7 @@ defmodule Foundation.ProcessRegistry do
   """
   def child_spec(_opts) do
     %{
-      id: Registry,
+      id: __MODULE__,
       start:
         {Registry, :start_link,
          [
@@ -114,9 +115,8 @@ defmodule Foundation.ProcessRegistry do
       iex> ProcessRegistry.register(:production, :worker, self(), %{type: :computation})
       :ok
   """
-  @spec register(namespace(), service_name(), pid()) :: :ok | {:error, {:already_registered, pid()}}
   @spec register(namespace(), service_name(), pid(), map()) ::
-          :ok | {:error, {:already_registered, pid()} | :invalid_metadata}
+          :ok | {:error, {:already_registered, pid()} | :invalid_metadata | :invalid_pid}
   def register(namespace, service, pid, metadata \\ %{})
 
   def register(namespace, service, pid, metadata) when is_pid(pid) and is_map(metadata) do
@@ -192,8 +192,12 @@ defmodule Foundation.ProcessRegistry do
     end
   end
 
-  # Handle invalid metadata
-  def register(_namespace, _service, _pid, _metadata), do: {:error, :invalid_metadata}
+  # Handle invalid parameters
+  def register(_namespace, _service, pid, _metadata) when not is_pid(pid),
+    do: {:error, :invalid_pid}
+
+  def register(_namespace, _service, _pid, metadata) when not is_map(metadata),
+    do: {:error, :invalid_metadata}
 
   @doc """
   Look up a service in the given namespace.
