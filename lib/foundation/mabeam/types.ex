@@ -294,6 +294,8 @@ defmodule Foundation.MABEAM.Types do
   # Coordination Session Types
   # ============================================================================
 
+  @type coordination_session_id :: String.t()
+
   @type coordination_session :: %{
           id: String.t(),
           type: coordination_algorithm(),
