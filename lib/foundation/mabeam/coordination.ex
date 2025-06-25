@@ -1524,19 +1524,1910 @@ defmodule Foundation.MABEAM.Coordination do
     {:ok, session, state}
   end
 
-  defp handle_byzantine_event(session, _event_type, _event_data, state) do
-    # TODO: Implement Byzantine consensus event handling
-    {:ok, session, state}
+  defp handle_byzantine_event(session, event_type, event_data, state) do
+    case event_type do
+      :pre_prepare -> handle_pbft_pre_prepare(session, event_data, state)
+      :prepare -> handle_pbft_prepare(session, event_data, state)
+      :commit -> handle_pbft_commit(session, event_data, state)
+      :view_change -> handle_pbft_view_change(session, event_data, state)
+      :new_view -> handle_pbft_new_view(session, event_data, state)
+      :timeout -> handle_pbft_timeout(session, event_data, state)
+      :proposal_submission -> handle_pbft_proposal_submission(session, event_data, state)
+      _ -> {:error, {:unknown_byzantine_event, event_type}}
+    end
   end
 
-  defp handle_weighted_event(session, _event_type, _event_data, state) do
-    # TODO: Implement weighted consensus event handling
-    {:ok, session, state}
+  defp handle_weighted_event(session, event_type, event_data, state) do
+    case event_type do
+      :vote_submission -> handle_weighted_vote_submission(session, event_data, state)
+      :weight_update_request -> handle_weight_update_request(session, event_data, state)
+      :expertise_assessment -> handle_expertise_assessment(session, event_data, state)
+      :consensus_check -> handle_weighted_consensus_check(session, event_data, state)
+      :voting_deadline -> handle_weighted_voting_deadline(session, event_data, state)
+      :performance_feedback -> handle_performance_feedback(session, event_data, state)
+      _ -> {:error, {:unknown_weighted_event, event_type}}
+    end
   end
 
-  defp handle_iterative_event(session, _event_type, _event_data, state) do
-    # TODO: Implement iterative consensus event handling
-    {:ok, session, state}
+  defp handle_iterative_event(session, event_type, event_data, state) do
+    case event_type do
+      :proposal_submission -> handle_iterative_proposal_submission(session, event_data, state)
+      :feedback_submission -> handle_iterative_feedback_submission(session, event_data, state)
+      :round_completion -> handle_iterative_round_completion(session, event_data, state)
+      :convergence_check -> handle_iterative_convergence_check(session, event_data, state)
+      :quality_assessment -> handle_iterative_quality_assessment(session, event_data, state)
+      :phase_transition -> handle_iterative_phase_transition(session, event_data, state)
+      :early_termination -> handle_iterative_early_termination(session, event_data, state)
+      _ -> {:error, {:unknown_iterative_event, event_type}}
+    end
+  end
+
+  # ============================================================================
+  # Byzantine PBFT Event Handlers
+  # ============================================================================
+
+  defp handle_pbft_pre_prepare(session, event_data, state) do
+    byzantine_state = session.state
+    message = event_data[:message]
+
+    case validate_pre_prepare_message(message, byzantine_state) do
+      {:ok, validated_message} ->
+        # Store pre-prepare message
+        updated_pre_prepares =
+          Map.put(
+            byzantine_state.pre_prepare_messages || %{},
+            validated_message.sequence,
+            validated_message
+          )
+
+        # Broadcast prepare message to all agents
+        prepare_message = create_prepare_message(validated_message, session)
+        broadcast_message(prepare_message, byzantine_state.participants || [])
+
+        # Update session state
+        updated_byzantine_state =
+          Map.merge(byzantine_state, %{
+            phase: :prepare,
+            current_proposal: validated_message.proposal,
+            proposal_digest: validated_message.proposal_digest,
+            pre_prepare_messages: updated_pre_prepares,
+            sequence_number: validated_message.sequence,
+            last_activity: DateTime.utc_now()
+          })
+
+        updated_session = %{session | state: updated_byzantine_state}
+
+        emit_byzantine_telemetry(:pre_prepare_processed, session.id, %{}, %{
+          agent_id: message.agent_id,
+          sequence: validated_message.sequence
+        })
+
+        {:ok, updated_session, state}
+
+      {:error, reason} ->
+        Logger.warning("Invalid pre-prepare message: #{inspect(reason)}")
+        handle_byzantine_fault_detection(session, state, :invalid_pre_prepare)
+    end
+  end
+
+  defp handle_pbft_prepare(session, event_data, state) do
+    byzantine_state = session.state
+    message = event_data[:message]
+
+    case validate_prepare_message(message, byzantine_state) do
+      {:ok, validated_message} ->
+        # Store prepare message
+        agent_prepares = Map.get(byzantine_state.prepare_messages || %{}, message.agent_id, %{})
+        updated_agent_prepares = Map.put(agent_prepares, message.sequence, validated_message)
+
+        updated_prepare_messages =
+          Map.put(
+            byzantine_state.prepare_messages || %{},
+            message.agent_id,
+            updated_agent_prepares
+          )
+
+        # Check if we have enough prepare messages (2f + 1)
+        prepare_count =
+          count_matching_prepares(
+            updated_prepare_messages,
+            message.sequence,
+            message.proposal_digest
+          )
+
+        byzantine_state_updates = %{
+          prepare_messages: updated_prepare_messages,
+          last_activity: DateTime.utc_now()
+        }
+
+        updated_byzantine_state =
+          if prepare_count >= (byzantine_state.commit_threshold || 3) do
+            # Move to commit phase
+            commit_message = create_commit_message(validated_message, session)
+            broadcast_message(commit_message, byzantine_state.participants || [])
+
+            Map.merge(byzantine_state, Map.put(byzantine_state_updates, :phase, :commit))
+          else
+            # Still collecting prepare messages
+            Map.merge(byzantine_state, byzantine_state_updates)
+          end
+
+        updated_session = %{session | state: updated_byzantine_state}
+
+        emit_byzantine_telemetry(:prepare_processed, session.id, %{prepare_count: prepare_count}, %{
+          agent_id: message.agent_id,
+          sequence: message.sequence
+        })
+
+        {:ok, updated_session, state}
+
+      {:error, reason} ->
+        Logger.warning("Invalid prepare message: #{inspect(reason)}")
+        {:ok, session, state}
+    end
+  end
+
+  defp handle_pbft_commit(session, event_data, state) do
+    byzantine_state = session.state
+    message = event_data[:message]
+
+    case validate_commit_message(message, byzantine_state) do
+      {:ok, validated_message} ->
+        # Store commit message
+        agent_commits = Map.get(byzantine_state.commit_messages || %{}, message.agent_id, %{})
+        updated_agent_commits = Map.put(agent_commits, message.sequence, validated_message)
+
+        updated_commit_messages =
+          Map.put(
+            byzantine_state.commit_messages || %{},
+            message.agent_id,
+            updated_agent_commits
+          )
+
+        # Check if we have enough commit messages (2f + 1)
+        commit_count =
+          count_matching_commits(
+            updated_commit_messages,
+            message.sequence,
+            message.proposal_digest
+          )
+
+        byzantine_state_updates = %{
+          commit_messages: updated_commit_messages,
+          last_activity: DateTime.utc_now()
+        }
+
+        updated_byzantine_state =
+          if commit_count >= (byzantine_state.commit_threshold || 3) do
+            # Consensus reached!
+            decision_proof = collect_decision_proof(updated_commit_messages, message.sequence)
+
+            emit_byzantine_telemetry(
+              :consensus_reached,
+              session.id,
+              %{commit_count: commit_count},
+              %{
+                decided_value: validated_message.proposal,
+                sequence: message.sequence
+              }
+            )
+
+            Map.merge(
+              byzantine_state,
+              Map.merge(byzantine_state_updates, %{
+                phase: :decided,
+                decided_value: validated_message.proposal,
+                decision_proof: decision_proof
+              })
+            )
+          else
+            # Still collecting commit messages
+            Map.merge(byzantine_state, byzantine_state_updates)
+          end
+
+        updated_session = %{session | state: updated_byzantine_state}
+        {:ok, updated_session, state}
+
+      {:error, reason} ->
+        Logger.warning("Invalid commit message: #{inspect(reason)}")
+        {:ok, session, state}
+    end
+  end
+
+  defp handle_pbft_view_change(session, event_data, state) do
+    byzantine_state = session.state
+    message = event_data[:message]
+
+    case validate_view_change_message(message, byzantine_state) do
+      {:ok, validated_message} ->
+        # Store view change message
+        updated_view_change_messages =
+          Map.put(
+            byzantine_state.view_change_messages || %{},
+            message.agent_id,
+            validated_message
+          )
+
+        # Check if we have enough view change messages (f + 1)
+        view_change_count = map_size(updated_view_change_messages)
+        f_threshold = div((byzantine_state.n || 4) - 1, 3)
+
+        updated_byzantine_state =
+          if view_change_count >= f_threshold + 1 do
+            # Initiate new view
+            new_view_number = (byzantine_state.view_number || 0) + 1
+            new_primary = select_new_primary(new_view_number, byzantine_state.participants || [])
+
+            emit_byzantine_telemetry(
+              :view_change_initiated,
+              session.id,
+              %{
+                new_view: new_view_number,
+                new_primary: new_primary
+              },
+              %{}
+            )
+
+            Map.merge(byzantine_state, %{
+              view_number: new_view_number,
+              primary: new_primary,
+              phase: :pre_prepare,
+              view_change_messages: updated_view_change_messages,
+              last_activity: DateTime.utc_now()
+            })
+          else
+            Map.merge(byzantine_state, %{
+              view_change_messages: updated_view_change_messages,
+              last_activity: DateTime.utc_now()
+            })
+          end
+
+        updated_session = %{session | state: updated_byzantine_state}
+        {:ok, updated_session, state}
+
+      {:error, reason} ->
+        Logger.warning("Invalid view change message: #{inspect(reason)}")
+        {:ok, session, state}
+    end
+  end
+
+  defp handle_pbft_new_view(session, event_data, state) do
+    byzantine_state = session.state
+    message = event_data[:message]
+
+    case validate_new_view_message(message, byzantine_state) do
+      {:ok, validated_message} ->
+        # Accept new view and reset state
+        updated_byzantine_state =
+          Map.merge(byzantine_state, %{
+            view_number: validated_message.view,
+            primary: validated_message.agent_id,
+            phase: :pre_prepare,
+            pre_prepare_messages: %{},
+            prepare_messages: %{},
+            commit_messages: %{},
+            view_change_messages: %{},
+            last_activity: DateTime.utc_now()
+          })
+
+        updated_session = %{session | state: updated_byzantine_state}
+
+        emit_byzantine_telemetry(
+          :new_view_accepted,
+          session.id,
+          %{
+            view: validated_message.view,
+            primary: validated_message.agent_id
+          },
+          %{}
+        )
+
+        {:ok, updated_session, state}
+
+      {:error, reason} ->
+        Logger.warning("Invalid new view message: #{inspect(reason)}")
+        {:ok, session, state}
+    end
+  end
+
+  defp handle_pbft_timeout(session, event_data, state) do
+    byzantine_state = session.state
+    timeout_type = event_data[:timeout_type] || :general
+
+    case timeout_type do
+      :view_change ->
+        # Initiate view change
+        view_change_message = create_view_change_message(session)
+        broadcast_message(view_change_message, byzantine_state.participants || [])
+
+        updated_byzantine_state =
+          Map.merge(byzantine_state, %{
+            phase: :view_change,
+            last_activity: DateTime.utc_now()
+          })
+
+        updated_session = %{session | state: updated_byzantine_state}
+
+        emit_byzantine_telemetry(:timeout_view_change, session.id, %{}, %{
+          timeout_type: timeout_type
+        })
+
+        {:ok, updated_session, state}
+
+      _ ->
+        Logger.info("General timeout in Byzantine consensus session #{session.id}")
+        emit_byzantine_telemetry(:timeout_general, session.id, %{}, %{timeout_type: timeout_type})
+        {:ok, session, state}
+    end
+  end
+
+  defp handle_pbft_proposal_submission(session, event_data, state) do
+    byzantine_state = session.state
+    proposal = event_data[:proposal]
+    agent_id = event_data[:agent_id]
+
+    # Check if this agent is the current primary
+    if agent_id == byzantine_state.primary do
+      # Create pre-prepare message
+      sequence_number = (byzantine_state.sequence_number || 0) + 1
+      proposal_digest = :crypto.hash(:sha256, :erlang.term_to_binary(proposal))
+
+      pre_prepare_message = %{
+        type: :pre_prepare,
+        view: byzantine_state.view_number || 0,
+        sequence: sequence_number,
+        agent_id: agent_id,
+        proposal: proposal,
+        proposal_digest: proposal_digest,
+        timestamp: DateTime.utc_now()
+      }
+
+      # Process our own pre-prepare message
+      handle_pbft_pre_prepare(session, %{message: pre_prepare_message}, state)
+    else
+      Logger.warning("Non-primary agent #{agent_id} attempted to submit proposal")
+      {:error, :not_primary}
+    end
+  end
+
+  defp handle_byzantine_fault_detection(session, state, :invalid_pre_prepare) do
+    Logger.warning("Byzantine fault detected: invalid_pre_prepare in session #{session.id}")
+
+    byzantine_state = session.state
+
+    # Trigger view change if primary is sending invalid messages
+    view_change_message = create_view_change_message(session)
+    broadcast_message(view_change_message, byzantine_state.participants || [])
+
+    updated_byzantine_state =
+      Map.merge(byzantine_state, %{
+        phase: :view_change,
+        last_activity: DateTime.utc_now()
+      })
+
+    updated_session = %{session | state: updated_byzantine_state}
+    emit_byzantine_telemetry(:fault_detected, session.id, %{}, %{fault_type: :invalid_pre_prepare})
+    {:ok, updated_session, state}
+  end
+
+  # ============================================================================
+  # Byzantine PBFT Helper Functions
+  # ============================================================================
+
+  defp validate_pre_prepare_message(message, byzantine_state) do
+    cond do
+      not is_map(message) ->
+        {:error, :invalid_message_format}
+
+      message.type != :pre_prepare ->
+        {:error, :invalid_message_type}
+
+      message.agent_id != byzantine_state.primary ->
+        {:error, :not_from_primary}
+
+      message.view != byzantine_state.view_number ->
+        {:error, :invalid_view}
+
+      true ->
+        {:ok, message}
+    end
+  end
+
+  defp validate_prepare_message(message, byzantine_state) do
+    cond do
+      not is_map(message) ->
+        {:error, :invalid_message_format}
+
+      message.type != :prepare ->
+        {:error, :invalid_message_type}
+
+      message.view != byzantine_state.view_number ->
+        {:error, :invalid_view}
+
+      true ->
+        {:ok, message}
+    end
+  end
+
+  defp validate_commit_message(message, byzantine_state) do
+    cond do
+      not is_map(message) ->
+        {:error, :invalid_message_format}
+
+      message.type != :commit ->
+        {:error, :invalid_message_type}
+
+      message.view != byzantine_state.view_number ->
+        {:error, :invalid_view}
+
+      true ->
+        {:ok, message}
+    end
+  end
+
+  defp validate_view_change_message(message, _byzantine_state) do
+    cond do
+      not is_map(message) ->
+        {:error, :invalid_message_format}
+
+      message.type != :view_change ->
+        {:error, :invalid_message_type}
+
+      true ->
+        {:ok, message}
+    end
+  end
+
+  defp validate_new_view_message(message, _byzantine_state) do
+    cond do
+      not is_map(message) ->
+        {:error, :invalid_message_format}
+
+      message.type != :new_view ->
+        {:error, :invalid_message_type}
+
+      true ->
+        {:ok, message}
+    end
+  end
+
+  defp create_prepare_message(pre_prepare_message, session) do
+    %{
+      type: :prepare,
+      view: pre_prepare_message.view,
+      sequence: pre_prepare_message.sequence,
+      agent_id: session.id,
+      proposal: pre_prepare_message.proposal,
+      proposal_digest: pre_prepare_message.proposal_digest,
+      timestamp: DateTime.utc_now()
+    }
+  end
+
+  defp create_commit_message(prepare_message, session) do
+    %{
+      type: :commit,
+      view: prepare_message.view,
+      sequence: prepare_message.sequence,
+      agent_id: session.id,
+      proposal: prepare_message.proposal,
+      proposal_digest: prepare_message.proposal_digest,
+      timestamp: DateTime.utc_now()
+    }
+  end
+
+  defp create_view_change_message(session) do
+    byzantine_state = session.state
+
+    %{
+      type: :view_change,
+      view: (byzantine_state.view_number || 0) + 1,
+      agent_id: session.id,
+      committed_proposals: extract_committed_proposals(byzantine_state),
+      timestamp: DateTime.utc_now()
+    }
+  end
+
+  defp broadcast_message(message, participants) do
+    for agent_id <- participants do
+      case Foundation.MABEAM.ProcessRegistry.get_agent_pid(agent_id) do
+        {:ok, pid} when is_pid(pid) ->
+          send(pid, {:coordination_message, message})
+
+        {:error, :not_found} ->
+          Logger.warning("Agent #{agent_id} not found in ProcessRegistry")
+
+        {:error, :not_running} ->
+          Logger.warning("Agent #{agent_id} is not running")
+      end
+    end
+  end
+
+  defp count_matching_prepares(prepare_messages, sequence, proposal_digest) do
+    Enum.count(prepare_messages, fn {_agent_id, agent_prepares} ->
+      case Map.get(agent_prepares, sequence) do
+        %{proposal_digest: ^proposal_digest} -> true
+        _ -> false
+      end
+    end)
+  end
+
+  defp count_matching_commits(commit_messages, sequence, proposal_digest) do
+    Enum.count(commit_messages, fn {_agent_id, agent_commits} ->
+      case Map.get(agent_commits, sequence) do
+        %{proposal_digest: ^proposal_digest} -> true
+        _ -> false
+      end
+    end)
+  end
+
+  defp collect_decision_proof(commit_messages, sequence) do
+    Enum.flat_map(commit_messages, fn {_agent_id, agent_commits} ->
+      case Map.get(agent_commits, sequence) do
+        nil -> []
+        message -> [message]
+      end
+    end)
+  end
+
+  defp select_new_primary(view_number, participants) do
+    if length(participants) > 0 do
+      primary_index = rem(view_number, length(participants))
+      Enum.at(participants, primary_index)
+    else
+      nil
+    end
+  end
+
+  defp extract_committed_proposals(_byzantine_state) do
+    # Extract proposals that have been committed in previous views
+    # For now, return empty list as a placeholder
+    []
+  end
+
+  defp emit_byzantine_telemetry(event_name, session_id, measurements, metadata) do
+    :telemetry.execute(
+      [:foundation, :mabeam, :coordination, :byzantine, event_name],
+      Map.merge(%{count: 1}, measurements),
+      Map.merge(%{session_id: session_id}, metadata)
+    )
+  end
+
+  # ============================================================================
+  # Weighted Voting Event Handlers
+  # ============================================================================
+
+  defp handle_weighted_vote_submission(session, event_data, state) do
+    weighted_state = session.state
+    agent_id = event_data[:agent_id]
+    vote = event_data[:vote]
+    confidence = event_data[:confidence] || 1.0
+    reasoning = event_data[:reasoning]
+
+    # Get current agent weight
+    agent_weight = Map.get(weighted_state.agent_weights || %{}, agent_id, 1.0)
+
+    # Calculate numeric vote value
+    vote_numeric = convert_vote_to_numeric(vote, weighted_state.proposal)
+
+    # Calculate weighted contribution
+    weighted_contribution = agent_weight * confidence * vote_numeric
+
+    # Store vote data
+    vote_data = %{
+      vote: vote,
+      weight: agent_weight,
+      confidence: confidence,
+      reasoning: reasoning,
+      timestamp: DateTime.utc_now(),
+      weighted_value: weighted_contribution
+    }
+
+    # Update state
+    updated_votes = Map.put(weighted_state.votes || %{}, agent_id, vote_data)
+    new_weighted_total = (weighted_state.weighted_total || 0.0) + weighted_contribution
+
+    # Check for early consensus
+    consensus_reached =
+      check_early_consensus(
+        new_weighted_total,
+        weighted_state.max_possible_weight || 10.0,
+        weighted_state.consensus_threshold || 0.6
+      )
+
+    updated_weighted_state =
+      Map.merge(weighted_state, %{
+        votes: updated_votes,
+        weighted_total: new_weighted_total,
+        consensus_reached: consensus_reached
+      })
+
+    # If consensus reached, finalize
+    if consensus_reached do
+      finalize_weighted_consensus(updated_weighted_state, session, state)
+    else
+      updated_session = %{session | state: updated_weighted_state}
+
+      emit_weighted_telemetry(
+        :vote_processed,
+        session.id,
+        %{
+          weighted_contribution: weighted_contribution,
+          total_weight: new_weighted_total
+        },
+        %{agent_id: agent_id, confidence: confidence}
+      )
+
+      {:ok, updated_session, state}
+    end
+  end
+
+  defp handle_weight_update_request(session, event_data, state) do
+    weighted_state = session.state
+    agent_id = event_data[:agent_id]
+    new_expertise_metrics = event_data[:expertise_metrics]
+    context = event_data[:context] || %{}
+
+    # Calculate new weight based on expertise
+    new_weight = calculate_expertise_weight(agent_id, new_expertise_metrics, context)
+
+    # Update agent weights
+    updated_agent_weights = Map.put(weighted_state.agent_weights || %{}, agent_id, new_weight)
+
+    # Recalculate max possible weight
+    _updated_max_possible_weight = Enum.sum(Map.values(updated_agent_weights))
+
+    # Apply fairness constraints
+    {balanced_weights, weight_stats} = apply_fairness_constraints(updated_agent_weights)
+
+    updated_weighted_state =
+      Map.merge(weighted_state, %{
+        agent_weights: balanced_weights,
+        max_possible_weight: Enum.sum(Map.values(balanced_weights)),
+        weight_distribution_stats: weight_stats,
+        last_weight_update: DateTime.utc_now()
+      })
+
+    updated_session = %{session | state: updated_weighted_state}
+
+    emit_weighted_telemetry(
+      :weight_updated,
+      session.id,
+      %{
+        old_weight: Map.get(weighted_state.agent_weights || %{}, agent_id, 1.0),
+        new_weight: new_weight
+      },
+      %{agent_id: agent_id}
+    )
+
+    {:ok, updated_session, state}
+  end
+
+  defp handle_expertise_assessment(session, event_data, state) do
+    weighted_state = session.state
+    agent_id = event_data[:agent_id]
+    assessment_data = event_data[:assessment_data]
+
+    # Update expertise history
+    current_history = Map.get(weighted_state.expertise_history || %{}, agent_id, [])
+    # Keep last 10 assessments
+    updated_history = [assessment_data | current_history] |> Enum.take(10)
+
+    updated_expertise_history =
+      Map.put(weighted_state.expertise_history || %{}, agent_id, updated_history)
+
+    # Calculate updated performance metrics
+    performance_metrics = calculate_performance_metrics(updated_history)
+
+    updated_weighted_state =
+      Map.merge(weighted_state, %{
+        expertise_history: updated_expertise_history,
+        real_time_metrics:
+          Map.put(weighted_state.real_time_metrics || %{}, agent_id, performance_metrics)
+      })
+
+    updated_session = %{session | state: updated_weighted_state}
+
+    emit_weighted_telemetry(:expertise_assessed, session.id, performance_metrics, %{
+      agent_id: agent_id
+    })
+
+    {:ok, updated_session, state}
+  end
+
+  defp handle_weighted_consensus_check(session, event_data, state) do
+    weighted_state = session.state
+    force_check = event_data[:force_check] || false
+
+    # Check if consensus has been reached
+    current_threshold_met =
+      check_consensus_threshold(
+        weighted_state.weighted_total || 0.0,
+        weighted_state.max_possible_weight || 10.0,
+        weighted_state.consensus_threshold || 0.6
+      )
+
+    # Check if voting deadline has passed
+    deadline_passed =
+      case weighted_state.voting_deadline do
+        nil -> false
+        deadline -> DateTime.compare(DateTime.utc_now(), deadline) == :gt
+      end
+
+    should_finalize = current_threshold_met or deadline_passed or force_check
+
+    if should_finalize do
+      finalize_weighted_consensus(weighted_state, session, state)
+    else
+      # Update consensus state but don't finalize
+      updated_weighted_state = Map.put(weighted_state, :consensus_reached, current_threshold_met)
+      updated_session = %{session | state: updated_weighted_state}
+
+      emit_weighted_telemetry(
+        :consensus_checked,
+        session.id,
+        %{
+          threshold_met: current_threshold_met,
+          deadline_passed: deadline_passed
+        },
+        %{}
+      )
+
+      {:ok, updated_session, state}
+    end
+  end
+
+  defp handle_weighted_voting_deadline(session, _event_data, state) do
+    # Deadline reached, finalize voting regardless of threshold
+    weighted_state = session.state
+    Logger.info("Voting deadline reached for session #{session.id}")
+
+    emit_weighted_telemetry(
+      :deadline_reached,
+      session.id,
+      %{
+        votes_collected: map_size(weighted_state.votes || %{}),
+        weighted_total: weighted_state.weighted_total || 0.0
+      },
+      %{}
+    )
+
+    finalize_weighted_consensus(weighted_state, session, state)
+  end
+
+  defp handle_performance_feedback(session, event_data, state) do
+    weighted_state = session.state
+    agent_id = event_data[:agent_id]
+    performance_data = event_data[:performance_data]
+
+    # Store performance feedback for future weight adjustments
+    current_adjustments = Map.get(weighted_state.weight_adjustments || %{}, agent_id, [])
+
+    new_adjustment = %{
+      performance_data: performance_data,
+      timestamp: DateTime.utc_now(),
+      adjustment_factor: calculate_adjustment_factor(performance_data)
+    }
+
+    # Keep last 5
+    updated_adjustments = [new_adjustment | current_adjustments] |> Enum.take(5)
+
+    updated_weight_adjustments =
+      Map.put(weighted_state.weight_adjustments || %{}, agent_id, updated_adjustments)
+
+    updated_weighted_state =
+      Map.put(weighted_state, :weight_adjustments, updated_weight_adjustments)
+
+    updated_session = %{session | state: updated_weighted_state}
+
+    emit_weighted_telemetry(:performance_feedback, session.id, performance_data, %{
+      agent_id: agent_id
+    })
+
+    {:ok, updated_session, state}
+  end
+
+  # ============================================================================
+  # Weighted Voting Helper Functions
+  # ============================================================================
+
+  defp convert_vote_to_numeric(vote, _proposal) do
+    case vote do
+      true -> 1.0
+      false -> 0.0
+      :approve -> 1.0
+      :reject -> 0.0
+      :neutral -> 0.5
+      num when is_number(num) -> num
+      # Default neutral value
+      _ -> 0.5
+    end
+  end
+
+  defp check_early_consensus(weighted_total, max_possible_weight, threshold) do
+    weighted_total / max_possible_weight >= threshold
+  end
+
+  defp check_consensus_threshold(weighted_total, max_possible_weight, threshold) do
+    if max_possible_weight > 0 do
+      weighted_total / max_possible_weight >= threshold
+    else
+      false
+    end
+  end
+
+  defp finalize_weighted_consensus(weighted_state, session, state) do
+    # Calculate final decision
+    final_decision = calculate_weighted_decision(weighted_state.votes || %{})
+
+    # Calculate confidence score
+    confidence_score =
+      calculate_consensus_confidence(
+        weighted_state.weighted_total || 0.0,
+        weighted_state.max_possible_weight || 10.0
+      )
+
+    # Update session state
+    updated_weighted_state =
+      Map.merge(weighted_state, %{
+        consensus_reached: true,
+        final_decision: final_decision,
+        confidence_score: confidence_score
+      })
+
+    updated_session = %{session | state: updated_weighted_state}
+
+    emit_weighted_telemetry(
+      :consensus_finalized,
+      session.id,
+      %{
+        confidence_score: confidence_score,
+        participant_count: map_size(weighted_state.votes || %{})
+      },
+      %{final_decision: final_decision}
+    )
+
+    {:ok, updated_session, state}
+  end
+
+  defp calculate_weighted_decision(votes) do
+    if map_size(votes) == 0 do
+      :no_decision
+    else
+      # Calculate weighted average
+      total_weighted_value =
+        Enum.sum(
+          Enum.map(votes, fn {_agent_id, vote_data} ->
+            vote_data.weighted_value
+          end)
+        )
+
+      total_weight =
+        Enum.sum(
+          Enum.map(votes, fn {_agent_id, vote_data} ->
+            vote_data.weight * vote_data.confidence
+          end)
+        )
+
+      if total_weight > 0 do
+        weighted_average = total_weighted_value / total_weight
+
+        cond do
+          weighted_average >= 0.7 -> :strong_approve
+          weighted_average >= 0.5 -> :approve
+          weighted_average >= 0.3 -> :neutral
+          true -> :reject
+        end
+      else
+        :no_decision
+      end
+    end
+  end
+
+  defp calculate_consensus_confidence(weighted_total, max_possible_weight) do
+    if max_possible_weight > 0 do
+      min(1.0, weighted_total / max_possible_weight)
+    else
+      0.0
+    end
+  end
+
+  defp calculate_expertise_weight(_agent_id, expertise_metrics, context) do
+    base_metrics =
+      Map.merge(
+        %{
+          accuracy: 0.5,
+          consistency: 0.5,
+          domain_knowledge: 0.5,
+          past_performance: 0.5
+        },
+        expertise_metrics || %{}
+      )
+
+    # Weight the different factors based on context
+    factor_weights = get_factor_weights(context)
+
+    # Calculate weighted score
+    raw_score =
+      base_metrics.accuracy * factor_weights.accuracy +
+        base_metrics.consistency * factor_weights.consistency +
+        base_metrics.domain_knowledge * factor_weights.domain_knowledge +
+        base_metrics.past_performance * factor_weights.past_performance
+
+    # Apply non-linear scaling to emphasize expertise differences
+    scaled_score = apply_expertise_scaling(raw_score)
+
+    # Ensure reasonable bounds (0.1 to 3.0)
+    max(0.1, min(3.0, scaled_score))
+  end
+
+  defp get_factor_weights(context) do
+    Map.merge(
+      %{
+        accuracy: 0.3,
+        consistency: 0.2,
+        domain_knowledge: 0.3,
+        past_performance: 0.2
+      },
+      Map.get(context, :factor_weights, %{})
+    )
+  end
+
+  defp apply_expertise_scaling(raw_score) do
+    # Use exponential scaling to emphasize high performers
+    # while preventing extreme values
+    cond do
+      raw_score >= 0.8 -> :math.pow(raw_score, 0.7) * 2.0
+      raw_score >= 0.6 -> raw_score * 1.5
+      raw_score >= 0.4 -> raw_score * 1.2
+      true -> raw_score
+    end
+  end
+
+  defp apply_fairness_constraints(agent_weights) do
+    total_weight = Enum.sum(Map.values(agent_weights))
+    _agent_count = map_size(agent_weights)
+
+    # Calculate weight statistics
+    weight_values = Map.values(agent_weights)
+    max_weight = Enum.max(weight_values, fn -> 0.0 end)
+
+    # Apply constraint: no single agent should have >50% of total weight
+    max_allowed_weight = total_weight * 0.5
+
+    constrained_weights =
+      if max_weight > max_allowed_weight do
+        Map.new(agent_weights, fn {agent_id, weight} ->
+          constrained_weight = min(weight, max_allowed_weight)
+          {agent_id, constrained_weight}
+        end)
+      else
+        agent_weights
+      end
+
+    # Calculate distribution statistics
+    final_values = Map.values(constrained_weights)
+    _final_total = Enum.sum(final_values)
+    final_max = Enum.max(final_values, fn -> 0.0 end)
+
+    weight_stats = %{
+      gini_coefficient: calculate_gini_coefficient(final_values),
+      max_individual_weight: final_max,
+      weight_entropy: calculate_weight_entropy(final_values)
+    }
+
+    {constrained_weights, weight_stats}
+  end
+
+  defp calculate_gini_coefficient(values) do
+    # Simplified Gini coefficient calculation
+    sorted_values = Enum.sort(values)
+    n = length(sorted_values)
+
+    if n <= 1 do
+      0.0
+    else
+      sum_of_differences =
+        Enum.with_index(sorted_values, 1)
+        |> Enum.reduce(0, fn {value, index}, acc ->
+          acc + (2 * index - n - 1) * value
+        end)
+
+      mean_value = Enum.sum(sorted_values) / n
+      sum_of_differences / (n * n * mean_value)
+    end
+  end
+
+  defp calculate_weight_entropy(values) do
+    total = Enum.sum(values)
+
+    if total == 0 do
+      0.0
+    else
+      values
+      |> Enum.filter(&(&1 > 0))
+      |> Enum.map(fn weight ->
+        probability = weight / total
+        -probability * :math.log2(probability)
+      end)
+      |> Enum.sum()
+    end
+  end
+
+  defp calculate_performance_metrics(history) do
+    if length(history) == 0 do
+      %{accuracy: 0.5, consistency: 0.5, trend: :stable}
+    else
+      accuracy_scores = Enum.map(history, &Map.get(&1, :accuracy, 0.5))
+      consistency_scores = Enum.map(history, &Map.get(&1, :consistency, 0.5))
+
+      %{
+        accuracy: Enum.sum(accuracy_scores) / length(accuracy_scores),
+        consistency: Enum.sum(consistency_scores) / length(consistency_scores),
+        trend: calculate_trend(accuracy_scores)
+      }
+    end
+  end
+
+  defp calculate_trend(scores) when length(scores) < 2, do: :stable
+
+  defp calculate_trend(scores) do
+    recent_avg = scores |> Enum.take(3) |> Enum.sum() |> Kernel./(min(3, length(scores)))
+    older_sum = scores |> Enum.drop(3) |> Enum.sum()
+    older_count = length(scores) - 3
+
+    older_avg =
+      case older_count do
+        0 -> recent_avg
+        n -> older_sum / n
+      end
+
+    cond do
+      recent_avg > older_avg + 0.1 -> :improving
+      recent_avg < older_avg - 0.1 -> :declining
+      true -> :stable
+    end
+  end
+
+  defp calculate_adjustment_factor(performance_data) do
+    accuracy = Map.get(performance_data, :accuracy, 0.5)
+    efficiency = Map.get(performance_data, :efficiency, 0.5)
+
+    # Simple adjustment factor calculation
+    (accuracy + efficiency) / 2.0
+  end
+
+  defp emit_weighted_telemetry(event_name, session_id, measurements, metadata) do
+    :telemetry.execute(
+      [:foundation, :mabeam, :coordination, :weighted, event_name],
+      Map.merge(%{count: 1}, measurements),
+      Map.merge(%{session_id: session_id}, metadata)
+    )
+  end
+
+  # ============================================================================
+  # Iterative Refinement Event Handlers
+  # ============================================================================
+
+  defp handle_iterative_proposal_submission(session, event_data, state) do
+    iterative_state = session.state
+    agent_id = event_data[:agent_id]
+    proposal = event_data[:proposal]
+    confidence = event_data[:confidence] || 0.5
+    reasoning = event_data[:reasoning]
+    based_on = event_data[:based_on] || []
+
+    # Validate submission timing and agent eligibility
+    case validate_proposal_submission(agent_id, iterative_state) do
+      :ok ->
+        # Create proposal submission record
+        submission = %{
+          proposal: proposal,
+          agent_id: agent_id,
+          confidence: confidence,
+          reasoning: reasoning,
+          based_on: based_on,
+          timestamp: DateTime.utc_now(),
+          # Will be calculated later
+          estimated_quality: nil
+        }
+
+        # Store proposal
+        updated_round_proposals =
+          Map.put(
+            iterative_state.round_proposals || %{},
+            agent_id,
+            submission
+          )
+
+        # Check if all agents have submitted
+        participants = iterative_state.participants || []
+        all_submitted = length(Map.keys(updated_round_proposals)) >= length(participants)
+
+        updated_iterative_state =
+          Map.put(iterative_state, :round_proposals, updated_round_proposals)
+
+        if all_submitted do
+          # Move to feedback collection phase
+          transition_to_feedback_phase(updated_iterative_state, session, state)
+        else
+          updated_session = %{session | state: updated_iterative_state}
+
+          emit_iterative_telemetry(
+            :proposal_submitted,
+            session.id,
+            %{
+              confidence: confidence,
+              proposals_count: map_size(updated_round_proposals)
+            },
+            %{agent_id: agent_id, round: iterative_state.current_round || 1}
+          )
+
+          {:ok, updated_session, state}
+        end
+
+      {:error, reason} ->
+        Logger.warning("Invalid proposal submission: #{inspect(reason)}")
+        {:ok, session, state}
+    end
+  end
+
+  defp handle_iterative_feedback_submission(session, event_data, state) do
+    iterative_state = session.state
+    from_agent = event_data[:from_agent]
+    target_agent = event_data[:target_agent]
+    feedback = event_data[:feedback]
+
+    # Validate feedback
+    case validate_feedback_submission(from_agent, target_agent, feedback, iterative_state) do
+      :ok ->
+        # Store feedback
+        from_agent_feedback = Map.get(iterative_state.feedback_collection || %{}, from_agent, %{})
+        updated_from_agent_feedback = Map.put(from_agent_feedback, target_agent, feedback)
+
+        updated_feedback_collection =
+          Map.put(
+            iterative_state.feedback_collection || %{},
+            from_agent,
+            updated_from_agent_feedback
+          )
+
+        # Check if feedback collection is complete
+        feedback_complete =
+          check_feedback_completion(
+            updated_feedback_collection,
+            iterative_state.participants || []
+          )
+
+        updated_iterative_state =
+          Map.put(iterative_state, :feedback_collection, updated_feedback_collection)
+
+        if feedback_complete do
+          # Move to analysis phase
+          transition_to_analysis_phase(updated_iterative_state, session, state)
+        else
+          updated_session = %{session | state: updated_iterative_state}
+
+          emit_iterative_telemetry(
+            :feedback_submitted,
+            session.id,
+            %{
+              quality_score: Map.get(feedback, :quality_score, 0.5),
+              feedback_count: map_size(updated_feedback_collection)
+            },
+            %{from_agent: from_agent, target_agent: target_agent}
+          )
+
+          {:ok, updated_session, state}
+        end
+
+      {:error, reason} ->
+        Logger.warning("Invalid feedback submission: #{inspect(reason)}")
+        {:ok, session, state}
+    end
+  end
+
+  defp handle_iterative_round_completion(session, _event_data, state) do
+    iterative_state = session.state
+
+    # Analyze round results
+    round_analysis = analyze_round_results(iterative_state)
+
+    # Update proposals history
+    round_record = %{
+      round: iterative_state.current_round || 1,
+      proposals: iterative_state.round_proposals || %{},
+      selected_proposal: round_analysis.best_proposal,
+      quality_score: round_analysis.quality_score,
+      convergence_score: round_analysis.convergence_score,
+      feedback_summary: round_analysis.feedback_summary,
+      timestamp: DateTime.utc_now()
+    }
+
+    _updated_proposals_history = [round_record | iterative_state.proposals_history || []]
+
+    # Check for termination conditions
+    should_terminate = check_termination_conditions(iterative_state, round_analysis)
+
+    if should_terminate do
+      # Finalize refinement process
+      finalize_iterative_refinement(iterative_state, round_analysis, session, state)
+    else
+      # Prepare for next round
+      prepare_next_round(iterative_state, round_analysis, session, state)
+    end
+  end
+
+  defp handle_iterative_convergence_check(session, event_data, state) do
+    iterative_state = session.state
+    force_check = event_data[:force_check] || false
+
+    # Calculate current convergence score
+    convergence_score =
+      calculate_convergence_score(
+        iterative_state.round_proposals || %{},
+        get_previous_round_proposals(iterative_state),
+        iterative_state.convergence_method || :jaccard
+      )
+
+    # Check convergence threshold
+    convergence_threshold = iterative_state.convergence_threshold || 0.9
+    convergence_reached = convergence_score >= convergence_threshold
+
+    # Update convergence tracking
+    updated_similarity_history =
+      [convergence_score | iterative_state.similarity_history || []] |> Enum.take(10)
+
+    updated_iterative_state =
+      Map.merge(iterative_state, %{
+        convergence_score: convergence_score,
+        similarity_history: updated_similarity_history
+      })
+
+    updated_session = %{session | state: updated_iterative_state}
+
+    emit_iterative_telemetry(
+      :convergence_checked,
+      session.id,
+      %{
+        convergence_score: convergence_score,
+        threshold: convergence_threshold,
+        reached: convergence_reached
+      },
+      %{round: iterative_state.current_round || 1}
+    )
+
+    if convergence_reached and force_check do
+      # Trigger early termination
+      handle_iterative_early_termination(updated_session, %{reason: :convergence}, state)
+    else
+      {:ok, updated_session, state}
+    end
+  end
+
+  defp handle_iterative_quality_assessment(session, event_data, state) do
+    iterative_state = session.state
+    proposal_id = event_data[:proposal_id]
+    quality_metrics = event_data[:quality_metrics]
+
+    # Update quality scores
+    updated_quality_scores =
+      Map.put(
+        iterative_state.quality_scores || %{},
+        proposal_id,
+        quality_metrics
+      )
+
+    # Calculate quality improvement
+    previous_quality = get_previous_round_quality(iterative_state)
+    current_quality = Map.get(quality_metrics, :overall_score, 0.5)
+    quality_improvement = current_quality - previous_quality
+
+    updated_iterative_state =
+      Map.merge(iterative_state, %{
+        quality_scores: updated_quality_scores,
+        quality_improvement: quality_improvement
+      })
+
+    updated_session = %{session | state: updated_iterative_state}
+
+    emit_iterative_telemetry(
+      :quality_assessed,
+      session.id,
+      %{
+        quality_score: current_quality,
+        improvement: quality_improvement
+      },
+      %{proposal_id: proposal_id}
+    )
+
+    {:ok, updated_session, state}
+  end
+
+  defp handle_iterative_phase_transition(session, event_data, state) do
+    iterative_state = session.state
+    target_phase = event_data[:target_phase]
+
+    updated_iterative_state =
+      case target_phase do
+        :proposal_collection ->
+          # Reset for new proposal collection
+          Map.merge(iterative_state, %{
+            current_phase: :proposal_collection,
+            round_proposals: %{},
+            # 5 minutes
+            phase_deadline: DateTime.add(DateTime.utc_now(), 300, :second)
+          })
+
+        :feedback_collection ->
+          # Transition to feedback collection
+          Map.merge(iterative_state, %{
+            current_phase: :feedback_collection,
+            feedback_collection: %{},
+            # 10 minutes
+            phase_deadline: DateTime.add(DateTime.utc_now(), 600, :second)
+          })
+
+        :analysis ->
+          # Transition to analysis phase
+          Map.merge(iterative_state, %{
+            current_phase: :analysis,
+            # 2 minutes
+            phase_deadline: DateTime.add(DateTime.utc_now(), 120, :second)
+          })
+
+        _ ->
+          Logger.warning("Unknown phase transition: #{target_phase}")
+          iterative_state
+      end
+
+    updated_session = %{session | state: updated_iterative_state}
+
+    emit_iterative_telemetry(:phase_transition, session.id, %{}, %{
+      from_phase: iterative_state.current_phase,
+      to_phase: target_phase,
+      round: iterative_state.current_round || 1
+    })
+
+    {:ok, updated_session, state}
+  end
+
+  defp handle_iterative_early_termination(session, event_data, state) do
+    iterative_state = session.state
+    termination_reason = event_data[:reason] || :manual
+
+    # Perform final analysis with current state
+    final_analysis = analyze_round_results(iterative_state)
+
+    # Set termination reason
+    updated_iterative_state = Map.put(iterative_state, :termination_reason, termination_reason)
+
+    emit_iterative_telemetry(
+      :early_termination,
+      session.id,
+      %{
+        rounds_completed: iterative_state.current_round || 1,
+        convergence_score: iterative_state.convergence_score || 0.0
+      },
+      %{reason: termination_reason}
+    )
+
+    # Finalize the refinement process
+    finalize_iterative_refinement(updated_iterative_state, final_analysis, session, state)
+  end
+
+  # ============================================================================
+  # Iterative Refinement Helper Functions
+  # ============================================================================
+
+  defp validate_proposal_submission(agent_id, iterative_state) do
+    cond do
+      iterative_state.current_phase != :proposal_collection ->
+        {:error, :wrong_phase}
+
+      DateTime.compare(DateTime.utc_now(), iterative_state.phase_deadline || DateTime.utc_now()) ==
+          :gt ->
+        {:error, :deadline_passed}
+
+      agent_id not in (iterative_state.participants || []) ->
+        {:error, :not_participant}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp validate_feedback_submission(from_agent, target_agent, feedback, iterative_state) do
+    cond do
+      iterative_state.current_phase != :feedback_collection ->
+        {:error, :wrong_phase}
+
+      from_agent not in (iterative_state.participants || []) ->
+        {:error, :from_agent_not_participant}
+
+      target_agent not in (iterative_state.participants || []) ->
+        {:error, :target_agent_not_participant}
+
+      from_agent == target_agent ->
+        {:error, :self_feedback_not_allowed}
+
+      not is_map(feedback) ->
+        {:error, :invalid_feedback_format}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp transition_to_feedback_phase(iterative_state, session, state) do
+    # Calculate estimated quality for all proposals
+    proposals_with_quality =
+      Map.new(iterative_state.round_proposals, fn {agent_id, submission} ->
+        estimated_quality = estimate_proposal_quality(submission.proposal, iterative_state)
+        updated_submission = Map.put(submission, :estimated_quality, estimated_quality)
+        {agent_id, updated_submission}
+      end)
+
+    updated_iterative_state =
+      Map.merge(iterative_state, %{
+        current_phase: :feedback_collection,
+        round_proposals: proposals_with_quality,
+        feedback_collection: %{},
+        # 10 minutes
+        phase_deadline: DateTime.add(DateTime.utc_now(), 600, :second)
+      })
+
+    updated_session = %{session | state: updated_iterative_state}
+
+    emit_iterative_telemetry(
+      :transition_to_feedback,
+      session.id,
+      %{
+        proposals_count: map_size(proposals_with_quality)
+      },
+      %{round: iterative_state.current_round || 1}
+    )
+
+    {:ok, updated_session, state}
+  end
+
+  defp transition_to_analysis_phase(iterative_state, session, state) do
+    updated_iterative_state =
+      Map.merge(iterative_state, %{
+        current_phase: :analysis,
+        # 2 minutes
+        phase_deadline: DateTime.add(DateTime.utc_now(), 120, :second)
+      })
+
+    updated_session = %{session | state: updated_iterative_state}
+
+    emit_iterative_telemetry(
+      :transition_to_analysis,
+      session.id,
+      %{
+        feedback_entries: count_feedback_entries(iterative_state.feedback_collection)
+      },
+      %{round: iterative_state.current_round || 1}
+    )
+
+    # Trigger round completion analysis
+    handle_iterative_round_completion(updated_session, %{}, state)
+  end
+
+  defp check_feedback_completion(feedback_collection, participants) do
+    # Check if each participant has provided feedback for all other participants
+    participant_count = length(participants)
+    # Everyone except themselves
+    expected_feedback_per_agent = participant_count - 1
+
+    actual_feedback_counts =
+      Map.new(participants, fn participant ->
+        feedback_count = Map.get(feedback_collection, participant, %{}) |> map_size()
+        {participant, feedback_count}
+      end)
+
+    # All participants should have provided feedback for all others
+    Enum.all?(actual_feedback_counts, fn {_agent, count} ->
+      count >= expected_feedback_per_agent
+    end)
+  end
+
+  defp analyze_round_results(iterative_state) do
+    round_proposals = iterative_state.round_proposals || %{}
+    feedback_collection = iterative_state.feedback_collection || %{}
+    quality_scores = iterative_state.quality_scores || %{}
+
+    # Select best proposal
+    case select_best_proposal(round_proposals, feedback_collection, quality_scores) do
+      {:ok, best_proposal, best_agent, composite_score} ->
+        # Calculate convergence score
+        previous_proposals = get_previous_round_proposals(iterative_state)
+
+        convergence_score =
+          calculate_convergence_score(
+            round_proposals,
+            previous_proposals,
+            iterative_state.convergence_method || :jaccard
+          )
+
+        # Summarize feedback
+        feedback_summary = summarize_feedback(feedback_collection)
+
+        %{
+          best_proposal: best_proposal,
+          best_agent: best_agent,
+          quality_score: composite_score,
+          convergence_score: convergence_score,
+          feedback_summary: feedback_summary
+        }
+
+      {:error, :no_proposals} ->
+        %{
+          best_proposal: nil,
+          best_agent: nil,
+          quality_score: 0.0,
+          convergence_score: 0.0,
+          feedback_summary: %{}
+        }
+    end
+  end
+
+  defp check_termination_conditions(iterative_state, round_analysis) do
+    current_round = iterative_state.current_round || 1
+    max_rounds = iterative_state.max_rounds || 10
+    convergence_threshold = iterative_state.convergence_threshold || 0.9
+    quality_threshold = iterative_state.quality_threshold || 0.8
+
+    cond do
+      # Maximum rounds reached
+      current_round >= max_rounds ->
+        true
+
+      # Convergence achieved
+      round_analysis.convergence_score >= convergence_threshold ->
+        true
+
+      # Quality threshold met
+      round_analysis.quality_score >= quality_threshold ->
+        true
+
+      # No improvement in quality over several rounds
+      quality_stagnant?(iterative_state) ->
+        true
+
+      true ->
+        false
+    end
+  end
+
+  defp finalize_iterative_refinement(iterative_state, round_analysis, session, state) do
+    # Create final refinement summary
+    final_proposal = round_analysis.best_proposal || iterative_state.initial_proposal
+    consensus_level = calculate_final_consensus_level(iterative_state.feedback_collection || %{})
+
+    refinement_summary = %{
+      rounds_completed: iterative_state.current_round || 1,
+      final_proposal: final_proposal,
+      initial_proposal: iterative_state.initial_proposal,
+      quality_improvement: iterative_state.quality_improvement || 0.0,
+      final_quality_score: round_analysis.quality_score,
+      convergence_achieved:
+        round_analysis.convergence_score >= (iterative_state.convergence_threshold || 0.9),
+      consensus_level: consensus_level,
+      termination_reason: iterative_state.termination_reason || :max_rounds
+    }
+
+    updated_iterative_state =
+      Map.merge(iterative_state, %{
+        final_proposal: final_proposal,
+        consensus_level: consensus_level,
+        refinement_summary: refinement_summary
+      })
+
+    updated_session = %{session | state: updated_iterative_state}
+
+    emit_iterative_telemetry(
+      :refinement_finalized,
+      session.id,
+      %{
+        rounds_completed: refinement_summary.rounds_completed,
+        quality_improvement: refinement_summary.quality_improvement,
+        consensus_level: consensus_level
+      },
+      %{termination_reason: refinement_summary.termination_reason}
+    )
+
+    {:ok, updated_session, state}
+  end
+
+  defp prepare_next_round(iterative_state, round_analysis, session, state) do
+    next_round = (iterative_state.current_round || 1) + 1
+
+    # Update state for next round
+    updated_iterative_state =
+      Map.merge(iterative_state, %{
+        current_round: next_round,
+        current_proposal: round_analysis.best_proposal,
+        current_phase: :proposal_collection,
+        round_proposals: %{},
+        feedback_collection: %{},
+        # 5 minutes
+        phase_deadline: DateTime.add(DateTime.utc_now(), 300, :second)
+      })
+
+    updated_session = %{session | state: updated_iterative_state}
+
+    emit_iterative_telemetry(
+      :next_round_prepared,
+      session.id,
+      %{
+        round: next_round,
+        previous_quality: round_analysis.quality_score
+      },
+      %{}
+    )
+
+    {:ok, updated_session, state}
+  end
+
+  defp calculate_convergence_score(current_proposals, previous_proposals, method) do
+    case method do
+      :jaccard ->
+        calculate_jaccard_similarity(current_proposals, previous_proposals)
+
+      :semantic ->
+        calculate_semantic_similarity(current_proposals, previous_proposals)
+
+      :custom ->
+        calculate_custom_similarity(current_proposals, previous_proposals)
+
+      _ ->
+        0.0
+    end
+  end
+
+  defp calculate_jaccard_similarity(current_proposals, previous_proposals) do
+    if map_size(previous_proposals) == 0 do
+      0.0
+    else
+      # Convert proposals to word sets for Jaccard index calculation
+      current_words = extract_word_sets(current_proposals)
+      previous_words = extract_word_sets(previous_proposals)
+
+      # Calculate pairwise Jaccard similarities
+      similarities =
+        for {agent_id, current_set} <- current_words,
+            {^agent_id, previous_set} <- previous_words do
+          intersection_size = MapSet.size(MapSet.intersection(current_set, previous_set))
+          union_size = MapSet.size(MapSet.union(current_set, previous_set))
+
+          if union_size > 0 do
+            intersection_size / union_size
+          else
+            # Empty sets are considered identical
+            1.0
+          end
+        end
+
+      # Return average similarity
+      if length(similarities) > 0 do
+        Enum.sum(similarities) / length(similarities)
+      else
+        0.0
+      end
+    end
+  end
+
+  defp calculate_semantic_similarity(current_proposals, previous_proposals) do
+    # Placeholder for semantic similarity calculation
+    # In a real implementation, this would use NLP techniques
+    calculate_jaccard_similarity(current_proposals, previous_proposals)
+  end
+
+  defp calculate_custom_similarity(current_proposals, previous_proposals) do
+    # Custom similarity metric combining multiple factors
+    jaccard_sim = calculate_jaccard_similarity(current_proposals, previous_proposals)
+
+    # Add other similarity measures here
+    structure_sim = calculate_structural_similarity(current_proposals, previous_proposals)
+
+    # Weighted combination
+    0.7 * jaccard_sim + 0.3 * structure_sim
+  end
+
+  defp extract_word_sets(proposals) do
+    Map.new(proposals, fn {agent_id, submission} ->
+      words =
+        submission.proposal
+        |> to_string()
+        |> String.downcase()
+        |> String.split(~r/\W+/, trim: true)
+        |> MapSet.new()
+
+      {agent_id, words}
+    end)
+  end
+
+  defp calculate_structural_similarity(current_proposals, previous_proposals) do
+    # Simple structural similarity based on proposal lengths and types
+    if map_size(previous_proposals) == 0 do
+      0.0
+    else
+      current_lengths = Map.values(current_proposals) |> Enum.map(&proposal_length/1)
+      previous_lengths = Map.values(previous_proposals) |> Enum.map(&proposal_length/1)
+
+      current_avg = Enum.sum(current_lengths) / length(current_lengths)
+      previous_avg = Enum.sum(previous_lengths) / length(previous_lengths)
+
+      # Similarity based on average length difference
+      max_val = Enum.max([current_avg, previous_avg, 1.0])
+      max(0.0, 1.0 - abs(current_avg - previous_avg) / max_val)
+    end
+  end
+
+  defp proposal_length(submission) do
+    submission.proposal |> to_string() |> String.length()
+  end
+
+  defp select_best_proposal(round_proposals, feedback_collection, quality_scores) do
+    if map_size(round_proposals) == 0 do
+      {:error, :no_proposals}
+    else
+      # Calculate composite scores for each proposal
+      proposal_scores =
+        for {agent_id, submission} <- round_proposals do
+          # Base quality score
+          base_quality = Map.get(quality_scores, agent_id, submission.estimated_quality || 0.5)
+
+          # Feedback score (average of feedback from other agents)
+          feedback_score = calculate_average_feedback_score(agent_id, feedback_collection)
+
+          # Confidence score from submitter
+          confidence_score = submission.confidence
+
+          # Composite score with weights
+          composite_score =
+            base_quality * 0.4 +
+              feedback_score * 0.4 +
+              confidence_score * 0.2
+
+          {agent_id, submission.proposal, composite_score}
+        end
+
+      # Select highest scoring proposal
+      case Enum.max_by(proposal_scores, fn {_, _, score} -> score end, fn -> nil end) do
+        {best_agent, best_proposal, best_score} ->
+          {:ok, best_proposal, best_agent, best_score}
+
+        nil ->
+          {:error, :no_proposals}
+      end
+    end
+  end
+
+  defp calculate_average_feedback_score(target_agent, feedback_collection) do
+    feedback_scores =
+      for {_from_agent, agent_feedback} <- feedback_collection,
+          {^target_agent, feedback} <- agent_feedback do
+        Map.get(feedback, :quality_score, 0.5)
+      end
+
+    if length(feedback_scores) > 0 do
+      Enum.sum(feedback_scores) / length(feedback_scores)
+    else
+      # Default neutral score
+      0.5
+    end
+  end
+
+  defp get_previous_round_proposals(iterative_state) do
+    case iterative_state.proposals_history do
+      [previous_round | _] -> previous_round.proposals
+      [] -> %{}
+    end
+  end
+
+  defp get_previous_round_quality(iterative_state) do
+    case iterative_state.proposals_history do
+      [previous_round | _] -> previous_round.quality_score
+      [] -> 0.0
+    end
+  end
+
+  defp quality_stagnant?(iterative_state) do
+    history = iterative_state.proposals_history || []
+
+    if length(history) < 3 do
+      false
+    else
+      recent_scores = history |> Enum.take(3) |> Enum.map(& &1.quality_score)
+      max_score = Enum.max(recent_scores)
+      min_score = Enum.min(recent_scores)
+
+      # Consider stagnant if improvement is less than 5% over last 3 rounds
+      max_score - min_score < 0.05
+    end
+  end
+
+  defp summarize_feedback(feedback_collection) do
+    total_feedback_items =
+      Enum.reduce(feedback_collection, 0, fn {_from_agent, agent_feedback}, acc ->
+        acc + map_size(agent_feedback)
+      end)
+
+    if total_feedback_items > 0 do
+      # Calculate average scores
+      all_scores =
+        for {_from_agent, agent_feedback} <- feedback_collection,
+            {_target_agent, feedback} <- agent_feedback do
+          Map.get(feedback, :quality_score, 0.5)
+        end
+
+      average_score = Enum.sum(all_scores) / length(all_scores)
+
+      %{
+        total_feedback_items: total_feedback_items,
+        average_quality_score: average_score,
+        participation_rate: map_size(feedback_collection) / max(1, total_feedback_items)
+      }
+    else
+      %{
+        total_feedback_items: 0,
+        average_quality_score: 0.0,
+        participation_rate: 0.0
+      }
+    end
+  end
+
+  defp calculate_final_consensus_level(feedback_collection) do
+    if map_size(feedback_collection) == 0 do
+      0.0
+    else
+      # Calculate consensus based on agreement in feedback scores
+      all_scores =
+        for {_from_agent, agent_feedback} <- feedback_collection,
+            {_target_agent, feedback} <- agent_feedback do
+          Map.get(feedback, :quality_score, 0.5)
+        end
+
+      if length(all_scores) > 0 do
+        mean_score = Enum.sum(all_scores) / length(all_scores)
+
+        variance =
+          Enum.sum(Enum.map(all_scores, fn score -> :math.pow(score - mean_score, 2) end)) /
+            length(all_scores)
+
+        # Higher consensus when variance is lower
+        max(0.0, 1.0 - variance)
+      else
+        0.0
+      end
+    end
+  end
+
+  defp estimate_proposal_quality(proposal, _iterative_state) do
+    # Simple quality estimation based on proposal characteristics
+    proposal_text = to_string(proposal)
+
+    # Basic quality metrics
+    length_score = min(1.0, String.length(proposal_text) / 100.0)
+    complexity_score = min(1.0, (String.split(proposal_text) |> length()) / 20.0)
+
+    # Combine scores
+    (length_score + complexity_score) / 2.0
+  end
+
+  defp count_feedback_entries(feedback_collection) do
+    Enum.reduce(feedback_collection, 0, fn {_from_agent, agent_feedback}, acc ->
+      acc + map_size(agent_feedback)
+    end)
+  end
+
+  defp emit_iterative_telemetry(event_name, session_id, measurements, metadata) do
+    :telemetry.execute(
+      [:foundation, :mabeam, :coordination, :iterative, event_name],
+      Map.merge(%{count: 1}, measurements),
+      Map.merge(%{session_id: session_id}, metadata)
+    )
   end
 
   # Configuration Builders
