@@ -41,9 +41,7 @@ defmodule Foundation.MABEAM.CoordinationAdvancedTest do
       Types.new_agent_config(:expert_agent, AdvancedTestAgent, [],
         capabilities: [:consensus, :expertise]
       ),
-      Types.new_agent_config(:intermediate_agent, AdvancedTestAgent, [],
-        capabilities: [:consensus]
-      ),
+      Types.new_agent_config(:intermediate_agent, AdvancedTestAgent, [], capabilities: [:consensus]),
       Types.new_agent_config(:novice_agent, AdvancedTestAgent, [], capabilities: [:consensus])
     ]
 
