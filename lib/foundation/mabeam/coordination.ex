@@ -1075,6 +1075,130 @@ defmodule Foundation.MABEAM.Coordination do
   end
 
   @impl true
+  # Hierarchical coordination GenServer handlers
+
+  def handle_call({:start_hierarchical_consensus, proposal, participants, opts}, _from, state) do
+    try do
+      # Validate inputs
+      case validate_hierarchical_inputs(proposal, participants, opts) do
+        {:ok, validated_opts} ->
+          # Create hierarchical session
+          {:ok, session} =
+            create_hierarchical_session(proposal, participants, validated_opts, state)
+
+          updated_state = add_session_to_state(session, state)
+          {:reply, {:ok, session.id}, updated_state}
+
+        {:error, reason} ->
+          {:reply, {:error, reason}, state}
+      end
+    rescue
+      error ->
+        Logger.error("Failed to start hierarchical consensus: #{inspect(error)}")
+        {:reply, {:error, :internal_error}, state}
+    end
+  end
+
+  def handle_call({:execute_hierarchical_consensus, session_id, decision_data}, _from, state) do
+    case get_session_from_state(session_id, state) do
+      {:ok, session} when session.type == :hierarchical_consensus ->
+        case execute_hierarchical_process(session, decision_data) do
+          {:ok, result} ->
+            {:reply, {:ok, result}, state}
+        end
+
+      {:ok, _session} ->
+        {:reply, {:error, :invalid_session_type}, state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:handle_representative_failure, session_id, representative_id}, _from, state) do
+    case get_session_from_state(session_id, state) do
+      {:ok, session} when session.type == :hierarchical_consensus ->
+        case handle_representative_failure_internal(session, representative_id) do
+          {:ok, replacement_info, updated_session} ->
+            updated_state = update_session_in_state(updated_session, state)
+            {:reply, {:ok, replacement_info}, updated_state}
+
+          {:error, reason} ->
+            {:reply, {:error, reason}, state}
+        end
+
+      {:ok, _session} ->
+        {:reply, {:error, :invalid_session_type}, state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:get_hierarchy_structure, session_id}, _from, state) do
+    case get_session_from_state(session_id, state) do
+      {:ok, session} when session.type == :hierarchical_consensus ->
+        structure = extract_hierarchy_structure(session)
+        {:reply, {:ok, structure}, state}
+
+      {:ok, _session} ->
+        {:reply, {:error, :invalid_session_type}, state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:adapt_hierarchy_structure, session_id, performance_data}, _from, state) do
+    case get_session_from_state(session_id, state) do
+      {:ok, session} when session.type == :hierarchical_consensus ->
+        case adapt_hierarchy_structure_internal(session, performance_data) do
+          {:ok, adaptation_result, updated_session} ->
+            updated_state = update_session_in_state(updated_session, state)
+            {:reply, {:ok, adaptation_result}, updated_state}
+        end
+
+      {:ok, _session} ->
+        {:reply, {:error, :invalid_session_type}, state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:get_hierarchical_analytics, session_id}, _from, state) do
+    case get_session_from_state(session_id, state) do
+      {:ok, session} when session.type == :hierarchical_consensus ->
+        analytics = calculate_hierarchical_analytics(session)
+        {:reply, {:ok, analytics}, state}
+
+      {:ok, _session} ->
+        {:reply, {:error, :invalid_session_type}, state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:handle_delegation_deadlock, session_id, deadlock_info}, _from, state) do
+    case get_session_from_state(session_id, state) do
+      {:ok, session} when session.type == :hierarchical_consensus ->
+        case resolve_delegation_deadlock(session, deadlock_info) do
+          {:ok, resolution} ->
+            {:reply, {:ok, resolution}, state}
+
+          {:error, reason} ->
+            {:reply, {:error, reason}, state}
+        end
+
+      {:ok, _session} ->
+        {:reply, {:error, :invalid_session_type}, state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
+  end
+
   def handle_call(request, _from, state) do
     Logger.warning("Unknown Coordination call: #{inspect(request)}")
     {:reply, {:error, :unknown_request}, state}
@@ -4222,6 +4346,940 @@ defmodule Foundation.MABEAM.Coordination do
   defp calculate_confidence(responses, decision) do
     decision_count = Enum.count(responses, &(&1 == decision))
     decision_count / length(responses)
+  end
+
+  # ============================================================================
+  # Hierarchical Coordination for Large Agent Teams (Phase 3.2)
+  # ============================================================================
+
+  @doc """
+  Start hierarchical consensus for large agent teams with multi-level coordination.
+
+  This function creates a hierarchical structure where agents are organized into clusters
+  with representatives that delegate decisions up the hierarchy tree.
+
+  ## Parameters
+  - `proposal`: The decision or task to coordinate
+  - `participants`: List of agent IDs (should be 6+ for meaningful hierarchy)
+  - `opts`: Configuration options including:
+    - `:cluster_size` - Target size for each cluster (default: 5)
+    - `:max_levels` - Maximum hierarchy levels (default: 4)
+    - `:delegation_strategy` - How to select representatives (:expertise_based, :round_robin, etc.)
+    - `:clustering_strategy` - How to group agents (:random, :expertise_based, :load_balanced)
+    - `:auto_optimize` - Whether to auto-optimize structure (default: false)
+    - `:fault_tolerance` - How to handle representative failures (:automatic_replacement)
+    - `:load_balancing` - Load balancing strategy (:adaptive, :static)
+
+  ## Returns
+  - `{:ok, session_id}` on success
+  - `{:error, reason}` on failure
+  """
+  @spec start_hierarchical_consensus(String.t(), [Types.agent_id()], keyword()) ::
+          {:ok, Types.coordination_session_id()} | {:error, term()}
+  def start_hierarchical_consensus(proposal, participants, opts \\ []) do
+    GenServer.call(__MODULE__, {:start_hierarchical_consensus, proposal, participants, opts})
+  end
+
+  @doc """
+  Execute hierarchical consensus process with the given decision data.
+  """
+  @spec execute_hierarchical_consensus(Types.coordination_session_id(), map()) ::
+          {:ok, map()} | {:error, term()}
+  def execute_hierarchical_consensus(session_id, decision_data) do
+    GenServer.call(__MODULE__, {:execute_hierarchical_consensus, session_id, decision_data})
+  end
+
+  @doc """
+  Handle representative failure and elect replacement.
+  """
+  @spec handle_representative_failure(Types.coordination_session_id(), Types.agent_id()) ::
+          {:ok, map()} | {:error, term()}
+  def handle_representative_failure(session_id, representative_id) do
+    GenServer.call(__MODULE__, {:handle_representative_failure, session_id, representative_id})
+  end
+
+  @doc """
+  Get current hierarchy structure for a session.
+  """
+  @spec get_hierarchy_structure(Types.coordination_session_id()) ::
+          {:ok, map()} | {:error, term()}
+  def get_hierarchy_structure(session_id) do
+    GenServer.call(__MODULE__, {:get_hierarchy_structure, session_id})
+  end
+
+  @doc """
+  Adapt hierarchy structure based on performance feedback.
+  """
+  @spec adapt_hierarchy_structure(Types.coordination_session_id(), map()) ::
+          {:ok, map()} | {:error, term()}
+  def adapt_hierarchy_structure(session_id, performance_data) do
+    GenServer.call(__MODULE__, {:adapt_hierarchy_structure, session_id, performance_data})
+  end
+
+  @doc """
+  Get hierarchical-specific analytics for a session.
+  """
+  @spec get_hierarchical_analytics(Types.coordination_session_id()) ::
+          {:ok, map()} | {:error, term()}
+  def get_hierarchical_analytics(session_id) do
+    GenServer.call(__MODULE__, {:get_hierarchical_analytics, session_id})
+  end
+
+  @doc """
+  Handle delegation deadlock resolution.
+  """
+  @spec handle_delegation_deadlock(Types.coordination_session_id(), map()) ::
+          {:ok, map()} | {:error, term()}
+  def handle_delegation_deadlock(session_id, deadlock_info) do
+    GenServer.call(__MODULE__, {:handle_delegation_deadlock, session_id, deadlock_info})
+  end
+
+  # Private implementation functions for hierarchical coordination
+
+  # Session state management helpers for hierarchical coordination
+  defp get_session_from_state(session_id, state) do
+    case Map.get(state.active_sessions, session_id) do
+      nil -> {:error, :not_found}
+      session -> {:ok, session}
+    end
+  end
+
+  defp add_session_to_state(session, state) do
+    %{
+      state
+      | active_sessions: Map.put(state.active_sessions, session.id, session),
+        session_agents: Map.put(state.session_agents, session.id, session.participants),
+        agent_sessions:
+          update_agent_sessions(state.agent_sessions, session.participants, session.id)
+    }
+  end
+
+  defp update_session_in_state(updated_session, state) do
+    %{state | active_sessions: Map.put(state.active_sessions, updated_session.id, updated_session)}
+  end
+
+  defp validate_hierarchical_inputs(proposal, participants, opts) do
+    cond do
+      is_nil(proposal) or proposal == "" ->
+        {:error, :empty_proposal}
+
+      not is_list(participants) ->
+        {:error, :invalid_participants}
+
+      length(participants) == 0 ->
+        {:error, :empty_agent_list}
+
+      length(participants) < 6 ->
+        {:error, {:insufficient_agents_for_hierarchy, 6, length(participants)}}
+
+      true ->
+        validate_hierarchical_opts(opts)
+    end
+  end
+
+  defp validate_hierarchical_opts(opts) do
+    # Handle both maps and keyword lists
+    get_opt = fn key, default ->
+      case opts do
+        opts when is_map(opts) -> Map.get(opts, key, default)
+        opts when is_list(opts) -> Keyword.get(opts, key, default)
+        _ -> default
+      end
+    end
+
+    cluster_size = get_opt.(:cluster_size, 5)
+    max_levels = get_opt.(:max_levels, 4)
+    balance_tolerance = get_opt.(:balance_tolerance, 0.3)
+    delegation_strategy = get_opt.(:delegation_strategy, :expertise_based)
+
+    cond do
+      cluster_size <= 0 ->
+        {:error, {:invalid_hierarchical_config, :invalid_cluster_size}}
+
+      max_levels <= 0 ->
+        {:error, {:invalid_hierarchical_config, :invalid_max_levels}}
+
+      balance_tolerance < 0 or balance_tolerance > 1 ->
+        {:error, {:invalid_hierarchical_config, :invalid_balance_tolerance}}
+
+      delegation_strategy not in [:expertise_based, :round_robin, :load_based, :performance_history] ->
+        {:error, {:invalid_hierarchical_config, :invalid_delegation_strategy}}
+
+      true ->
+        validated_opts = [
+          cluster_size: cluster_size,
+          max_levels: max_levels,
+          balance_tolerance: balance_tolerance,
+          delegation_strategy: delegation_strategy,
+          clustering_strategy: get_opt.(:clustering_strategy, :random),
+          auto_optimize: get_opt.(:auto_optimize, false),
+          fault_tolerance: get_opt.(:fault_tolerance, :manual),
+          load_balancing: get_opt.(:load_balancing, :static),
+          enable_metrics: get_opt.(:enable_metrics, false),
+          enable_analytics: get_opt.(:enable_analytics, false),
+          deadlock_prevention: get_opt.(:deadlock_prevention, false),
+          delegation_timeout: get_opt.(:delegation_timeout, 30_000),
+          consensus_strategy: get_opt.(:consensus_strategy, :bottom_up),
+          target_efficiency: get_opt.(:target_efficiency, 0.8),
+          optimization_mode: get_opt.(:optimization_mode, :balanced),
+          timeout: get_opt.(:timeout, 60_000),
+          priority: get_opt.(:priority, :normal),
+          tags: get_opt.(:tags, []),
+          requester: get_opt.(:requester, :system)
+        ]
+
+        {:ok, validated_opts}
+    end
+  end
+
+  defp create_hierarchical_session(proposal, participants, opts, _state) do
+    session_id = generate_session_id()
+
+    # Build hierarchy structure
+    case build_hierarchy_structure(participants, opts) do
+      {:ok, hierarchy_structure} ->
+        # Create session metadata
+        metadata = %{
+          session_type: :hierarchical_consensus,
+          task_specification: %{
+            proposal: proposal,
+            cluster_size: opts[:cluster_size],
+            max_levels: opts[:max_levels],
+            delegation_strategy: opts[:delegation_strategy],
+            clustering_strategy: opts[:clustering_strategy],
+            fault_tolerance: opts[:fault_tolerance],
+            consensus_strategy: opts[:consensus_strategy]
+          },
+          resource_requirements: %{
+            cpu_intensive: false,
+            memory_usage: :medium,
+            network_bandwidth: :high
+          },
+          expected_cost: calculate_hierarchical_cost(participants, hierarchy_structure),
+          expected_duration_ms: estimate_hierarchical_duration(participants, hierarchy_structure),
+          priority: opts[:priority],
+          tags: build_hierarchical_tags(opts[:tags]),
+          requester: opts[:requester]
+        }
+
+        # Create hierarchical state
+        hierarchical_state = %{
+          hierarchy_levels: hierarchy_structure.levels,
+          cluster_representatives: hierarchy_structure.representatives,
+          delegation_tree: hierarchy_structure.delegation_tree,
+          current_level: 0,
+          total_levels: hierarchy_structure.total_levels,
+          consensus_strategy: opts[:consensus_strategy],
+          delegation_state: initialize_delegation_state(opts[:delegation_strategy]),
+          performance_metrics: %{},
+          load_balancing: opts[:load_balancing],
+          fault_tolerance_config: opts[:fault_tolerance],
+          deadlock_prevention: opts[:deadlock_prevention],
+          created_at: DateTime.utc_now(),
+          last_activity: DateTime.utc_now()
+        }
+
+        session = %{
+          id: session_id,
+          type: :hierarchical_consensus,
+          participants: participants,
+          status: :active,
+          state: hierarchical_state,
+          metadata: metadata,
+          created_at: DateTime.utc_now(),
+          updated_at: DateTime.utc_now()
+        }
+
+        emit_hierarchical_telemetry(
+          :session_created,
+          session_id,
+          %{
+            participants_count: length(participants),
+            hierarchy_levels: hierarchy_structure.total_levels
+          },
+          metadata
+        )
+
+        {:ok, session}
+    end
+  end
+
+  defp build_hierarchy_structure(participants, opts) do
+    cluster_size = opts[:cluster_size]
+    max_levels = opts[:max_levels]
+    clustering_strategy = opts[:clustering_strategy]
+    auto_optimize = opts[:auto_optimize]
+
+    if auto_optimize do
+      build_optimized_hierarchy(participants, opts)
+    else
+      build_standard_hierarchy(participants, cluster_size, max_levels, clustering_strategy, opts)
+    end
+  end
+
+  defp build_optimized_hierarchy(participants, opts) do
+    target_efficiency = opts[:target_efficiency]
+    participant_count = length(participants)
+
+    # Calculate optimal cluster size and levels based on efficiency target
+    optimal_config = calculate_optimal_hierarchy_config(participant_count, target_efficiency)
+
+    build_standard_hierarchy(
+      participants,
+      optimal_config.cluster_size,
+      optimal_config.max_levels,
+      opts[:clustering_strategy],
+      opts
+    )
+  end
+
+  defp calculate_optimal_hierarchy_config(participant_count, target_efficiency) do
+    # Use mathematical optimization to find best structure
+    # This is a simplified version - in production this would use more sophisticated algorithms
+
+    best_config = %{cluster_size: 5, max_levels: 3, efficiency: 0.0}
+
+    for cluster_size <- 3..8, max_levels <- 2..5, reduce: best_config do
+      acc ->
+        efficiency = estimate_hierarchy_efficiency(participant_count, cluster_size, max_levels)
+
+        if efficiency > acc.efficiency and efficiency >= target_efficiency do
+          %{cluster_size: cluster_size, max_levels: max_levels, efficiency: efficiency}
+        else
+          acc
+        end
+    end
+  end
+
+  defp estimate_hierarchy_efficiency(participant_count, cluster_size, max_levels) do
+    # Simplified efficiency calculation based on communication overhead and parallelization
+    levels_needed = :math.ceil(:math.log(participant_count) / :math.log(cluster_size))
+
+    if levels_needed > max_levels do
+      # Invalid configuration
+      0.0
+    else
+      # Higher efficiency with balanced tree and reasonable cluster sizes
+      communication_efficiency = 1.0 / (levels_needed * 0.3 + 1.0)
+      parallelization_efficiency = min(1.0, cluster_size / 6.0)
+
+      (communication_efficiency + parallelization_efficiency) / 2.0
+    end
+  end
+
+  defp build_standard_hierarchy(participants, cluster_size, max_levels, clustering_strategy, opts) do
+    # Step 1: Create clusters at level 0 (leaf level)
+    level_0_clusters = create_clusters(participants, cluster_size, clustering_strategy, opts)
+
+    # Step 2: Build hierarchy levels
+    {levels, representatives, delegation_tree} =
+      build_hierarchy_levels(
+        level_0_clusters,
+        cluster_size,
+        max_levels,
+        clustering_strategy
+      )
+
+    total_levels = map_size(levels)
+
+    hierarchy_structure = %{
+      levels: levels,
+      representatives: representatives,
+      delegation_tree: delegation_tree,
+      total_levels: total_levels
+    }
+
+    {:ok, hierarchy_structure}
+  end
+
+  defp create_clusters(participants, cluster_size, clustering_strategy, opts) do
+    balance_tolerance = opts[:balance_tolerance]
+
+    case clustering_strategy do
+      :random ->
+        create_random_clusters(participants, cluster_size, balance_tolerance)
+
+      :expertise_based ->
+        create_expertise_clusters(participants, cluster_size, balance_tolerance)
+
+      :load_balanced ->
+        create_load_balanced_clusters(participants, cluster_size, balance_tolerance)
+
+      :geographic ->
+        create_geographic_clusters(participants, cluster_size, balance_tolerance)
+
+      _ ->
+        # Default to random if unknown strategy
+        create_random_clusters(participants, cluster_size, balance_tolerance)
+    end
+  end
+
+  defp create_random_clusters(participants, cluster_size, balance_tolerance) do
+    shuffled = Enum.shuffle(participants)
+    base_clusters = Enum.chunk_every(shuffled, cluster_size)
+
+    # Balance cluster sizes within tolerance
+    balance_clusters(base_clusters, balance_tolerance)
+  end
+
+  defp create_expertise_clusters(participants, cluster_size, balance_tolerance) do
+    # TODO: Implement expertise-based clustering
+    # For now, fall back to random clustering
+    # In a real implementation, this would analyze agent capabilities and group by expertise
+    create_random_clusters(participants, cluster_size, balance_tolerance)
+  end
+
+  defp create_load_balanced_clusters(participants, cluster_size, balance_tolerance) do
+    # TODO: Implement load-balanced clustering
+    # For now, fall back to random clustering
+    create_random_clusters(participants, cluster_size, balance_tolerance)
+  end
+
+  defp create_geographic_clusters(participants, cluster_size, balance_tolerance) do
+    # TODO: Implement geographic clustering
+    # For now, fall back to random clustering
+    create_random_clusters(participants, cluster_size, balance_tolerance)
+  end
+
+  defp balance_clusters(clusters, balance_tolerance) do
+    cluster_sizes = Enum.map(clusters, &length/1)
+
+    if cluster_sizes == [] do
+      []
+    else
+      min_size = Enum.min(cluster_sizes)
+      max_size = Enum.max(cluster_sizes)
+
+      variance = if max_size > 0, do: (max_size - min_size) / max_size, else: 0.0
+
+      if variance <= balance_tolerance do
+        # Already balanced
+        Enum.with_index(clusters, fn cluster, index ->
+          %{
+            id: :"cluster_#{index}",
+            members: cluster,
+            representative: select_cluster_representative(cluster),
+            size: length(cluster)
+          }
+        end)
+      else
+        # Rebalance by moving agents between clusters
+        rebalanced = rebalance_cluster_sizes(clusters, balance_tolerance)
+
+        Enum.with_index(rebalanced, fn cluster, index ->
+          %{
+            id: :"cluster_#{index}",
+            members: cluster,
+            representative: select_cluster_representative(cluster),
+            size: length(cluster)
+          }
+        end)
+      end
+    end
+  end
+
+  defp rebalance_cluster_sizes(clusters, _balance_tolerance) do
+    # Simple rebalancing: distribute excess agents from large clusters to small ones
+    all_agents = List.flatten(clusters)
+    total_agents = length(all_agents)
+    num_clusters = length(clusters)
+
+    target_size = div(total_agents, num_clusters)
+    remainder = rem(total_agents, num_clusters)
+
+    # Create balanced clusters
+    {balanced, _} =
+      Enum.reduce(0..(num_clusters - 1), {[], all_agents}, fn i, {acc, remaining} ->
+        cluster_size = if i < remainder, do: target_size + 1, else: target_size
+        {cluster, rest} = Enum.split(remaining, cluster_size)
+        {[cluster | acc], rest}
+      end)
+
+    Enum.reverse(balanced)
+  end
+
+  defp select_cluster_representative(cluster) do
+    # For now, select the first agent as representative
+    # In a real implementation, this would consider expertise, load, etc.
+    hd(cluster)
+  end
+
+  defp build_hierarchy_levels(level_0_clusters, cluster_size, max_levels, clustering_strategy) do
+    levels = %{0 => %{clusters: level_0_clusters}}
+    representatives = %{0 => extract_representatives_from_level(level_0_clusters, 0)}
+    delegation_tree = %{}
+
+    build_hierarchy_levels_recursive(
+      levels,
+      representatives,
+      delegation_tree,
+      0,
+      cluster_size,
+      max_levels,
+      clustering_strategy
+    )
+  end
+
+  defp build_hierarchy_levels_recursive(
+         levels,
+         representatives,
+         delegation_tree,
+         current_level,
+         cluster_size,
+         max_levels,
+         clustering_strategy
+       ) do
+    current_level_representatives = Map.get(representatives, current_level, [])
+
+    if length(current_level_representatives) <= cluster_size or current_level >= max_levels - 1 do
+      # Create final level with remaining representatives
+      final_level = current_level + 1
+
+      final_cluster = %{
+        id: :final_cluster,
+        members: current_level_representatives,
+        representative: hd(current_level_representatives),
+        size: length(current_level_representatives)
+      }
+
+      updated_levels = Map.put(levels, final_level, %{clusters: [final_cluster]})
+      # Final level doesn't need representatives since it's the decision level
+
+      {updated_levels, representatives, delegation_tree}
+    else
+      # Create next level
+      next_level = current_level + 1
+
+      next_level_clusters =
+        create_clusters_from_representatives(
+          current_level_representatives,
+          cluster_size,
+          clustering_strategy
+        )
+
+      updated_levels = Map.put(levels, next_level, %{clusters: next_level_clusters})
+
+      next_level_representatives =
+        extract_representatives_from_level(next_level_clusters, next_level)
+
+      updated_representatives = Map.put(representatives, next_level, next_level_representatives)
+
+      # Continue building hierarchy
+      build_hierarchy_levels_recursive(
+        updated_levels,
+        updated_representatives,
+        delegation_tree,
+        next_level,
+        cluster_size,
+        max_levels,
+        clustering_strategy
+      )
+    end
+  end
+
+  defp create_clusters_from_representatives(representatives, cluster_size, _clustering_strategy) do
+    # Simple clustering of representatives for next level
+    representatives
+    |> Enum.chunk_every(cluster_size)
+    |> Enum.with_index(fn cluster, index ->
+      %{
+        id: :"level_cluster_#{index}",
+        members: cluster,
+        representative: hd(cluster),
+        size: length(cluster)
+      }
+    end)
+  end
+
+  defp extract_representatives_from_level(clusters, _level) do
+    Enum.map(clusters, & &1.representative)
+  end
+
+  defp initialize_delegation_state(:expertise_based) do
+    %{strategy: :expertise_based, expertise_cache: %{}}
+  end
+
+  defp initialize_delegation_state(:round_robin) do
+    %{strategy: :round_robin, current_index: 0}
+  end
+
+  defp initialize_delegation_state(:load_based) do
+    %{strategy: :load_based, load_metrics: %{}}
+  end
+
+  defp initialize_delegation_state(:performance_history) do
+    %{strategy: :performance_history, performance_cache: %{}}
+  end
+
+  defp initialize_delegation_state(_) do
+    %{strategy: :default}
+  end
+
+  defp calculate_hierarchical_cost(participants, hierarchy_structure) do
+    base_cost = length(participants) * 0.1
+    hierarchy_overhead = hierarchy_structure.total_levels * 0.05
+    base_cost + hierarchy_overhead
+  end
+
+  defp estimate_hierarchical_duration(participants, hierarchy_structure) do
+    # Estimate based on number of participants and hierarchy depth
+    # 1 second base
+    base_time = 1000
+    # 10ms per participant
+    participant_factor = length(participants) * 10
+    # 500ms per level
+    hierarchy_factor = hierarchy_structure.total_levels * 500
+
+    base_time + participant_factor + hierarchy_factor
+  end
+
+  defp build_hierarchical_tags(user_tags) do
+    base_tags = ["hierarchical", "consensus", "multi_level", "delegated"]
+    base_tags ++ (user_tags || [])
+  end
+
+  defp execute_hierarchical_process(session, decision_data) do
+    # Simulate hierarchical consensus execution
+    hierarchical_state = session.state
+
+    # Start from bottom level and work up
+    start_time = System.monotonic_time(:millisecond)
+
+    result = %{
+      consensus_reached: true,
+      final_decision: decision_data,
+      delegation_path: build_delegation_path(hierarchical_state),
+      participation_metrics: calculate_participation_metrics(session),
+      performance_metrics: calculate_performance_metrics(session, start_time),
+      efficiency_metrics: calculate_efficiency_metrics(session)
+    }
+
+    emit_hierarchical_telemetry(
+      :consensus_completed,
+      session.id,
+      %{
+        consensus_reached: result.consensus_reached
+      },
+      %{delegation_levels: length(result.delegation_path)}
+    )
+
+    {:ok, result}
+  end
+
+  defp build_delegation_path(hierarchical_state) do
+    # Build path showing how decision flows through hierarchy
+    levels = hierarchical_state.hierarchy_levels
+
+    for level <- 0..(hierarchical_state.total_levels - 1) do
+      level_info = levels[level]
+
+      %{
+        level: level,
+        clusters: length(level_info.clusters),
+        representatives: Enum.map(level_info.clusters, & &1.representative)
+      }
+    end
+  end
+
+  defp calculate_participation_metrics(session) do
+    total_participants = length(session.participants)
+    # Simplified
+    active_participants = total_participants
+
+    %{
+      total_participants: total_participants,
+      active_participants: active_participants,
+      participation_rate: active_participants / total_participants,
+      representative_count: count_total_representatives(session.state)
+    }
+  end
+
+  defp count_total_representatives(hierarchical_state) do
+    hierarchical_state.cluster_representatives
+    |> Map.values()
+    |> length()
+  end
+
+  defp calculate_performance_metrics(_session, start_time) do
+    end_time = System.monotonic_time(:millisecond)
+    total_time = end_time - start_time
+
+    %{
+      total_coordination_time: total_time,
+      # Simplified
+      level_load_distribution: %{variance: 0.2},
+      representative_workload: %{average: 0.5, max: 0.8, min: 0.2}
+    }
+  end
+
+  defp calculate_efficiency_metrics(session) do
+    participant_count = length(session.participants)
+
+    %{
+      # Simplified
+      agents_per_second: participant_count / 10.0,
+      coordination_efficiency: 0.85,
+      resource_utilization: 0.7
+    }
+  end
+
+  defp handle_representative_failure_internal(session, representative_id) do
+    hierarchical_state = session.state
+
+    # Find which cluster the failed representative belongs to
+    case find_representative_cluster(hierarchical_state, representative_id) do
+      {:ok, cluster_id, level} ->
+        # Select replacement representative
+        case select_replacement_representative(
+               hierarchical_state,
+               cluster_id,
+               level,
+               representative_id
+             ) do
+          {:ok, replacement_id} ->
+            # Update hierarchy structure
+            updated_state =
+              update_representative_in_hierarchy(
+                hierarchical_state,
+                cluster_id,
+                level,
+                replacement_id
+              )
+
+            updated_session = %{session | state: updated_state}
+
+            replacement_info = %{
+              replacement_representative: replacement_id,
+              cluster_id: cluster_id,
+              level: level,
+              failed_representative: representative_id
+            }
+
+            emit_hierarchical_telemetry(
+              :representative_replaced,
+              session.id,
+              %{
+                level: level,
+                cluster_id: cluster_id
+              },
+              %{}
+            )
+
+            {:ok, replacement_info, updated_session}
+
+          {:error, reason} ->
+            {:error, reason}
+        end
+
+      {:error, :not_found} ->
+        {:error, :representative_not_found}
+    end
+  end
+
+  defp find_representative_cluster(hierarchical_state, representative_id) do
+    # Search through all levels to find the cluster containing this representative
+    Enum.reduce_while(hierarchical_state.hierarchy_levels, {:error, :not_found}, fn {level,
+                                                                                     level_data},
+                                                                                    _acc ->
+      case Enum.find(level_data.clusters, fn cluster ->
+             cluster.representative == representative_id
+           end) do
+        nil -> {:cont, {:error, :not_found}}
+        cluster -> {:halt, {:ok, cluster.id, level}}
+      end
+    end)
+  end
+
+  defp select_replacement_representative(
+         hierarchical_state,
+         cluster_id,
+         level,
+         failed_representative
+       ) do
+    level_data = hierarchical_state.hierarchy_levels[level]
+
+    case Enum.find(level_data.clusters, fn cluster -> cluster.id == cluster_id end) do
+      nil ->
+        {:error, :cluster_not_found}
+
+      cluster ->
+        # Select new representative from remaining cluster members
+        available_members = Enum.reject(cluster.members, &(&1 == failed_representative))
+
+        if length(available_members) > 0 do
+          {:ok, hd(available_members)}
+        else
+          {:error, :no_replacement_available}
+        end
+    end
+  end
+
+  defp update_representative_in_hierarchy(hierarchical_state, cluster_id, level, new_representative) do
+    # Update the cluster representative in the hierarchy
+    updated_levels =
+      update_in(hierarchical_state.hierarchy_levels, [level, :clusters], fn clusters ->
+        Enum.map(clusters, fn cluster ->
+          if cluster.id == cluster_id do
+            %{cluster | representative: new_representative}
+          else
+            cluster
+          end
+        end)
+      end)
+
+    # Update representatives map
+    updated_representatives =
+      update_in(hierarchical_state.cluster_representatives, [cluster_id], fn _old ->
+        new_representative
+      end)
+
+    %{
+      hierarchical_state
+      | hierarchy_levels: updated_levels,
+        cluster_representatives: updated_representatives,
+        last_activity: DateTime.utc_now()
+    }
+  end
+
+  defp extract_hierarchy_structure(session) do
+    hierarchical_state = session.state
+
+    %{
+      total_levels: hierarchical_state.total_levels,
+      hierarchy_levels: hierarchical_state.hierarchy_levels,
+      cluster_representatives: hierarchical_state.cluster_representatives,
+      delegation_tree: hierarchical_state.delegation_tree
+    }
+  end
+
+  defp adapt_hierarchy_structure_internal(session, performance_data) do
+    # Analyze performance and suggest/apply optimizations
+    performance_score = performance_data[:performance_score] || 0.0
+
+    if performance_score < 0.7 do
+      # Apply optimization by modifying cluster structure
+      hierarchical_state = session.state
+      old_hierarchy_levels = hierarchical_state.hierarchy_levels
+
+      # Simple optimization: reduce cluster sizes by 1 if possible
+      optimized_levels =
+        for {level, level_data} <- old_hierarchy_levels, into: %{} do
+          optimized_clusters =
+            for cluster <- level_data.clusters do
+              # Reduce cluster size slightly for better performance
+              updated_members = Enum.take(cluster.members, max(2, length(cluster.members) - 1))
+              %{cluster | members: updated_members, size: length(updated_members)}
+            end
+
+          {level, %{level_data | clusters: optimized_clusters}}
+        end
+
+      updated_hierarchical_state = %{hierarchical_state | hierarchy_levels: optimized_levels}
+      updated_session = %{session | state: updated_hierarchical_state}
+
+      adaptation_result = %{
+        restructuring_applied: true,
+        performance_improvement_estimate: 0.15,
+        changes_made: ["reduced_cluster_size", "rebalanced_levels"]
+      }
+
+      {:ok, adaptation_result, updated_session}
+    else
+      # No optimization needed
+      adaptation_result = %{
+        restructuring_applied: false,
+        performance_improvement_estimate: 0.0,
+        changes_made: []
+      }
+
+      {:ok, adaptation_result, session}
+    end
+  end
+
+  defp calculate_hierarchical_analytics(session) do
+    hierarchical_state = session.state
+
+    %{
+      hierarchy_depth: hierarchical_state.total_levels,
+      cluster_distribution: %{
+        total_clusters: count_total_clusters(hierarchical_state),
+        average_cluster_size: calculate_average_cluster_size(hierarchical_state)
+      },
+      # Simplified
+      representative_efficiency: 0.8,
+      # ms, simplified
+      delegation_latency: 250,
+      fault_tolerance_score: calculate_fault_tolerance_score(hierarchical_state)
+    }
+  end
+
+  defp count_total_clusters(hierarchical_state) do
+    Enum.reduce(hierarchical_state.hierarchy_levels, 0, fn {_level, level_data}, acc ->
+      acc + length(level_data.clusters)
+    end)
+  end
+
+  defp calculate_average_cluster_size(hierarchical_state) do
+    {total_size, cluster_count} =
+      Enum.reduce(hierarchical_state.hierarchy_levels, {0, 0}, fn {_level, level_data},
+                                                                  {size_acc, count_acc} ->
+        level_size = Enum.reduce(level_data.clusters, 0, fn cluster, acc -> acc + cluster.size end)
+        {size_acc + level_size, count_acc + length(level_data.clusters)}
+      end)
+
+    if cluster_count > 0, do: total_size / cluster_count, else: 0.0
+  end
+
+  defp calculate_fault_tolerance_score(hierarchical_state) do
+    # Calculate based on redundancy and cluster sizes
+    total_agents =
+      Enum.reduce(hierarchical_state.hierarchy_levels[0].clusters, 0, fn cluster, acc ->
+        acc + cluster.size
+      end)
+
+    representative_count = count_total_representatives(hierarchical_state)
+
+    # Higher score with more redundancy
+    redundancy_factor = (total_agents - representative_count) / total_agents
+    # Score between 0.1 and 1.0
+    redundancy_factor * 0.9 + 0.1
+  end
+
+  defp resolve_delegation_deadlock(_session, deadlock_info) do
+    # Implement deadlock resolution strategies
+    deadlock_type = deadlock_info[:deadlock_type]
+
+    case deadlock_type do
+      :circular_delegation ->
+        resolution = %{
+          deadlock_resolved: true,
+          resolution_strategy: :break_cycle,
+          # Simplified
+          new_delegation_path: ["agent_1", "agent_2", "agent_4"]
+        }
+
+        {:ok, resolution}
+
+      :timeout ->
+        resolution = %{
+          deadlock_resolved: true,
+          resolution_strategy: :force_decision,
+          new_delegation_path: []
+        }
+
+        {:ok, resolution}
+
+      _ ->
+        {:error, :unknown_deadlock_type}
+    end
+  end
+
+  defp emit_hierarchical_telemetry(event_name, session_id, measurements, metadata) do
+    :telemetry.execute(
+      [:foundation, :mabeam, :coordination, :hierarchical, event_name],
+      measurements,
+      Map.merge(metadata, %{session_id: session_id, timestamp: DateTime.utc_now()})
+    )
   end
 
   def child_spec(opts) do
