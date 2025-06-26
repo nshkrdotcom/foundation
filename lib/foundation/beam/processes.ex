@@ -57,6 +57,9 @@ defmodule Foundation.BEAM.Processes do
   that work together as an ecosystem. Each process has its own isolated heap
   for optimal garbage collection performance.
 
+  **Note**: This function now uses proper OTP supervision via EcosystemSupervisor
+  for improved reliability and automatic process restarts.
+
   ## Parameters
 
   - `config` - Configuration map defining the ecosystem structure
@@ -85,7 +88,93 @@ defmodule Foundation.BEAM.Processes do
     ErrorContext.with_context(context, fn ->
       case validate_config(config) do
         :ok ->
-          {:ok, create_basic_ecosystem(config)}
+          # Use the new OTP-based EcosystemSupervisor when modules have proper GenServer interface
+          # For test modules or backward compatibility, allow fallback with validation
+          if has_proper_genserver_start_link?(config.coordinator) and
+               has_proper_genserver_start_link?(elem(config.workers, 0)) do
+            # Use new OTP supervision for proper GenServer modules
+            ecosystem_id = :"ecosystem_#{:erlang.unique_integer([:positive])}"
+
+            ecosystem_config = %{
+              # Generate unique ID for this ecosystem
+              id: ecosystem_id,
+              coordinator: config.coordinator,
+              workers: config.workers
+            }
+
+            case Foundation.BEAM.EcosystemSupervisor.start_link(ecosystem_config) do
+              {:ok, supervisor_pid} ->
+                # By the time we are here, the supervisor's init/1 has completed,
+                # which means its children have been started. Trust OTP synchronous startup.
+                case Foundation.BEAM.EcosystemSupervisor.get_coordinator(supervisor_pid) do
+                  {:ok, coordinator_pid} ->
+                    worker_pids = Foundation.BEAM.EcosystemSupervisor.list_workers(supervisor_pid)
+
+                    # Build ecosystem structure for backward compatibility
+                    ecosystem = %{
+                      coordinator: coordinator_pid,
+                      workers: worker_pids,
+                      # No longer manually monitored
+                      monitors: [],
+                      topology: :tree,
+                      # NEW: Add supervisor reference
+                      supervisor: supervisor_pid,
+                      config: config
+                    }
+
+                    {:ok, ecosystem}
+
+                  {:error, reason} ->
+                    # Handle the case where the coordinator failed to start or isn't found
+                    # This is proper error handling, not a race condition.
+                    {:error, {:coordinator_not_found, reason}}
+                end
+
+              {:error, error} ->
+                {:error, error}
+            end
+          else
+            # For test modules or backward compatibility
+            # Issue a warning but continue with ecosystem supervisor
+            require Logger
+
+            Logger.warning(
+              "Using OTP supervision for modules that may not be proper GenServers: #{config.coordinator}, #{elem(config.workers, 0)}"
+            )
+
+            ecosystem_id = :"ecosystem_#{:erlang.unique_integer([:positive])}"
+
+            ecosystem_config = %{
+              id: ecosystem_id,
+              coordinator: config.coordinator,
+              workers: config.workers
+            }
+
+            case Foundation.BEAM.EcosystemSupervisor.start_link(ecosystem_config) do
+              {:ok, supervisor_pid} ->
+                case Foundation.BEAM.EcosystemSupervisor.get_coordinator(supervisor_pid) do
+                  {:ok, coordinator_pid} ->
+                    worker_pids = Foundation.BEAM.EcosystemSupervisor.list_workers(supervisor_pid)
+
+                    ecosystem = %{
+                      coordinator: coordinator_pid,
+                      workers: worker_pids,
+                      monitors: [],
+                      topology: :tree,
+                      supervisor: supervisor_pid,
+                      config: config
+                    }
+
+                    {:ok, ecosystem}
+
+                  {:error, reason} ->
+                    {:error, {:coordinator_not_found, reason}}
+                end
+
+              {:error, error} ->
+                {:error, error}
+            end
+          end
 
         {:error, reason} ->
           {:error,
@@ -166,51 +255,58 @@ defmodule Foundation.BEAM.Processes do
   Gracefully shutdown an ecosystem.
 
   Terminates all processes in the ecosystem and waits for cleanup.
+  Now uses proper OTP supervision for graceful shutdown.
   """
   @spec shutdown_ecosystem(ecosystem()) :: :ok | {:error, Error.t()}
   def shutdown_ecosystem(ecosystem) do
     context = ErrorContext.new(__MODULE__, :shutdown_ecosystem)
 
     ErrorContext.with_context(context, fn ->
-      all_pids =
-        [ecosystem.coordinator | ecosystem.workers] ++
-          if ecosystem.supervisor, do: [ecosystem.supervisor], else: []
+      if ecosystem.supervisor && Process.alive?(ecosystem.supervisor) do
+        # Use the new OTP-based shutdown
+        Foundation.BEAM.EcosystemSupervisor.shutdown(ecosystem.supervisor)
+      else
+        # Fallback to manual shutdown for older ecosystems
+        all_pids =
+          [ecosystem.coordinator | ecosystem.workers] ++
+            if ecosystem.supervisor, do: [ecosystem.supervisor], else: []
 
-      # Signal all processes to shutdown
-      for pid <- all_pids, Process.alive?(pid) do
-        send(pid, :shutdown)
-      end
+        # Signal all processes to shutdown
+        for pid <- all_pids, Process.alive?(pid) do
+          send(pid, :shutdown)
+        end
 
-      # Wait for graceful shutdown with timeout
-      deadline = System.monotonic_time(:millisecond) + 500
-      wait_for_shutdown(all_pids, deadline)
+        # Wait for graceful shutdown with timeout
+        deadline = System.monotonic_time(:millisecond) + 500
+        wait_for_shutdown(all_pids, deadline)
 
-      # Force kill any remaining processes
-      for pid <- all_pids, Process.alive?(pid) do
-        Process.exit(pid, :kill)
-      end
+        # Force kill any remaining processes
+        for pid <- all_pids, Process.alive?(pid) do
+          Process.exit(pid, :kill)
+        end
 
-      # Final wait to ensure processes are truly dead with monitoring
-      Task.async_stream(
-        all_pids,
-        fn pid ->
-          if Process.alive?(pid) do
-            ref = Process.monitor(pid)
+        # Final wait to ensure processes are truly dead with monitoring
+        Task.async_stream(
+          all_pids,
+          fn pid ->
+            if Process.alive?(pid) do
+              ref = Process.monitor(pid)
 
-            receive do
-              {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
-            after
-              50 ->
-                Process.demonitor(ref, [:flush])
-                :timeout
+              receive do
+                {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
+              after
+                50 ->
+                  Process.demonitor(ref, [:flush])
+                  :timeout
+              end
+            else
+              :ok
             end
-          else
-            :ok
-          end
-        end,
-        timeout: 100
-      )
-      |> Stream.run()
+          end,
+          timeout: 100
+        )
+        |> Stream.run()
+      end
 
       :ok
     end)
@@ -288,6 +384,39 @@ defmodule Foundation.BEAM.Processes do
 
   ## Private Functions
 
+  defp has_proper_genserver_start_link?(module) when is_atom(module) do
+    try do
+      # Check if module is already loaded or can be loaded
+      module_loaded =
+        function_exported?(module, :module_info, 0) or
+          case Code.ensure_loaded(module) do
+            {:module, ^module} -> true
+            _ -> false
+          end
+
+      if module_loaded do
+        # Check for required GenServer functions
+        function_exported?(module, :start_link, 1) and
+          function_exported?(module, :init, 1)
+      else
+        # In test environment, try checking if it's a test module with full namespace
+        # This is a fallback for test modules that might be defined within test files
+        test_module_name = :"Elixir.Foundation.BEAM.ProcessesTest.#{module}"
+
+        if function_exported?(test_module_name, :module_info, 0) do
+          function_exported?(test_module_name, :start_link, 1) and
+            function_exported?(test_module_name, :init, 1)
+        else
+          false
+        end
+      end
+    rescue
+      _ -> false
+    end
+  end
+
+  defp has_proper_genserver_start_link?(_), do: false
+
   defp validate_config(config) do
     with :ok <- validate_config_structure(config),
          :ok <- validate_coordinator_config(config) do
@@ -335,211 +464,18 @@ defmodule Foundation.BEAM.Processes do
     end
   end
 
-  defp create_basic_ecosystem(config) do
-    # Start with a simple ecosystem structure
-    # This will be enhanced in subsequent days of Week 1
-
-    coordinator_pid = spawn_coordinator(config.coordinator)
-    worker_count = get_in(config, [:workers, Access.elem(1), :count]) || 1
-    worker_module = elem(config.workers, 0)
-
-    workers = spawn_workers(worker_module, worker_count, coordinator_pid)
-    monitors = setup_monitors([coordinator_pid | workers])
-
-    # Spawn supervisor if self-healing is enabled
-    supervisor_pid =
-      if Map.get(config, :fault_tolerance) == :self_healing do
-        spawn_ecosystem_supervisor(config, coordinator_pid, workers)
-      else
-        nil
-      end
-
-    ecosystem = %{
-      coordinator: coordinator_pid,
-      workers: workers,
-      monitors: monitors,
-      # Start with tree topology, will add mesh/ring later
-      topology: :tree,
-      supervisor: supervisor_pid,
-      config: config
-    }
-
-    # Register ecosystem with supervisor if present
-    if supervisor_pid do
-      send(supervisor_pid, {:register_ecosystem, ecosystem})
-    end
-
-    ecosystem
-  end
-
-  defp spawn_coordinator(coordinator_module) do
-    # Basic coordinator spawning - will be enhanced with supervision
-    if function_exported?(coordinator_module, :start_link, 1) do
-      case coordinator_module.start_link([]) do
-        {:ok, pid} when is_pid(pid) ->
-          pid
-
-        pid when is_pid(pid) ->
-          pid
-
-        _ ->
-          spawn(fn -> coordinator_loop() end)
-      end
-    else
-      spawn(fn -> coordinator_loop() end)
-    end
-  end
-
-  defp spawn_workers(worker_module, count, coordinator_pid) do
-    1..count
-    |> Enum.map(fn _i -> spawn_single_worker(worker_module, coordinator_pid) end)
-  end
-
-  defp spawn_single_worker(worker_module, coordinator_pid) do
-    if function_exported?(worker_module, :start_link, 1) do
-      start_worker_with_module(worker_module, coordinator_pid)
-    else
-      spawn(fn -> worker_loop() end)
-    end
-  end
-
-  defp start_worker_with_module(worker_module, coordinator_pid) do
-    case worker_module.start_link(coordinator: coordinator_pid) do
-      {:ok, pid} when is_pid(pid) -> pid
-      pid when is_pid(pid) -> pid
-      _ -> spawn(fn -> worker_loop() end)
-    end
-  end
-
-  defp setup_monitors(pids) do
-    Enum.map(pids, &Process.monitor/1)
-  end
-
-  defp coordinator_loop do
-    receive do
-      {:work_request, from, work} ->
-        # Basic work distribution
-        send(from, {:work_assigned, work})
-        coordinator_loop()
-
-      {:worker_result, _result} ->
-        # Handle worker results
-        coordinator_loop()
-
-      {:test_message, _data, caller_pid} ->
-        # Echo test message for property tests
-        send(caller_pid, {:message_processed, :coordinator})
-        coordinator_loop()
-
-      {:test_message, _data} ->
-        # Echo test message for property tests (fallback)
-        send(self(), {:message_processed, :coordinator})
-        coordinator_loop()
-
-      {:DOWN, _ref, :process, _pid, _reason} ->
-        # Handle process termination
-        coordinator_loop()
-
-      :shutdown ->
-        :ok
-    after
-      5000 ->
-        # Periodic health check
-        coordinator_loop()
-    end
-  end
-
-  defp worker_loop do
-    receive do
-      {:work_assigned, work} ->
-        # Process work
-        result = process_work(work)
-        send(:coordinator, {:worker_result, result})
-        worker_loop()
-
-      {:test_message, _data, caller_pid} ->
-        # Echo test message for property tests
-        send(caller_pid, {:message_processed, :worker})
-        worker_loop()
-
-      {:test_message, _data} ->
-        # Echo test message for property tests (fallback)
-        send(self(), {:message_processed, :worker})
-        worker_loop()
-
-      :shutdown ->
-        :ok
-    after
-      10_000 ->
-        # Worker timeout
-        worker_loop()
-    end
-  end
-
-  defp process_work(work) do
-    # Basic work processing - will be enhanced
-    {:processed, work}
-  end
-
-  defp spawn_ecosystem_supervisor(config, coordinator_pid, workers) do
-    spawn(fn ->
-      ecosystem_supervisor_loop(config, coordinator_pid, workers)
-    end)
-  end
-
-  defp ecosystem_supervisor_loop(config, coordinator_pid, _workers) do
-    receive do
-      {:register_ecosystem, ecosystem} ->
-        # Monitor the coordinator for crashes
-        monitor_ref = Process.monitor(coordinator_pid)
-        ecosystem_supervisor_loop_with_monitoring(config, ecosystem, monitor_ref)
-
-      :shutdown ->
-        :ok
-    end
-  end
-
-  defp ecosystem_supervisor_loop_with_monitoring(config, ecosystem, monitor_ref) do
-    receive do
-      {:DOWN, ^monitor_ref, :process, _pid, _reason} ->
-        # Coordinator died, restart it
-        new_coordinator = spawn_coordinator(config.coordinator)
-
-        # Update ecosystem (in real implementation, this would be stored in ETS or similar)
-        # For now, we'll use the process dictionary as a simple state store
-        Process.put(:current_coordinator, new_coordinator)
-
-        # Monitor the new coordinator
-        new_monitor_ref = Process.monitor(new_coordinator)
-        updated_ecosystem = %{ecosystem | coordinator: new_coordinator}
-
-        ecosystem_supervisor_loop_with_monitoring(config, updated_ecosystem, new_monitor_ref)
-
-      :shutdown ->
-        # Clean up monitors
-        Process.demonitor(monitor_ref, [:flush])
-        :ok
-    end
-  end
+  # All manual process management code removed
+  # Now uses only OTP supervision via Foundation.BEAM.EcosystemSupervisor
 
   defp get_current_coordinator(ecosystem) do
     if ecosystem.supervisor && Process.alive?(ecosystem.supervisor) do
-      get_coordinator_from_supervisor(ecosystem)
+      # Use EcosystemSupervisor API instead of process dictionary
+      case Foundation.BEAM.EcosystemSupervisor.get_coordinator(ecosystem.supervisor) do
+        {:ok, coordinator_pid} -> coordinator_pid
+        {:error, :not_found} -> ecosystem.coordinator
+      end
     else
       ecosystem.coordinator
-    end
-  end
-
-  defp get_coordinator_from_supervisor(ecosystem) do
-    case Process.info(ecosystem.supervisor, :dictionary) do
-      {:dictionary, dict} ->
-        case Keyword.get(dict, :current_coordinator) do
-          nil -> ecosystem.coordinator
-          new_coordinator -> new_coordinator
-        end
-
-      _ ->
-        ecosystem.coordinator
     end
   end
 

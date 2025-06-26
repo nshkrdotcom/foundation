@@ -359,22 +359,22 @@ defmodule Foundation.TestHelpers do
   """
   @spec verify_ecosystem_cleanup(map(), non_neg_integer()) :: :ok | {:error, term()}
   def verify_ecosystem_cleanup(ecosystem, timeout \\ 5000) do
-    all_pids =
-      [ecosystem.coordinator | ecosystem.workers] ++
-        if Map.get(ecosystem, :supervisor), do: [ecosystem.supervisor], else: []
+    # For OTP-supervised ecosystems, shutdown the supervisor first
+    if ecosystem.supervisor && Process.alive?(ecosystem.supervisor) do
+      # Graceful shutdown of the entire supervision tree
+      Foundation.BEAM.EcosystemSupervisor.shutdown(ecosystem.supervisor)
 
-    # First, try to shutdown the ecosystem gracefully
-    if function_exported?(Processes, :shutdown_ecosystem, 1) do
-      Processes.shutdown_ecosystem(ecosystem)
-    end
+      # Wait for supervisor to fully terminate
+      case wait_for_supervisor_shutdown(ecosystem.supervisor, timeout) do
+        :ok ->
+          handle_successful_cleanup()
 
-    # Wait for all processes to terminate
-    case wait_for_all_processes_to_die(all_pids, timeout) do
-      :ok ->
-        handle_successful_cleanup()
-
-      {:error, :timeout} ->
-        handle_cleanup_timeout_with_force_kill(all_pids)
+        {:error, :timeout} ->
+          handle_cleanup_timeout_with_supervisor(ecosystem.supervisor)
+      end
+    else
+      # Fallback to manual cleanup for non-supervised ecosystems
+      handle_cleanup_fallback(ecosystem, timeout)
     end
   end
 
@@ -441,6 +441,47 @@ defmodule Foundation.TestHelpers do
     :erlang.garbage_collect()
     :timer.sleep(100)
     :ok
+  end
+
+  defp wait_for_supervisor_shutdown(supervisor_pid, timeout) do
+    wait_for_condition(
+      fn -> not Process.alive?(supervisor_pid) end,
+      timeout
+    )
+  end
+
+  defp handle_cleanup_timeout_with_supervisor(supervisor_pid) do
+    # Force kill the supervisor if graceful shutdown failed
+    if Process.alive?(supervisor_pid) do
+      Process.exit(supervisor_pid, :kill)
+      :timer.sleep(100)
+    end
+
+    if Process.alive?(supervisor_pid) do
+      {:error, {:supervisor_still_alive, supervisor_pid}}
+    else
+      :ok
+    end
+  end
+
+  defp handle_cleanup_fallback(ecosystem, timeout) do
+    all_pids =
+      [ecosystem.coordinator | ecosystem.workers] ++
+        if Map.get(ecosystem, :supervisor), do: [ecosystem.supervisor], else: []
+
+    # First, try to shutdown the ecosystem gracefully
+    if function_exported?(Processes, :shutdown_ecosystem, 1) do
+      Processes.shutdown_ecosystem(ecosystem)
+    end
+
+    # Wait for all processes to terminate
+    case wait_for_all_processes_to_die(all_pids, timeout) do
+      :ok ->
+        handle_successful_cleanup()
+
+      {:error, :timeout} ->
+        handle_cleanup_timeout_with_force_kill(all_pids)
+    end
   end
 
   defp handle_cleanup_timeout_with_force_kill(all_pids) do

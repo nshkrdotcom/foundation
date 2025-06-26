@@ -7,8 +7,8 @@ defmodule Foundation.BEAM.ProcessesTest do
   describe "spawn_ecosystem/1" do
     test "creates ecosystem with coordinator and workers" do
       config = %{
-        coordinator: TestCoordinator,
-        workers: {TestWorker, count: 3}
+        coordinator: __MODULE__.TestCoordinator,
+        workers: {__MODULE__.TestWorker, count: 3}
       }
 
       {:ok, ecosystem} = Processes.spawn_ecosystem(config)
@@ -17,8 +17,10 @@ defmodule Foundation.BEAM.ProcessesTest do
       assert is_pid(ecosystem.coordinator)
       assert length(ecosystem.workers) == 3
       assert ecosystem.topology == :tree
-      # coordinator + 3 workers
-      assert length(ecosystem.monitors) == 4
+      # OTP supervision - no manual monitors needed
+      assert ecosystem.monitors == []
+      # Verify supervisor is present
+      assert is_pid(ecosystem.supervisor)
 
       # Verify all processes are alive
       assert Process.alive?(ecosystem.coordinator)
@@ -40,8 +42,8 @@ defmodule Foundation.BEAM.ProcessesTest do
 
     test "creates ecosystem with custom memory strategy" do
       config = %{
-        coordinator: TestCoordinator,
-        workers: {TestWorker, count: 2},
+        coordinator: __MODULE__.TestCoordinator,
+        workers: {__MODULE__.TestWorker, count: 2},
         memory_strategy: :isolated_heaps,
         gc_strategy: :frequent_minor
       }
@@ -58,8 +60,8 @@ defmodule Foundation.BEAM.ProcessesTest do
     @tag :concurrency
     test "ecosystem handles high worker count" do
       config = %{
-        coordinator: TestCoordinator,
-        workers: {TestWorker, count: 100}
+        coordinator: __MODULE__.TestCoordinator,
+        workers: {__MODULE__.TestWorker, count: 100}
       }
 
       {creation_time, {:ok, ecosystem}} =
@@ -154,8 +156,8 @@ defmodule Foundation.BEAM.ProcessesTest do
   describe "ecosystem_info/1" do
     test "returns comprehensive ecosystem information" do
       config = %{
-        coordinator: TestCoordinator,
-        workers: {TestWorker, count: 5}
+        coordinator: __MODULE__.TestCoordinator,
+        workers: {__MODULE__.TestWorker, count: 5}
       }
 
       {:ok, ecosystem} = Processes.spawn_ecosystem(config)
@@ -186,8 +188,8 @@ defmodule Foundation.BEAM.ProcessesTest do
 
     test "handles dead processes gracefully" do
       config = %{
-        coordinator: TestCoordinator,
-        workers: {TestWorker, count: 3}
+        coordinator: __MODULE__.TestCoordinator,
+        workers: {__MODULE__.TestWorker, count: 3}
       }
 
       {:ok, ecosystem} = Processes.spawn_ecosystem(config)
@@ -215,8 +217,8 @@ defmodule Foundation.BEAM.ProcessesTest do
     @tag :concurrency
     test "ecosystem survives coordinator crash with self-healing" do
       config = %{
-        coordinator: TestCoordinator,
-        workers: {TestWorker, count: 3},
+        coordinator: __MODULE__.TestCoordinator,
+        workers: {__MODULE__.TestWorker, count: 3},
         fault_tolerance: :self_healing
       }
 
@@ -241,8 +243,8 @@ defmodule Foundation.BEAM.ProcessesTest do
     @tag :concurrency
     test "ecosystem survives multiple worker crashes" do
       config = %{
-        coordinator: TestCoordinator,
-        workers: {TestWorker, count: 5},
+        coordinator: __MODULE__.TestCoordinator,
+        workers: {__MODULE__.TestWorker, count: 5},
         fault_tolerance: :self_healing
       }
 
@@ -271,8 +273,8 @@ defmodule Foundation.BEAM.ProcessesTest do
     @tag :concurrency
     test "coordinator distributes work to workers" do
       config = %{
-        coordinator: MessageTestCoordinator,
-        workers: {MessageTestWorker, count: 3}
+        coordinator: __MODULE__.MessageTestCoordinator,
+        workers: {__MODULE__.MessageTestWorker, count: 3}
       }
 
       {:ok, ecosystem} = Processes.spawn_ecosystem(config)
@@ -298,8 +300,8 @@ defmodule Foundation.BEAM.ProcessesTest do
     @tag :concurrency
     test "workers send results back to coordinator" do
       config = %{
-        coordinator: ResultCollectorCoordinator,
-        workers: {ResultWorker, count: 2}
+        coordinator: __MODULE__.ResultCollectorCoordinator,
+        workers: {__MODULE__.ResultWorker, count: 2}
       }
 
       {:ok, ecosystem} = Processes.spawn_ecosystem(config)
@@ -328,13 +330,13 @@ defmodule Foundation.BEAM.ProcessesTest do
     @tag :benchmark
     test "ecosystem creation scales linearly" do
       small_config = %{
-        coordinator: BenchmarkCoordinator,
-        workers: {BenchmarkWorker, count: 10}
+        coordinator: __MODULE__.BenchmarkCoordinator,
+        workers: {__MODULE__.BenchmarkWorker, count: 10}
       }
 
       large_config = %{
-        coordinator: BenchmarkCoordinator,
-        workers: {BenchmarkWorker, count: 100}
+        coordinator: __MODULE__.BenchmarkCoordinator,
+        workers: {__MODULE__.BenchmarkWorker, count: 100}
       }
 
       # Benchmark small ecosystem
@@ -362,9 +364,18 @@ defmodule Foundation.BEAM.ProcessesTest do
       base_memory = :erlang.memory(:total)
 
       configs = [
-        %{coordinator: MemoryTestCoordinator, workers: {MemoryTestWorker, count: 10}},
-        %{coordinator: MemoryTestCoordinator, workers: {MemoryTestWorker, count: 50}},
-        %{coordinator: MemoryTestCoordinator, workers: {MemoryTestWorker, count: 100}}
+        %{
+          coordinator: __MODULE__.MemoryTestCoordinator,
+          workers: {__MODULE__.MemoryTestWorker, count: 10}
+        },
+        %{
+          coordinator: __MODULE__.MemoryTestCoordinator,
+          workers: {__MODULE__.MemoryTestWorker, count: 50}
+        },
+        %{
+          coordinator: __MODULE__.MemoryTestCoordinator,
+          workers: {__MODULE__.MemoryTestWorker, count: 100}
+        }
       ]
 
       memory_usage =
@@ -434,63 +445,204 @@ defmodule Foundation.BEAM.ProcessesTest do
   # Test modules (these would be in test/support/)
 
   defmodule TestCoordinator do
-    def start_link(_args), do: {:ok, self()}
+    use GenServer
+
+    def start_link(args) do
+      GenServer.start_link(__MODULE__, args)
+    end
+
+    def init(args) do
+      {:ok, %{args: args}}
+    end
+
+    def handle_call({:test_message, _data}, from, state) do
+      send(elem(from, 0), {:message_processed, :coordinator})
+      {:reply, :ok, state}
+    end
+
+    def handle_cast({:test_message, _data, caller_pid}, state) do
+      send(caller_pid, {:message_processed, :coordinator})
+      {:noreply, state}
+    end
   end
 
   defmodule TestWorker do
-    def start_link(_args), do: {:ok, self()}
+    use GenServer
+
+    def start_link(args) do
+      GenServer.start_link(__MODULE__, args)
+    end
+
+    def init(args) do
+      {:ok, %{args: args}}
+    end
+
+    def handle_cast({:work, work}, state) do
+      # Process work and send result
+      send(:coordinator, {:result, work})
+      {:noreply, state}
+    end
+
+    def handle_call({:test_message, _data}, from, state) do
+      send(elem(from, 0), {:message_processed, :worker})
+      {:reply, :ok, state}
+    end
   end
 
   defmodule MessageTestCoordinator do
-    def start_link(_args) do
-      spawn(fn -> coordinator_loop() end)
+    use GenServer
+
+    def start_link(args) do
+      GenServer.start_link(__MODULE__, args)
     end
 
-    defp coordinator_loop do
-      receive do
-        {:work_request, from, work} ->
-          send(from, {:work_assigned, work})
-          coordinator_loop()
-      end
+    def init(args) do
+      {:ok, %{args: args}}
+    end
+
+    def handle_call({:work_request, work}, from, state) do
+      send(elem(from, 0), {:work_assigned, work})
+      {:reply, :ok, state}
+    end
+
+    def handle_cast({:test_message, _data, caller_pid}, state) do
+      send(caller_pid, {:message_processed, :coordinator})
+      {:noreply, state}
+    end
+
+    def handle_info({:work_request, from, work}, state) do
+      send(from, {:work_assigned, work})
+      {:noreply, state}
     end
   end
 
   defmodule MessageTestWorker do
-    def start_link(_args) do
-      spawn(fn -> worker_loop() end)
+    use GenServer
+
+    def start_link(args) do
+      GenServer.start_link(__MODULE__, args)
     end
 
-    defp worker_loop do
-      receive do
-        {:work, work} ->
-          # Process work
-          send(:coordinator, {:result, work})
-          worker_loop()
-      end
+    def init(args) do
+      {:ok, %{args: args}}
+    end
+
+    def handle_cast({:work, work}, state) do
+      # Process work and send result
+      send(:coordinator, {:result, work})
+      {:noreply, state}
+    end
+
+    def handle_cast({:test_message, _data, caller_pid}, state) do
+      send(caller_pid, {:message_processed, :worker})
+      {:noreply, state}
     end
   end
 
   defmodule ResultCollectorCoordinator do
-    def start_link(_args), do: {:ok, self()}
+    use GenServer
+
+    def start_link(args) do
+      GenServer.start_link(__MODULE__, args)
+    end
+
+    def init(args) do
+      {:ok, %{args: args, results: []}}
+    end
+
+    def handle_cast({:result, result}, state) do
+      {:noreply, %{state | results: [result | state.results]}}
+    end
+
+    def handle_call(:get_results, _from, state) do
+      {:reply, Enum.reverse(state.results), state}
+    end
   end
 
   defmodule ResultWorker do
-    def start_link(_args), do: {:ok, self()}
+    use GenServer
+
+    def start_link(args) do
+      GenServer.start_link(__MODULE__, args)
+    end
+
+    def init(args) do
+      {:ok, %{args: args}}
+    end
+
+    def handle_cast({:work, work}, state) do
+      # Process work and send result to coordinator
+      result = {:processed, work}
+      GenServer.cast(:coordinator, {:result, result})
+      {:noreply, state}
+    end
   end
 
   defmodule BenchmarkCoordinator do
-    def start_link(_args), do: {:ok, self()}
+    use GenServer
+
+    def start_link(args) do
+      GenServer.start_link(__MODULE__, args)
+    end
+
+    def init(args) do
+      {:ok, %{args: args, start_time: System.monotonic_time()}}
+    end
+
+    def handle_cast({:benchmark_work, _work}, state) do
+      # Handle benchmark work
+      {:noreply, state}
+    end
   end
 
   defmodule BenchmarkWorker do
-    def start_link(_args), do: {:ok, self()}
+    use GenServer
+
+    def start_link(args) do
+      GenServer.start_link(__MODULE__, args)
+    end
+
+    def init(args) do
+      {:ok, %{args: args}}
+    end
+
+    def handle_cast({:work, _work}, state) do
+      # Process benchmark work
+      {:noreply, state}
+    end
   end
 
   defmodule MemoryTestCoordinator do
-    def start_link(_args), do: {:ok, self()}
+    use GenServer
+
+    def start_link(args) do
+      GenServer.start_link(__MODULE__, args)
+    end
+
+    def init(args) do
+      {:ok, %{args: args}}
+    end
+
+    def handle_cast({:memory_test, _data}, state) do
+      # Handle memory test
+      {:noreply, state}
+    end
   end
 
   defmodule MemoryTestWorker do
-    def start_link(_args), do: {:ok, self()}
+    use GenServer
+
+    def start_link(args) do
+      GenServer.start_link(__MODULE__, args)
+    end
+
+    def init(args) do
+      {:ok, %{args: args}}
+    end
+
+    def handle_cast({:memory_work, _data}, state) do
+      # Process memory-intensive work
+      {:noreply, state}
+    end
   end
 end

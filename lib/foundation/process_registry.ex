@@ -49,6 +49,7 @@ defmodule Foundation.ProcessRegistry do
           | :test_supervisor
           | {:agent, atom()}
           | {:mabeam, atom()}
+          | {:ecosystem_supervisor, atom()}
           | atom()
 
   @type registry_key :: {namespace(), service_name()}
