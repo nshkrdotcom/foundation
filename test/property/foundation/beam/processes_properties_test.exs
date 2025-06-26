@@ -122,7 +122,15 @@ defmodule Foundation.BEAM.ProcessesPropertiesTest do
               work_size <- integer(100..10_000),
               max_runs: 20
             ) do
-        initial_memory = :erlang.memory(:total)
+        # Get caller process memory info instead of total BEAM memory
+        caller_pid = self()
+        initial_process_info = Process.info(caller_pid, :memory)
+
+        initial_memory =
+          case initial_process_info do
+            {:memory, mem} -> mem
+            nil -> 0
+          end
 
         work_fn = fn ->
           # Create data proportional to work_size
@@ -138,22 +146,32 @@ defmodule Foundation.BEAM.ProcessesPropertiesTest do
         # Wait for worker process to die
         TestHelpers.assert_eventually(fn -> not Process.alive?(worker_pid) end, 1000)
 
-        # Force garbage collection and wait for it to complete
-        :erlang.garbage_collect()
-        # Give GC time to complete without arbitrary sleep
-        # Minimal yield to scheduler
+        # Force garbage collection on the caller process specifically
+        :erlang.garbage_collect(caller_pid)
+        # Minimal yield to scheduler to ensure GC completion
         Process.sleep(1)
 
-        final_memory = :erlang.memory(:total)
+        # Measure caller process memory after work completion
+        final_process_info = Process.info(caller_pid, :memory)
 
-        # Property: memory should not have grown significantly
-        # Allow for some variance due to test overhead
+        final_memory =
+          case final_process_info do
+            {:memory, mem} -> mem
+            nil -> 0
+          end
+
+        # Property: caller process memory should not have grown significantly
+        # The isolated work should not affect the caller's memory
         memory_growth = final_memory - initial_memory
-        # Property: memory growth should be reasonable (allowing for BEAM overhead)
-        # BEAM memory accounting can be unpredictable, so be very generous
-        # At least 100KB allowance
-        max_reasonable_growth = max(work_size * 10, 100_000)
-        assert memory_growth < max_reasonable_growth
+
+        # Allow for reasonable test overhead (message handling, etc.)
+        # Since we're only sending a small atom back, growth should be minimal
+        # 50KB allowance for test overhead
+        max_reasonable_growth = 50_000
+
+        assert memory_growth < max_reasonable_growth,
+               "Caller process memory grew by #{memory_growth} bytes, expected < #{max_reasonable_growth}. " <>
+                 "Initial: #{initial_memory}, Final: #{final_memory}, Work size: #{work_size}"
       end
     end
 

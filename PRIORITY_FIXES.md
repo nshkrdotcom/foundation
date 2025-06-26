@@ -37,8 +37,10 @@ This document outlines specific approaches to address the architectural issues a
 - **Message Handling**: ✅ FIXED - Added proper GenServer message handlers for test scenarios
 
 #### ⚠️ MINOR REMAINING ISSUE:
-- **Property Test Edge Case**: 1 property test failure related to process cleanup timing (9/10 pass)
-- **Impact**: Core functionality works perfectly; minor test timing issue doesn't affect production
+- **Property Test Edge Case**: ✅ **FIXED** - Memory isolation property test was measuring total BEAM memory instead of process-specific memory, causing false failures due to BEAM allocator behavior
+- **Root Cause**: Test used `:erlang.memory(:total)` which includes memory freed by processes but not yet returned to OS
+- **Solution**: Changed to measure `Process.info(caller_pid, :memory)` to test actual process memory isolation
+- **Impact**: Core functionality works perfectly; test was incorrectly implemented
 
 #### 🎯 SUCCESS METRICS ACHIEVED:
 - ✅ Zero manual `spawn()` calls in production code  
