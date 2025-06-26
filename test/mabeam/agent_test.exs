@@ -216,13 +216,13 @@ defmodule MABEAM.AgentTest do
         %{
           id: :worker2,
           type: :nlp_worker,
-          module: MABEAM.MLWorker,
+          module: MABEAM.MLTestWorker,
           capabilities: [:nlp, :text_processing]
         },
         %{
           id: :coordinator,
           type: :coordinator,
-          module: MABEAM.CoordinationAgent,
+          module: MABEAM.TestWorker,
           capabilities: [:coordination, :task_distribution]
         },
         %{

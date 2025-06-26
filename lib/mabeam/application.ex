@@ -1,12 +1,12 @@
 defmodule MABEAM.Application do
   @moduledoc """
   MABEAM Application supervisor.
-  
+
   Manages all MABEAM services and provides integration with Foundation infrastructure.
   """
-  
+
   use Application
-  
+
   @doc """
   Starts the MABEAM application with all required services.
   """
@@ -22,11 +22,11 @@ defmodule MABEAM.Application do
       {MABEAM.LoadBalancer, name: :mabeam_load_balancer},
       {MABEAM.PerformanceMonitor, name: :mabeam_performance_monitor}
     ]
-    
+
     opts = [strategy: :one_for_one, name: MABEAM.Supervisor]
     Supervisor.start_link(children, opts)
   end
-  
+
   @doc """
   Stops the MABEAM application gracefully.
   """

@@ -22,7 +22,7 @@ defmodule MABEAM.Migration do
   """
 
   require Logger
-  alias Foundation.{ProcessRegistry, MABEAM}
+  alias Foundation.ProcessRegistry
 
   @type migration_result ::
           {:ok, non_neg_integer()}
@@ -103,9 +103,9 @@ defmodule MABEAM.Migration do
   ## Examples
 
       case Migration.validate_migration() do
-        :ok -> 
+        :ok ->
           IO.puts("Migration is complete and valid")
-        {:error, error_reason} -> 
+        {:error, error_reason} ->
           IO.puts("Migration validation failed: \#{inspect(error_reason)}")
       end
   """

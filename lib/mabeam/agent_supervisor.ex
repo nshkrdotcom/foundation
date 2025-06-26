@@ -328,7 +328,7 @@ defmodule MABEAM.AgentSupervisor do
   ## DynamicSupervisor Callbacks
 
   @impl true
-  def init(opts) do
+  def init(_opts) do
     # Initialize tracking for supervised agents
     initialize_agent_tracking()
 
@@ -337,8 +337,7 @@ defmodule MABEAM.AgentSupervisor do
     DynamicSupervisor.init(
       strategy: :one_for_one,
       max_restarts: 10,
-      max_seconds: 60,
-      extra_arguments: opts
+      max_seconds: 60
     )
   end
 

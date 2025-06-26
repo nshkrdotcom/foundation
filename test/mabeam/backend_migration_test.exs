@@ -229,7 +229,7 @@ defmodule MABEAM.BackendMigrationTest do
       complex_config = %{
         id: :migration_test_complex,
         type: :complex_agent,
-        module: MABEAM.MLWorker,
+        module: MABEAM.MLTestWorker,
         args: [model_type: :transformer],
         capabilities: [:nlp, :text_generation, :reasoning],
         custom_metadata: %{

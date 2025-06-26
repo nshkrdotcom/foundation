@@ -560,8 +560,8 @@ defmodule MABEAM.Agent do
   defp build_agent_metadata(config) do
     %{
       type: :mabeam_agent,
-      agent_type: config.type,
-      module: config.module,
+      agent_type: Map.get(config, :type),
+      module: Map.get(config, :module),
       args: Map.get(config, :args, []),
       capabilities: Map.get(config, :capabilities, []),
       restart_policy: Map.get(config, :restart_policy, :permanent),

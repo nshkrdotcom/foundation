@@ -138,25 +138,31 @@ Application.put_env(:foundation, :test_mode, true)
 
 # Start MABEAM services if running MABEAM tests or all tests
 # This allows MABEAM tests to work despite services being moved out of Foundation.Application
-should_start_mabeam = case System.argv() do
-  args when is_list(args) ->
-    # Start MABEAM if:
-    # 1. Explicitly running test/mabeam tests
-    # 2. Running mix test without arguments (all tests)
-    # 3. No test path specified (default runs all)
-    Enum.any?(args, &String.contains?(&1, "test/mabeam")) or
-    Enum.empty?(Enum.filter(args, &String.starts_with?(&1, "test/"))) or
-    args == []
-  _ -> true
-end
+should_start_mabeam =
+  case System.argv() do
+    args when is_list(args) ->
+      # Start MABEAM if:
+      # 1. Explicitly running test/mabeam tests
+      # 2. Running mix test without arguments (all tests)
+      # 3. No test path specified (default runs all)
+      Enum.any?(args, &String.contains?(&1, "test/mabeam")) or
+        Enum.empty?(Enum.filter(args, &String.starts_with?(&1, "test/"))) or
+        args == []
+
+    _ ->
+      true
+  end
 
 if should_start_mabeam do
   IO.puts("Starting MABEAM services for tests...")
+
   case MABEAM.Application.start(:normal, []) do
-    {:ok, _pid} -> 
+    {:ok, _pid} ->
       IO.puts("MABEAM services started successfully for testing")
+
     {:error, {:already_started, _pid}} ->
       IO.puts("MABEAM services already started")
+
     {:error, reason} ->
       IO.puts("Warning: Failed to start MABEAM services: #{inspect(reason)}")
   end

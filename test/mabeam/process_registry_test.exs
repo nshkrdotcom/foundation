@@ -10,12 +10,8 @@ defmodule MABEAM.ProcessRegistryTest do
 
     # Create test agent configs
     configs = [
-      Types.new_agent_config(:worker1, MABEAM.TestWorker, [],
-        capabilities: [:task_execution]
-      ),
-      Types.new_agent_config(:worker2, MABEAM.TestWorker, [],
-        capabilities: [:data_processing]
-      ),
+      Types.new_agent_config(:worker1, MABEAM.TestWorker, [], capabilities: [:task_execution]),
+      Types.new_agent_config(:worker2, MABEAM.TestWorker, [], capabilities: [:data_processing]),
       Types.new_agent_config(:ml_agent, MABEAM.MLTestWorker, [],
         type: :ml_worker,
         capabilities: [:nlp, :classification]

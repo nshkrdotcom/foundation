@@ -42,6 +42,25 @@ defmodule MABEAM.TestWorker do
   end
 end
 
+defmodule MABEAM.FailingAgent do
+  @moduledoc """
+  Test agent that fails to start (for testing restart limits).
+  """
+
+  use GenServer
+
+  def start_link(_args \\ []) do
+    # Always fail to start
+    {:error, :intentional_failure}
+  end
+
+  @impl true
+  def init(_args) do
+    # This should never be called since start_link fails
+    {:stop, :intentional_failure}
+  end
+end
+
 defmodule MABEAM.MLTestWorker do
   @moduledoc """
   ML-specific test worker with NLP and classification capabilities.

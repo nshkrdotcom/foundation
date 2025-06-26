@@ -129,7 +129,7 @@ defmodule Foundation.Application do
       startup_phase: :application,
       health_check_interval: 60_000,
       restart_strategy: :permanent
-    },
+    }
 
     # MABEAM Phase - Multi-agent orchestration services
     # MABEAM services moved to MABEAM.Application - see lib/mabeam/application.ex
