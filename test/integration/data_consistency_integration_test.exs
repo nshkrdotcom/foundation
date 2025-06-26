@@ -10,7 +10,7 @@ defmodule Foundation.Integration.DataConsistencyIntegrationTest do
   use ExUnit.Case, async: false
 
   alias Foundation.{Config, Events, Telemetry}
-  alias Foundation.Services.{TelemetryService, EventStore}
+  alias Foundation.Services.EventStore
 
   @moduletag :integration
 
@@ -159,22 +159,11 @@ defmodule Foundation.Integration.DataConsistencyIntegrationTest do
       # Get metrics before restart
       {:ok, _pre_restart_metrics} = Telemetry.get_metrics()
 
-      # Restart telemetry service (check if already running)
-      case TelemetryService.stop() do
-        :ok -> :ok
-        # Already stopped
-        {:error, _} -> :ok
-      end
+      # Restart telemetry service by restarting Foundation infrastructure
+      # This ensures ProcessRegistry and all dependencies are available
+      Foundation.TestHelpers.ensure_foundation_running()
 
-      Process.sleep(100)
-
-      case TelemetryService.start_link(namespace: :production) do
-        {:ok, _pid} -> :ok
-        # Already running
-        {:error, {:already_started, _pid}} -> :ok
-      end
-
-      # Wait for service to be available
+      # Wait for all services to be available
       Foundation.TestHelpers.wait_for_all_services_available(5000)
 
       # Get metrics after restart
