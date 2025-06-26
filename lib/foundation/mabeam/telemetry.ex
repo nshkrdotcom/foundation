@@ -645,7 +645,7 @@ defmodule Foundation.MABEAM.Telemetry do
         :telemetry.attach(
           "mabeam_telemetry_#{Enum.join(event, "_")}",
           event,
-          &handle_telemetry_event/4,
+          &__MODULE__.handle_telemetry_event/4,
           nil
         )
       rescue
@@ -657,7 +657,7 @@ defmodule Foundation.MABEAM.Telemetry do
     length(telemetry_events)
   end
 
-  defp handle_telemetry_event(event, measurements, metadata, _config) do
+  def handle_telemetry_event(event, measurements, metadata, _config) do
     # Forward to GenServer for processing
     GenServer.cast(__MODULE__, {:telemetry_event, event, measurements, metadata})
   end

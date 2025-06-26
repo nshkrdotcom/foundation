@@ -502,15 +502,11 @@ defmodule Foundation.Application do
     unless test_mode do
       # Register application-level health checks
       spawn(fn ->
-        # Allow services to fully start
-        Process.sleep(1000)
         schedule_periodic_health_check()
       end)
 
       # Initialize service monitoring
       spawn(fn ->
-        # Allow all services to be ready
-        Process.sleep(2000)
         initialize_service_monitoring()
       end)
     end
@@ -563,7 +559,7 @@ defmodule Foundation.Application do
     end)
 
     # Wait for graceful shutdown
-    Process.sleep(1000)
+    :ok
   end
 
   defp cleanup_application_resources do
@@ -931,8 +927,11 @@ defmodule Foundation.Application do
         Logger.error("Health check failed: #{inspect(error)}")
     end
 
-    Process.sleep(interval)
-    health_check_loop()
+    Process.send_after(self(), :health_check, interval)
+
+    receive do
+      :health_check -> health_check_loop()
+    end
   end
 
   defp dependency_monitor_loop do
@@ -957,8 +956,11 @@ defmodule Foundation.Application do
     end
 
     # Check every minute
-    Process.sleep(60_000)
-    dependency_monitor_loop()
+    Process.send_after(self(), :dependency_check, 60_000)
+
+    receive do
+      :dependency_check -> dependency_monitor_loop()
+    end
   end
 
   defp find_unmet_dependencies do

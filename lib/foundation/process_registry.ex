@@ -763,21 +763,45 @@ defmodule Foundation.ProcessRegistry do
           catch
             # If that fails, force termination
             :exit, _ ->
+              ref = Process.monitor(pid)
               Process.exit(pid, :shutdown)
 
-              # Wait briefly then force kill if still alive
-              Process.sleep(50)
+              # Wait for graceful shutdown or timeout
+              receive do
+                {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
+              after
+                50 ->
+                  Process.demonitor(ref, [:flush])
 
-              if Process.alive?(pid) do
-                Process.exit(pid, :kill)
+                  if Process.alive?(pid) do
+                    Process.exit(pid, :kill)
+                  end
               end
           end
         end)
       end
     end)
 
-    # Wait for all processes to be terminated
-    Process.sleep(200)
+    # Wait for all processes to be terminated with proper monitoring
+    Task.async_stream(
+      backup_pids,
+      fn pid ->
+        if Process.alive?(pid) do
+          ref = Process.monitor(pid)
+
+          receive do
+            {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
+          after
+            200 -> :timeout
+          end
+        else
+          :ok
+        end
+      end,
+      timeout: 300,
+      max_concurrency: 10
+    )
+    |> Stream.run()
 
     # Clean up backup table entries for this namespace and count cleaned entries
     cleanup_count =

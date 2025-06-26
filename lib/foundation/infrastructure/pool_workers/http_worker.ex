@@ -310,8 +310,15 @@ defmodule Foundation.Infrastructure.PoolWorkers.HttpWorker do
     if delay_ms > timeout do
       {:error, :timeout}
     else
-      Process.sleep(delay_ms)
-      create_json_response(200, method, url, headers, body)
+      Process.send_after(self(), {:delay_complete, method, url, headers, body}, delay_ms)
+
+      receive do
+        {:delay_complete, ^method, ^url, ^headers, ^body} ->
+          create_json_response(200, method, url, headers, body)
+      after
+        timeout ->
+          {:error, :timeout}
+      end
     end
   end
 
@@ -324,8 +331,13 @@ defmodule Foundation.Infrastructure.PoolWorkers.HttpWorker do
 
   defp handle_status_request(url, method, headers, body) do
     status_code = extract_status_code(url)
-    Process.sleep(Enum.random(10..100))
-    create_json_response(status_code, method, url, headers, body)
+    delay = Enum.random(10..100)
+    Process.send_after(self(), {:status_response, status_code, method, url, headers, body}, delay)
+
+    receive do
+      {:status_response, ^status_code, ^method, ^url, ^headers, ^body} ->
+        create_json_response(status_code, method, url, headers, body)
+    end
   end
 
   defp extract_status_code(url) do
@@ -337,15 +349,19 @@ defmodule Foundation.Infrastructure.PoolWorkers.HttpWorker do
 
   defp handle_bytes_request(url) do
     byte_count = extract_byte_count(url)
-    Process.sleep(Enum.random(10..100))
+    delay = Enum.random(10..100)
+    Process.send_after(self(), {:bytes_response, byte_count}, delay)
 
-    response = %{
-      status_code: 200,
-      headers: [{"content-type", "application/octet-stream"}],
-      body: :crypto.strong_rand_bytes(byte_count)
-    }
+    receive do
+      {:bytes_response, ^byte_count} ->
+        response = %{
+          status_code: 200,
+          headers: [{"content-type", "application/octet-stream"}],
+          body: :crypto.strong_rand_bytes(byte_count)
+        }
 
-    {:ok, response}
+        {:ok, response}
+    end
   end
 
   defp extract_byte_count(url) do
@@ -356,42 +372,56 @@ defmodule Foundation.Infrastructure.PoolWorkers.HttpWorker do
   end
 
   defp handle_xml_request(method, url) do
-    Process.sleep(Enum.random(10..100))
+    delay = Enum.random(10..100)
+    Process.send_after(self(), {:xml_response, method, url}, delay)
 
-    xml_response = """
-    <?xml version="1.0" encoding="UTF-8"?>
-    <response>
-      <method>#{method}</method>
-      <url>#{url}</url>
-    </response>
-    """
+    receive do
+      {:xml_response, ^method, ^url} ->
+        xml_response = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <response>
+          <method>#{method}</method>
+          <url>#{url}</url>
+        </response>
+        """
 
-    response = %{
-      status_code: 200,
-      headers: [{"content-type", "application/xml"}],
-      body: xml_response
-    }
+        response = %{
+          status_code: 200,
+          headers: [{"content-type", "application/xml"}],
+          body: xml_response
+        }
 
-    {:ok, response}
+        {:ok, response}
+    end
   end
 
   defp handle_nonexistent_request(method, url, headers, body) do
-    Process.sleep(Enum.random(10..100))
-    create_json_response(404, method, url, headers, body)
+    delay = Enum.random(10..100)
+    Process.send_after(self(), {:nonexistent_response, method, url, headers, body}, delay)
+
+    receive do
+      {:nonexistent_response, ^method, ^url, ^headers, ^body} ->
+        create_json_response(404, method, url, headers, body)
+    end
   end
 
   defp handle_default_request(method, url, headers, body) do
-    Process.sleep(Enum.random(10..100))
-    response_body = create_httpbin_response(method, url, headers, body)
-    json_body = Jason.encode!(response_body)
+    delay = Enum.random(10..100)
+    Process.send_after(self(), {:default_response, method, url, headers, body}, delay)
 
-    response = %{
-      status_code: 200,
-      headers: [{"content-type", "application/json"}],
-      body: json_body
-    }
+    receive do
+      {:default_response, ^method, ^url, ^headers, ^body} ->
+        response_body = create_httpbin_response(method, url, headers, body)
+        json_body = Jason.encode!(response_body)
 
-    {:ok, response}
+        response = %{
+          status_code: 200,
+          headers: [{"content-type", "application/json"}],
+          body: json_body
+        }
+
+        {:ok, response}
+    end
   end
 
   defp create_json_response(status_code, method, url, headers, body) do

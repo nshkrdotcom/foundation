@@ -176,11 +176,14 @@ defmodule Foundation.MABEAM.ProcessRegistry do
         # Start dynamic supervisor for agents
         supervisor_name = Module.concat(__MODULE__, DynamicSupervisor)
 
-        {:ok, supervisor_pid} =
-          DynamicSupervisor.start_link(
-            name: supervisor_name,
-            strategy: :one_for_one
-          )
+        supervisor_pid =
+          case DynamicSupervisor.start_link(
+                 name: supervisor_name,
+                 strategy: :one_for_one
+               ) do
+            {:ok, pid} -> pid
+            {:error, {:already_started, pid}} -> pid
+          end
 
         state = %{
           backend: backend_module,

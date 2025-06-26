@@ -228,8 +228,12 @@ defmodule Foundation.MABEAM.Coordination do
         if System.monotonic_time(:millisecond) >= end_time do
           {:error, :timeout}
         else
-          Process.sleep(50)
-          wait_for_session_results_loop(session_id, end_time)
+          Process.send_after(self(), {:retry_session_check, session_id, end_time}, 50)
+
+          receive do
+            {:retry_session_check, ^session_id, ^end_time} ->
+              wait_for_session_results_loop(session_id, end_time)
+          end
         end
 
       {:error, reason} ->
@@ -3830,7 +3834,13 @@ defmodule Foundation.MABEAM.Coordination do
       count ->
         total_duration =
           Enum.reduce(completed_sessions, 0, fn session, acc ->
-            duration = DateTime.diff(session.updated_at, session.created_at, :millisecond)
+            duration =
+              DateTime.diff(
+                Map.get(session, :updated_at, session.started_at),
+                session.started_at,
+                :millisecond
+              )
+
             acc + duration
           end)
 
@@ -4092,8 +4102,15 @@ defmodule Foundation.MABEAM.Coordination do
     if total_delay > protocol_timeout do
       {:error, :timeout}
     else
-      # Simulate the processing time
-      Process.sleep(total_delay)
+      # Simulate the processing time with non-blocking timer
+      Process.send_after(self(), {:coordination_processing_complete, total_delay}, total_delay)
+
+      receive do
+        {:coordination_processing_complete, ^total_delay} -> :ok
+      after
+        protocol_timeout ->
+          {:error, :timeout}
+      end
 
       # For unanimous algorithm, enforce unanimous responses
       algorithm = Map.get(protocol, :algorithm, :majority_vote)

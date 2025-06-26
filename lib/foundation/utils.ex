@@ -579,8 +579,17 @@ defmodule Foundation.Utils do
 
       {:error, _} when attempt < max_attempts ->
         delay = min(base_delay * :math.pow(2, attempt - 1), max_delay) |> round()
-        Process.sleep(delay)
-        do_retry(fun, attempt + 1, max_attempts, base_delay, max_delay)
+
+        Process.send_after(
+          self(),
+          {:retry_attempt, fun, attempt + 1, max_attempts, base_delay, max_delay},
+          delay
+        )
+
+        receive do
+          {:retry_attempt, ^fun, next_attempt, ^max_attempts, ^base_delay, ^max_delay} ->
+            do_retry(fun, next_attempt, max_attempts, base_delay, max_delay)
+        end
 
       {:error, _reason} ->
         {:error, :max_attempts_exceeded}

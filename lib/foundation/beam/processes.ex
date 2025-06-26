@@ -190,8 +190,27 @@ defmodule Foundation.BEAM.Processes do
         Process.exit(pid, :kill)
       end
 
-      # Final wait to ensure processes are truly dead
-      Process.sleep(50)
+      # Final wait to ensure processes are truly dead with monitoring
+      Task.async_stream(
+        all_pids,
+        fn pid ->
+          if Process.alive?(pid) do
+            ref = Process.monitor(pid)
+
+            receive do
+              {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
+            after
+              50 ->
+                Process.demonitor(ref, [:flush])
+                :timeout
+            end
+          else
+            :ok
+          end
+        end,
+        timeout: 100
+      )
+      |> Stream.run()
 
       :ok
     end)
@@ -206,8 +225,12 @@ defmodule Foundation.BEAM.Processes do
       if Enum.empty?(living_pids) do
         :ok
       else
-        Process.sleep(10)
-        wait_for_shutdown(pids, deadline)
+        Process.send_after(self(), {:check_shutdown, pids, deadline}, 10)
+
+        receive do
+          {:check_shutdown, ^pids, ^deadline} ->
+            wait_for_shutdown(pids, deadline)
+        end
       end
     end
   end

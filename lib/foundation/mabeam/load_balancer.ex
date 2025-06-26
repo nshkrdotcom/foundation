@@ -289,8 +289,15 @@ defmodule Foundation.MABEAM.LoadBalancer do
         # For test mode agents, return a dummy PID for the response
         response_pid =
           case agent_data.pid do
-            :test_mode_agent -> spawn(fn -> Process.sleep(:infinity) end)
-            pid -> pid
+            :test_mode_agent ->
+              spawn(fn ->
+                receive do
+                  :shutdown -> :ok
+                end
+              end)
+
+            pid ->
+              pid
           end
 
         Logger.debug("Assigned task #{task_id} to agent #{agent_id}")

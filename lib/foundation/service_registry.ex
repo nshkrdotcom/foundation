@@ -343,8 +343,36 @@ defmodule Foundation.ServiceRegistry do
       "Waiting for service #{inspect(service)} in namespace #{inspect(namespace)} (timeout: #{timeout}ms)"
     )
 
-    start_time = System.monotonic_time(:millisecond)
-    wait_for_service_loop(namespace, service, timeout, start_time)
+    case lookup(namespace, service) do
+      {:ok, pid} ->
+        {:ok, pid}
+
+      {:error, _} ->
+        ref = make_ref()
+        Process.send_after(self(), {:service_check, ref, namespace, service}, 10)
+        wait_for_service_receive(ref, namespace, service, timeout)
+    end
+  end
+
+  defp wait_for_service_receive(ref, namespace, service, timeout) do
+    receive do
+      {:service_check, ^ref, ^namespace, ^service} ->
+        case lookup(namespace, service) do
+          {:ok, pid} ->
+            {:ok, pid}
+
+          {:error, _} when timeout > 10 ->
+            new_ref = make_ref()
+            Process.send_after(self(), {:service_check, new_ref, namespace, service}, 10)
+            wait_for_service_receive(new_ref, namespace, service, timeout - 10)
+
+          {:error, _} ->
+            {:error, :timeout}
+        end
+    after
+      timeout ->
+        {:error, :timeout}
+    end
   end
 
   @doc """
@@ -463,29 +491,6 @@ defmodule Foundation.ServiceRegistry do
   end
 
   ## Private Functions
-
-  @spec wait_for_service_loop(namespace(), service_name(), pos_integer(), integer()) ::
-          {:ok, pid()} | {:error, :timeout}
-  defp wait_for_service_loop(namespace, service, timeout, start_time) do
-    case lookup(namespace, service) do
-      {:ok, pid} ->
-        elapsed = System.monotonic_time(:millisecond) - start_time
-        Logger.debug("Service #{inspect(service)} became available after #{elapsed}ms")
-        {:ok, pid}
-
-      {:error, _reason} ->
-        elapsed = System.monotonic_time(:millisecond) - start_time
-
-        if elapsed >= timeout do
-          Logger.warning("Timeout waiting for service #{inspect(service)} after #{elapsed}ms")
-          {:error, :timeout}
-        else
-          # Wait a short time before retrying
-          Process.sleep(10)
-          wait_for_service_loop(namespace, service, timeout, start_time)
-        end
-    end
-  end
 
   @spec analyze_service(pid()) :: %{pid: pid(), alive: boolean(), uptime_ms: integer()}
   defp analyze_service(pid) do
