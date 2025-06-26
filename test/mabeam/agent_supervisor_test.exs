@@ -24,7 +24,7 @@ defmodule MABEAM.AgentSupervisorTest do
       agent_config = %{
         id: :supervised_agent,
         type: :worker,
-        module: Foundation.TestHelpers.TestWorker,
+        module: MABEAM.TestWorker,
         args: [],
         capabilities: [:test_supervision]
       }
@@ -50,7 +50,7 @@ defmodule MABEAM.AgentSupervisorTest do
       agent_config = %{
         id: :restart_test_agent,
         type: :worker,
-        module: Foundation.TestHelpers.TestWorker,
+        module: MABEAM.TestWorker,
         args: [],
         capabilities: [:restart_test]
       }
@@ -77,7 +77,7 @@ defmodule MABEAM.AgentSupervisorTest do
       agent_config = %{
         id: :stop_test_agent,
         type: :worker,
-        module: Foundation.TestHelpers.TestWorker,
+        module: MABEAM.TestWorker,
         args: [],
         capabilities: [:stop_test]
       }
@@ -101,7 +101,7 @@ defmodule MABEAM.AgentSupervisorTest do
       agent_config = %{
         id: :update_test_agent,
         type: :worker,
-        module: Foundation.TestHelpers.TestWorker,
+        module: MABEAM.TestWorker,
         args: [test: :original],
         capabilities: [:update_test]
       }
@@ -125,7 +125,7 @@ defmodule MABEAM.AgentSupervisorTest do
       agent_config = %{
         id: :crash_test_agent,
         type: :worker,
-        module: Foundation.TestHelpers.FailingAgent,
+        module: MABEAM.FailingAgent,
         args: [failure_mode: :immediate],
         capabilities: [:crash_test]
       }
@@ -143,7 +143,7 @@ defmodule MABEAM.AgentSupervisorTest do
       agent_config = %{
         id: :metrics_test_agent,
         type: :worker,
-        module: Foundation.TestHelpers.TestWorker,
+        module: MABEAM.TestWorker,
         args: [],
         capabilities: [:metrics_test]
       }
@@ -167,7 +167,7 @@ defmodule MABEAM.AgentSupervisorTest do
       agent_config = %{
         id: :resource_test_agent,
         type: :worker,
-        module: Foundation.TestHelpers.TestWorker,
+        module: MABEAM.TestWorker,
         args: [],
         capabilities: [:resource_test]
       }
@@ -190,13 +190,13 @@ defmodule MABEAM.AgentSupervisorTest do
         %{
           id: :perf_agent_1,
           type: :worker,
-          module: Foundation.TestHelpers.TestWorker,
+          module: MABEAM.TestWorker,
           capabilities: [:perf1]
         },
         %{
           id: :perf_agent_2,
           type: :worker,
-          module: Foundation.TestHelpers.TestWorker,
+          module: MABEAM.TestWorker,
           capabilities: [:perf2]
         }
       ]
@@ -222,7 +222,7 @@ defmodule MABEAM.AgentSupervisorTest do
       agent_config = %{
         id: :supervisor_crash_test,
         type: :worker,
-        module: Foundation.TestHelpers.TestWorker,
+        module: MABEAM.TestWorker,
         args: [],
         capabilities: [:supervisor_crash_test]
       }

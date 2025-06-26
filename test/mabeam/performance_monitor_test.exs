@@ -32,7 +32,7 @@ defmodule MABEAM.PerformanceMonitorTest do
       agent_config = %{
         id: :perf_test_agent,
         type: :worker,
-        module: Foundation.TestHelpers.TestWorker,
+        module: MABEAM.TestWorker,
         capabilities: [:performance_testing]
       }
 
@@ -78,7 +78,7 @@ defmodule MABEAM.PerformanceMonitorTest do
       agent_config = %{
         id: :time_series_agent,
         type: :worker,
-        module: Foundation.TestHelpers.TestWorker,
+        module: MABEAM.TestWorker,
         capabilities: [:time_series_testing]
       }
 
@@ -123,7 +123,7 @@ defmodule MABEAM.PerformanceMonitorTest do
         agent_config = %{
           id: agent_id,
           type: :worker,
-          module: Foundation.TestHelpers.TestWorker,
+          module: MABEAM.TestWorker,
           capabilities: [:stats_testing]
         }
 
@@ -165,7 +165,7 @@ defmodule MABEAM.PerformanceMonitorTest do
       agent_config = %{
         id: :high_cpu_agent,
         type: :worker,
-        module: Foundation.TestHelpers.TestWorker,
+        module: MABEAM.TestWorker,
         capabilities: [:alert_testing]
       }
 
@@ -206,7 +206,7 @@ defmodule MABEAM.PerformanceMonitorTest do
       agent_config = %{
         id: :low_throughput_agent,
         type: :worker,
-        module: Foundation.TestHelpers.TestWorker,
+        module: MABEAM.TestWorker,
         capabilities: [:throughput_testing]
       }
 
@@ -238,7 +238,7 @@ defmodule MABEAM.PerformanceMonitorTest do
       agent_config = %{
         id: :alert_resolution_agent,
         type: :worker,
-        module: Foundation.TestHelpers.TestWorker,
+        module: MABEAM.TestWorker,
         capabilities: [:resolution_testing]
       }
 
@@ -273,7 +273,7 @@ defmodule MABEAM.PerformanceMonitorTest do
       agent_config = %{
         id: :lifecycle_agent,
         type: :worker,
-        module: Foundation.TestHelpers.TestWorker,
+        module: MABEAM.TestWorker,
         capabilities: [:lifecycle_testing]
       }
 
@@ -300,7 +300,7 @@ defmodule MABEAM.PerformanceMonitorTest do
         agent_config = %{
           id: agent_id,
           type: :worker,
-          module: Foundation.TestHelpers.TestWorker,
+          module: MABEAM.TestWorker,
           capabilities: [:status_testing]
         }
 
@@ -332,7 +332,7 @@ defmodule MABEAM.PerformanceMonitorTest do
       agent_config = %{
         id: :export_agent,
         type: :worker,
-        module: Foundation.TestHelpers.TestWorker,
+        module: MABEAM.TestWorker,
         capabilities: [:export_testing]
       }
 

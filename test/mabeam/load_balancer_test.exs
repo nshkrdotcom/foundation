@@ -383,7 +383,7 @@ defmodule MABEAM.LoadBalancerTest do
     agent_config = %{
       id: agent_id,
       type: :worker,
-      module: Foundation.TestHelpers.TestWorker,
+      module: MABEAM.TestWorker,
       args: [],
       capabilities: capabilities
     }

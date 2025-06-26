@@ -1,22 +1,13 @@
 # MABEAM Test Helper
 # Sets up test environment for MABEAM modules
 
-# Start Foundation services that MABEAM depends on
-Application.ensure_all_started(:foundation)
+# Load the main test helper which loads all support files
+Code.require_file("../test_helper.exs", __DIR__)
 
-# Start MABEAM services for testing
-case MABEAM.Application.start(:normal, []) do
-  {:ok, _pid} -> 
-    # MABEAM services started successfully
-    :ok
-  {:error, {:already_started, _pid}} ->
-    # Already started, that's fine
-    :ok
-  {:error, reason} ->
-    IO.puts("Warning: Failed to start MABEAM services for testing: #{inspect(reason)}")
-    # Continue anyway - some tests might still work
-    :ok
-end
+# The main test helper already handles:
+# - Starting Foundation services
+# - Starting MABEAM services for MABEAM tests  
+# - Loading all test support modules (TestWorker, etc.)
+# - Configuring ExUnit
 
-# Configure test environment
-ExUnit.start()
+# Nothing else needed here - main test helper handles everything

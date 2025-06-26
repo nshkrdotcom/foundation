@@ -43,7 +43,7 @@ defmodule MABEAM.BackendMigrationTest do
       agent_config = %{
         id: :migration_test_worker,
         type: :worker,
-        module: Foundation.TestHelpers.TestWorker,
+        module: MABEAM.TestWorker,
         args: [test: true],
         capabilities: [:computation, :data_processing],
         restart_policy: :permanent
@@ -66,7 +66,7 @@ defmodule MABEAM.BackendMigrationTest do
       agent_config = %{
         id: :migration_test_lifecycle,
         type: :lifecycle_worker,
-        module: Foundation.TestHelpers.TestWorker,
+        module: MABEAM.TestWorker,
         capabilities: [:lifecycle_test]
       }
 
@@ -102,7 +102,7 @@ defmodule MABEAM.BackendMigrationTest do
       ]
 
       Enum.each(agents, fn config ->
-        full_config = Map.put(config, :module, Foundation.TestHelpers.TestWorker)
+        full_config = Map.put(config, :module, MABEAM.TestWorker)
         assert :ok = Agent.register_agent(full_config)
       end)
 
@@ -133,7 +133,7 @@ defmodule MABEAM.BackendMigrationTest do
       agent_config = %{
         id: :migration_test_backend,
         type: :backend_test,
-        module: Foundation.TestHelpers.TestWorker,
+        module: MABEAM.TestWorker,
         capabilities: [:backend_testing]
       }
 
@@ -178,7 +178,7 @@ defmodule MABEAM.BackendMigrationTest do
           agent_config = %{
             id: :"migration_test_perf_#{i}",
             type: :performance_test,
-            module: Foundation.TestHelpers.TestWorker,
+            module: MABEAM.TestWorker,
             capabilities: [:performance]
           }
 
@@ -229,7 +229,7 @@ defmodule MABEAM.BackendMigrationTest do
       complex_config = %{
         id: :migration_test_complex,
         type: :complex_agent,
-        module: Foundation.TestHelpers.MLWorker,
+        module: MABEAM.MLWorker,
         args: [model_type: :transformer],
         capabilities: [:nlp, :text_generation, :reasoning],
         custom_metadata: %{

@@ -9,7 +9,7 @@ defmodule MABEAM.AgentTest do
 
   alias MABEAM.Agent
   alias Foundation.ProcessRegistry
-  # alias Foundation.TestHelpers.{UnifiedRegistry, AgentFixtures}
+  # alias MABEAM.{UnifiedRegistry, AgentFixtures}
 
   setup do
     # Setup test namespace for agent testing
@@ -36,7 +36,7 @@ defmodule MABEAM.AgentTest do
       config = %{
         id: :test_worker,
         type: :worker,
-        module: Foundation.TestHelpers.TestWorker,
+        module: MABEAM.TestWorker,
         args: [],
         capabilities: [:computation]
       }
@@ -47,7 +47,7 @@ defmodule MABEAM.AgentTest do
       assert {:ok, metadata} = ProcessRegistry.get_metadata(:production, {:agent, :test_worker})
       assert metadata.type == :mabeam_agent
       assert metadata.agent_type == :worker
-      assert metadata.module == Foundation.TestHelpers.TestWorker
+      assert metadata.module == MABEAM.TestWorker
       assert metadata.capabilities == [:computation]
       assert metadata.status == :registered
     end
@@ -56,7 +56,7 @@ defmodule MABEAM.AgentTest do
       config = %{
         id: :minimal_agent,
         type: :worker,
-        module: Foundation.TestHelpers.TestWorker
+        module: MABEAM.TestWorker
       }
 
       assert :ok = Agent.register_agent(config)
@@ -69,11 +69,11 @@ defmodule MABEAM.AgentTest do
 
     test "register_agent/1 validates required fields" do
       # Missing id
-      config = %{type: :worker, module: Foundation.TestHelpers.TestWorker}
+      config = %{type: :worker, module: MABEAM.TestWorker}
       assert {:error, {:missing_required_fields, [:id]}} = Agent.register_agent(config)
 
       # Missing type  
-      config = %{id: :test, module: Foundation.TestHelpers.TestWorker}
+      config = %{id: :test, module: MABEAM.TestWorker}
       assert {:error, {:missing_required_fields, [:type]}} = Agent.register_agent(config)
 
       # Missing module
@@ -86,7 +86,7 @@ defmodule MABEAM.AgentTest do
         # Invalid - must be atom or string
         id: 123,
         type: :worker,
-        module: Foundation.TestHelpers.TestWorker
+        module: MABEAM.TestWorker
       }
 
       assert {:error, :invalid_agent_id} = Agent.register_agent(config)
@@ -106,7 +106,7 @@ defmodule MABEAM.AgentTest do
       config = %{
         id: "string_agent",
         type: :worker,
-        module: Foundation.TestHelpers.TestWorker
+        module: MABEAM.TestWorker
       }
 
       assert :ok = Agent.register_agent(config)
@@ -120,7 +120,7 @@ defmodule MABEAM.AgentTest do
       config = %{
         id: :lifecycle_agent,
         type: :worker,
-        module: Foundation.TestHelpers.TestWorker,
+        module: MABEAM.TestWorker,
         args: [name: :test_worker_instance],
         capabilities: [:test]
       }
@@ -210,25 +210,25 @@ defmodule MABEAM.AgentTest do
         %{
           id: :worker1,
           type: :computation_worker,
-          module: Foundation.TestHelpers.TestWorker,
+          module: MABEAM.TestWorker,
           capabilities: [:computation, :parallel_processing]
         },
         %{
           id: :worker2,
           type: :nlp_worker,
-          module: Foundation.TestHelpers.MLWorker,
+          module: MABEAM.MLWorker,
           capabilities: [:nlp, :text_processing]
         },
         %{
           id: :coordinator,
           type: :coordinator,
-          module: Foundation.TestHelpers.CoordinationAgent,
+          module: MABEAM.CoordinationAgent,
           capabilities: [:coordination, :task_distribution]
         },
         %{
           id: :hybrid_worker,
           type: :hybrid,
-          module: Foundation.TestHelpers.TestWorker,
+          module: MABEAM.TestWorker,
           capabilities: [:computation, :nlp]
         }
       ]
@@ -294,7 +294,7 @@ defmodule MABEAM.AgentTest do
       config = %{
         id: :info_test_agent,
         type: :test_worker,
-        module: Foundation.TestHelpers.TestWorker,
+        module: MABEAM.TestWorker,
         args: [test: true],
         capabilities: [:testing, :info_retrieval],
         restart_policy: :temporary
@@ -355,7 +355,7 @@ defmodule MABEAM.AgentTest do
       config = %{
         id: :removable_agent,
         type: :temporary,
-        module: Foundation.TestHelpers.TestWorker
+        module: MABEAM.TestWorker
       }
 
       assert :ok = Agent.register_agent(config)
@@ -402,7 +402,7 @@ defmodule MABEAM.AgentTest do
       config = %{
         id: :integration_agent,
         type: :integration_test,
-        module: Foundation.TestHelpers.TestWorker
+        module: MABEAM.TestWorker
       }
 
       Agent.register_agent(config)
@@ -425,7 +425,7 @@ defmodule MABEAM.AgentTest do
       config = %{
         id: :metadata_test,
         type: :metadata_worker,
-        module: Foundation.TestHelpers.TestWorker,
+        module: MABEAM.TestWorker,
         capabilities: [:metadata, :storage],
         custom_field: "custom_value"
       }
