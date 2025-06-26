@@ -240,12 +240,17 @@ defmodule MABEAM.AgentRegistry do
               end
           end
 
-        # Stop agent if running
+        # Stop agent if running - wait for completion
         case agent_info.status do
           :running ->
             if agent_info.pid && Process.alive?(agent_info.pid) do
               # Delegate to AgentSupervisor for process management
-              MABEAM.AgentSupervisor.stop_agent(agent_id)
+              # This call is now synchronous and will wait for termination
+              case MABEAM.AgentSupervisor.stop_agent(agent_id) do
+                :ok -> :ok
+                # Continue with deregistration even if stop failed
+                {:error, _reason} -> :ok
+              end
             end
 
           _ ->
@@ -371,11 +376,15 @@ defmodule MABEAM.AgentRegistry do
               end
           end
 
-        # Terminate the agent process
-        if agent_info.pid && Process.alive?(agent_info.pid) do
-          # Delegate to AgentSupervisor for process management
-          MABEAM.AgentSupervisor.stop_agent(agent_id)
-        end
+        # Terminate the agent process - wait for completion
+        stop_result =
+          if agent_info.pid && Process.alive?(agent_info.pid) do
+            # Delegate to AgentSupervisor for process management
+            # This call is now synchronous and will wait for termination
+            MABEAM.AgentSupervisor.stop_agent(agent_id)
+          else
+            :ok
+          end
 
         # Unregister from ProcessRegistry (if available)
         try do
@@ -395,7 +404,11 @@ defmodule MABEAM.AgentRegistry do
         emit_telemetry_event(:agent_stopped, %{agent_id: agent_id}, agent_info.config)
 
         Logger.info("Stopped agent #{agent_id}")
-        {:reply, :ok, new_state}
+
+        case stop_result do
+          :ok -> {:reply, :ok, new_state}
+          {:error, reason} -> {:reply, {:error, reason}, new_state}
+        end
     end
   end
 

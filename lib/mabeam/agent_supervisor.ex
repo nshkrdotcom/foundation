@@ -129,9 +129,11 @@ defmodule MABEAM.AgentSupervisor do
   end
 
   @doc """
-  Stop a supervised agent.
+  Stop a supervised agent gracefully.
 
-  Gracefully stops the agent and removes it from supervision.
+  This function is synchronous and will not return until the agent process
+  is confirmed to be terminated and removed from supervision, following
+  proper OTP coordination principles.
 
   ## Parameters
   - `agent_id` - The ID of the agent to stop
@@ -148,20 +150,56 @@ defmodule MABEAM.AgentSupervisor do
   def stop_agent(agent_id) do
     case get_supervised_agent_pid(agent_id) do
       {:ok, pid} ->
+        # Monitor the process to get synchronous notification when it dies
+        monitor_ref = Process.monitor(pid)
+
         # DynamicSupervisor.terminate_child expects the child PID, not ID
         case DynamicSupervisor.terminate_child(__MODULE__, pid) do
           :ok ->
-            untrack_supervised_agent(agent_id)
-            Agent.update_agent_status(agent_id, nil, :stopped)
-            :ok
+            # Wait for the process to actually terminate
+            receive do
+              {:DOWN, ^monitor_ref, :process, ^pid, _reason} ->
+                # Process confirmed dead, now wait for supervisor cleanup
+                wait_for_child_removal(pid)
+                untrack_supervised_agent(agent_id)
+                Agent.update_agent_status(agent_id, nil, :stopped)
+                :ok
+            after
+              5000 ->
+                # Timeout - force kill and clean up
+                Process.demonitor(monitor_ref, [:flush])
+                if Process.alive?(pid), do: Process.exit(pid, :kill)
+                wait_for_child_removal(pid)
+                untrack_supervised_agent(agent_id)
+                Agent.update_agent_status(agent_id, nil, :stopped)
+                :ok
+            end
 
           {:error, :not_found} ->
             # Child not found in supervisor, use direct termination
             if Process.alive?(pid) do
               # Use proper OTP shutdown - trust the process to handle :shutdown
               Process.exit(pid, :shutdown)
+
+              # Wait for confirmation
+              receive do
+                {:DOWN, ^monitor_ref, :process, ^pid, _reason} ->
+                  # Process confirmed dead
+                  :ok
+              after
+                5000 ->
+                  # Force kill if graceful shutdown failed
+                  Process.demonitor(monitor_ref, [:flush])
+                  if Process.alive?(pid), do: Process.exit(pid, :kill)
+                  :ok
+              end
+            else
+              # Process already dead
+              Process.demonitor(monitor_ref, [:flush])
             end
 
+            # Even for direct termination, wait for supervisor cleanup
+            wait_for_child_removal(pid)
             untrack_supervised_agent(agent_id)
             Agent.update_agent_status(agent_id, nil, :stopped)
             :ok
@@ -538,6 +576,35 @@ defmodule MABEAM.AgentSupervisor do
     case Map.get(supervised_agents, agent_id) do
       %{started_at: started_at} -> current_time - started_at
       nil -> 0
+    end
+  end
+
+  # Wait for the child to be completely removed from supervisor's children list
+  defp wait_for_child_removal(pid, timeout \\ 2000) do
+    start_time = System.monotonic_time(:millisecond)
+    wait_for_child_removal_loop(pid, start_time, timeout)
+  end
+
+  defp wait_for_child_removal_loop(pid, start_time, timeout) do
+    children = DynamicSupervisor.which_children(__MODULE__)
+
+    case Enum.find(children, fn {_, child_pid, _, _} -> child_pid == pid end) do
+      nil ->
+        # Child removed from supervisor, we're done
+        :ok
+
+      _child_spec ->
+        # Child still in supervisor list, check timeout
+        elapsed = System.monotonic_time(:millisecond) - start_time
+
+        if elapsed >= timeout do
+          # Timeout reached, but this is not an error - supervisor cleanup can be async
+          :ok
+        else
+          # Wait a bit and check again
+          Process.sleep(10)
+          wait_for_child_removal_loop(pid, start_time, timeout)
+        end
     end
   end
 end

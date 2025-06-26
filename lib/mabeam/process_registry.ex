@@ -32,7 +32,7 @@ defmodule MABEAM.ProcessRegistry do
       {:ok, agents} = ProcessRegistry.find_agents_by_capability([:nlp])
   """
 
-  use GenServer
+  use Supervisor
   require Logger
 
   alias MABEAM.{Types, ProcessRegistry.Backend.LocalETS}
@@ -45,9 +45,9 @@ defmodule MABEAM.ProcessRegistry do
   @doc """
   Start the ProcessRegistry with optional configuration.
   """
-  @spec start_link(keyword()) :: GenServer.on_start()
+  @spec start_link(keyword()) :: Supervisor.on_start()
   def start_link(opts \\ []) do
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+    Supervisor.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
   @doc """
@@ -55,7 +55,7 @@ defmodule MABEAM.ProcessRegistry do
   """
   @spec register_agent(Types.agent_config()) :: :ok | {:error, term()}
   def register_agent(config) do
-    GenServer.call(__MODULE__, {:register_agent, config})
+    GenServer.call(registry_server_name(), {:register_agent, config})
   end
 
   @doc """
@@ -63,7 +63,7 @@ defmodule MABEAM.ProcessRegistry do
   """
   @spec start_agent(Types.agent_id()) :: {:ok, pid()} | {:error, term()}
   def start_agent(agent_id) do
-    GenServer.call(__MODULE__, {:start_agent, agent_id})
+    GenServer.call(registry_server_name(), {:start_agent, agent_id})
   end
 
   @doc """
@@ -71,7 +71,7 @@ defmodule MABEAM.ProcessRegistry do
   """
   @spec stop_agent(Types.agent_id()) :: :ok | {:error, term()}
   def stop_agent(agent_id) do
-    GenServer.call(__MODULE__, {:stop_agent, agent_id})
+    GenServer.call(registry_server_name(), {:stop_agent, agent_id})
   end
 
   @doc """
@@ -79,7 +79,7 @@ defmodule MABEAM.ProcessRegistry do
   """
   @spec get_agent_info(Types.agent_id()) :: {:ok, agent_info()} | {:error, :not_found}
   def get_agent_info(agent_id) do
-    GenServer.call(__MODULE__, {:get_agent_info, agent_id})
+    GenServer.call(registry_server_name(), {:get_agent_info, agent_id})
   end
 
   @doc """
@@ -87,7 +87,7 @@ defmodule MABEAM.ProcessRegistry do
   """
   @spec get_agent_status(Types.agent_id()) :: {:ok, agent_status()} | {:error, :not_found}
   def get_agent_status(agent_id) do
-    GenServer.call(__MODULE__, {:get_agent_status, agent_id})
+    GenServer.call(registry_server_name(), {:get_agent_status, agent_id})
   end
 
   @doc """
@@ -95,7 +95,7 @@ defmodule MABEAM.ProcessRegistry do
   """
   @spec list_agents() :: {:ok, [agent_info()]}
   def list_agents do
-    GenServer.call(__MODULE__, {:list_agents, []})
+    GenServer.call(registry_server_name(), {:list_agents, []})
   end
 
   @doc """
@@ -103,7 +103,7 @@ defmodule MABEAM.ProcessRegistry do
   """
   @spec list_agents(keyword()) :: {:ok, [agent_info()]} | {:error, :not_supported}
   def list_agents(filters) when is_list(filters) do
-    GenServer.call(__MODULE__, {:list_agents, filters})
+    GenServer.call(registry_server_name(), {:list_agents, filters})
   end
 
   @doc """
@@ -111,7 +111,7 @@ defmodule MABEAM.ProcessRegistry do
   """
   @spec find_agents_by_capability([atom()]) :: {:ok, [Types.agent_id()]} | {:error, term()}
   def find_agents_by_capability(capabilities) when is_list(capabilities) do
-    GenServer.call(__MODULE__, {:find_agents_by_capability, capabilities})
+    GenServer.call(registry_server_name(), {:find_agents_by_capability, capabilities})
   end
 
   @spec find_by_capability([atom()]) :: [Types.agent_id()]
@@ -127,7 +127,7 @@ defmodule MABEAM.ProcessRegistry do
   """
   @spec get_agent_stats(Types.agent_id()) :: {:ok, map()} | {:error, :not_implemented | :not_found}
   def get_agent_stats(agent_id) do
-    GenServer.call(__MODULE__, {:get_agent_stats, agent_id})
+    GenServer.call(registry_server_name(), {:get_agent_stats, agent_id})
   end
 
   @doc """
@@ -135,7 +135,7 @@ defmodule MABEAM.ProcessRegistry do
   """
   @spec get_agent_pid(Types.agent_id()) :: {:ok, pid()} | {:error, :not_found | :not_running}
   def get_agent_pid(agent_id) do
-    GenServer.call(__MODULE__, {:get_agent_pid, agent_id})
+    GenServer.call(registry_server_name(), {:get_agent_pid, agent_id})
   end
 
   @doc """
@@ -143,7 +143,7 @@ defmodule MABEAM.ProcessRegistry do
   """
   @spec restart_agent(Types.agent_id()) :: :ok | {:error, term()}
   def restart_agent(agent_id) do
-    GenServer.call(__MODULE__, {:restart_agent, agent_id})
+    GenServer.call(registry_server_name(), {:restart_agent, agent_id})
   end
 
   @doc """
@@ -151,7 +151,7 @@ defmodule MABEAM.ProcessRegistry do
   """
   @spec find_agents_by_type(Types.agent_type()) :: {:ok, [Types.agent_id()]} | {:error, term()}
   def find_agents_by_type(agent_type) do
-    GenServer.call(__MODULE__, {:find_agents_by_type, agent_type})
+    GenServer.call(registry_server_name(), {:find_agents_by_type, agent_type})
   end
 
   @doc """
@@ -160,10 +160,56 @@ defmodule MABEAM.ProcessRegistry do
   @spec get_agent_health(Types.agent_id()) ::
           {:ok, :healthy | :degraded | :unhealthy} | {:error, term()}
   def get_agent_health(agent_id) do
-    GenServer.call(__MODULE__, {:get_agent_health, agent_id})
+    GenServer.call(registry_server_name(), {:get_agent_health, agent_id})
   end
 
+  # Supervisor Callbacks
+
+  @impl true
+  def init(opts) do
+    children = [
+      # The registry server that manages agent state
+      {MABEAM.ProcessRegistry.Server, opts},
+      # The dynamic supervisor that manages agent processes
+      {DynamicSupervisor, name: agent_supervisor_name(), strategy: :one_for_one}
+    ]
+
+    Supervisor.init(children, strategy: :one_for_one)
+  end
+
+  # Helper functions
+
+  defp registry_server_name, do: Module.concat(__MODULE__, Server)
+  defp agent_supervisor_name, do: Module.concat(__MODULE__, AgentSupervisor)
+
+  @doc false
+  def get_agent_supervisor_pid do
+    case Process.whereis(agent_supervisor_name()) do
+      nil -> {:error, :supervisor_not_found}
+      pid -> {:ok, pid}
+    end
+  end
+end
+
+defmodule MABEAM.ProcessRegistry.Server do
+  @moduledoc """
+  The GenServer that manages agent registry state.
+  This is separated from the main ProcessRegistry to follow proper OTP supervision.
+  """
+
+  use GenServer
+  require Logger
+
+  alias MABEAM.{Types, ProcessRegistry.Backend.LocalETS}
+
+  @type agent_info :: map()
+  @type agent_status :: :registered | :starting | :running | :stopping | :stopped | :failed
+
   # GenServer Callbacks
+
+  def start_link(opts) do
+    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+  end
 
   @impl true
   def init(opts) do
@@ -173,22 +219,9 @@ defmodule MABEAM.ProcessRegistry do
 
     case backend_module.init(backend_opts) do
       {:ok, backend_state} ->
-        # Start dynamic supervisor for agents
-        supervisor_name = Module.concat(__MODULE__, DynamicSupervisor)
-
-        supervisor_pid =
-          case DynamicSupervisor.start_link(
-                 name: supervisor_name,
-                 strategy: :one_for_one
-               ) do
-            {:ok, pid} -> pid
-            {:error, {:already_started, pid}} -> pid
-          end
-
         state = %{
           backend: backend_module,
           backend_state: backend_state,
-          supervisor: supervisor_pid,
           # pid -> {agent_id, monitor_ref}
           agent_monitors: %{},
           # agent_id -> pid
@@ -441,7 +474,7 @@ defmodule MABEAM.ProcessRegistry do
     {:ok, pid, new_state}
   end
 
-  defp start_supervised_agent(agent_entry, state) do
+  defp start_supervised_agent(agent_entry, _state) do
     child_spec = %{
       id: agent_entry.id,
       start: {agent_entry.config.module, :start_link, [agent_entry.config.args]},
@@ -450,7 +483,13 @@ defmodule MABEAM.ProcessRegistry do
       type: :worker
     }
 
-    DynamicSupervisor.start_child(state.supervisor, child_spec)
+    case MABEAM.ProcessRegistry.get_agent_supervisor_pid() do
+      {:ok, supervisor_pid} ->
+        DynamicSupervisor.start_child(supervisor_pid, child_spec)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   defp stop_agent_process(agent_id, state) do
@@ -473,7 +512,14 @@ defmodule MABEAM.ProcessRegistry do
 
   defp handle_stop_running_agent(agent_id, pid, state) do
     # Stop the process
-    DynamicSupervisor.terminate_child(state.supervisor, pid)
+    case MABEAM.ProcessRegistry.get_agent_supervisor_pid() do
+      {:ok, supervisor_pid} ->
+        DynamicSupervisor.terminate_child(supervisor_pid, pid)
+
+      {:error, _} ->
+        # Fallback to direct termination if supervisor not available
+        if Process.alive?(pid), do: Process.exit(pid, :shutdown)
+    end
 
     # Update backend status
     state.backend.update_agent_status(agent_id, :stopped, nil)
@@ -522,19 +568,6 @@ defmodule MABEAM.ProcessRegistry do
       %{count: 1},
       metadata
     )
-  end
-
-  # Child Spec for Supervision
-
-  @doc false
-  def child_spec(opts) do
-    %{
-      id: __MODULE__,
-      start: {__MODULE__, :start_link, [opts]},
-      type: :worker,
-      restart: :permanent,
-      shutdown: 5000
-    }
   end
 
   defp handle_agent_restart(agent_id, agent_entry, state) do
