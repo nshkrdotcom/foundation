@@ -65,7 +65,7 @@ end
 Code.require_file("support/foundation_test_helper.exs", __DIR__)
 Code.require_file("support/contract_test_helpers.exs", __DIR__)
 Code.require_file("support/test_workers.exs", __DIR__)
-Code.require_file("support/test_helpers.exs", __DIR__)
+
 Code.require_file("support/coordination_helpers.exs", __DIR__)
 Code.require_file("support/telemetry_helpers.exs", __DIR__)
 
