@@ -461,17 +461,13 @@ defmodule Foundation.Coordination.Primitives do
     # Simplified consensus implementation
     # In production, this would be a full Raft implementation
 
-    # Phase 1: Propose value to all nodes
+    # Phase 1: Propose value to all nodes using async message passing
     propose_requests =
       Enum.map(nodes, fn node ->
         if node == Node.self() do
           {:ok, :accepted}
         else
-          try do
-            :rpc.call(node, __MODULE__, :handle_consensus_propose, [consensus_id, value], timeout)
-          catch
-            _, _ -> {:error, :node_unreachable}
-          end
+          async_consensus_propose(node, consensus_id, value, timeout)
         end
       end)
 
@@ -506,20 +502,10 @@ defmodule Foundation.Coordination.Primitives do
       broadcast_leader_announcement(nodes, current_node, term, timeout)
       {:leader_elected, current_node, term}
     else
-      # Send election messages to higher nodes
+      # Send election messages to higher nodes using async message passing
       responses =
         Enum.map(higher_nodes, fn node ->
-          try do
-            :rpc.call(
-              node,
-              __MODULE__,
-              :handle_election_message,
-              [election_id, current_node],
-              timeout
-            )
-          catch
-            _, _ -> :no_response
-          end
+          async_election_message(node, election_id, current_node, timeout)
         end)
 
       if Enum.any?(responses, &(&1 == :ok)) do
@@ -552,17 +538,7 @@ defmodule Foundation.Coordination.Primitives do
           :ets.insert(request_queue, {timestamp, Node.self(), lock_ref})
           :ok
         else
-          try do
-            :rpc.call(
-              node,
-              __MODULE__,
-              :handle_lock_request,
-              [resource_id, lock_ref, timestamp, Node.self()],
-              timeout
-            )
-          catch
-            _, _ -> :error
-          end
+          async_lock_request(node, resource_id, lock_ref, timestamp, Node.self(), timeout)
         end
       end)
 
@@ -715,6 +691,232 @@ defmodule Foundation.Coordination.Primitives do
     spawn(fn ->
       Process.send_after(self(), {:barrier_complete, barrier_id}, 0)
     end)
+  end
+
+  ## Async Message Passing Helpers (replaces RPC calls)
+
+  # Async consensus propose using message passing instead of :rpc.call
+  defp async_consensus_propose(node, consensus_id, value, timeout) do
+    # Create a unique request ID for tracking responses
+    request_id = make_ref()
+    caller_pid = self()
+
+    # Spawn a task to handle the async communication
+    task_pid =
+      spawn(fn ->
+        # Create a unique process name for receiving the response
+        response_name =
+          :"consensus_response_#{:erlang.phash2(request_id)}_#{:erlang.monotonic_time()}"
+
+        # Safely register the process name with error handling
+        try do
+          Process.register(self(), response_name)
+        catch
+          :error, :badarg ->
+            # Registration failed (name already taken), notify caller and exit
+            send(caller_pid, {:async_result, request_id, {:error, :registration_failed}})
+            exit(:registration_failed)
+        end
+
+        # Send the message to the remote node's registered process
+        # In a real implementation, we'd use a well-known registered process
+        # For now, we'll use a GenServer-style approach
+        try do
+          # Use Node.spawn to execute the handler on the remote node
+          remote_pid =
+            Node.spawn(node, fn ->
+              result = handle_consensus_propose(consensus_id, value)
+              send({response_name, node()}, {:consensus_response, request_id, result})
+            end)
+
+          # Monitor the remote process to detect failures
+          monitor_ref = Process.monitor(remote_pid)
+
+          # Wait for response with timeout and process monitoring
+          receive do
+            {:consensus_response, ^request_id, result} ->
+              Process.demonitor(monitor_ref, [:flush])
+              send(caller_pid, {:async_result, request_id, result})
+
+            {:DOWN, ^monitor_ref, :process, ^remote_pid, reason} ->
+              send(
+                caller_pid,
+                {:async_result, request_id, {:error, {:remote_process_died, reason}}}
+              )
+          after
+            timeout ->
+              Process.demonitor(monitor_ref, [:flush])
+              Process.exit(remote_pid, :timeout)
+              send(caller_pid, {:async_result, request_id, {:error, :timeout}})
+          end
+        catch
+          :error, :badarg ->
+            # Node not reachable
+            send(caller_pid, {:async_result, request_id, {:error, :node_unreachable}})
+        after
+          # Ensure process name is unregistered for cleanup
+          try do
+            Process.unregister(response_name)
+          catch
+            # Process name might not be registered or already cleaned up
+            :error, :badarg -> :ok
+          end
+        end
+      end)
+
+    # Wait for the async result
+    receive do
+      {:async_result, ^request_id, result} -> result
+    after
+      timeout + 100 ->
+        # Kill the task if it's still running
+        Process.exit(task_pid, :timeout)
+        {:error, :timeout}
+    end
+  end
+
+  # Async election message using message passing instead of :rpc.call
+  defp async_election_message(node, election_id, requesting_node, timeout) do
+    request_id = make_ref()
+    caller_pid = self()
+
+    task_pid =
+      spawn(fn ->
+        response_name = :"election_response_#{:erlang.phash2(request_id)}"
+        Process.register(self(), response_name)
+
+        try do
+          remote_pid =
+            Node.spawn(node, fn ->
+              result = handle_election_message(election_id, requesting_node)
+              send({response_name, node()}, {:election_response, request_id, result})
+            end)
+
+          # Monitor the remote process to detect failures
+          monitor_ref = Process.monitor(remote_pid)
+
+          receive do
+            {:election_response, ^request_id, result} ->
+              Process.demonitor(monitor_ref, [:flush])
+              send(caller_pid, {:async_result, request_id, result})
+
+            {:DOWN, ^monitor_ref, :process, ^remote_pid, _reason} ->
+              send(caller_pid, {:async_result, request_id, :no_response})
+          after
+            timeout ->
+              Process.demonitor(monitor_ref, [:flush])
+              Process.exit(remote_pid, :timeout)
+              send(caller_pid, {:async_result, request_id, :no_response})
+          end
+        catch
+          :error, :badarg ->
+            send(caller_pid, {:async_result, request_id, :no_response})
+        end
+      end)
+
+    receive do
+      {:async_result, ^request_id, result} -> result
+    after
+      timeout + 100 ->
+        Process.exit(task_pid, :timeout)
+        :no_response
+    end
+  end
+
+  # Async lock request using message passing instead of :rpc.call
+  defp async_lock_request(node, resource_id, lock_ref, timestamp, requesting_node, timeout) do
+    request_id = make_ref()
+    caller_pid = self()
+
+    task_pid =
+      spawn(fn ->
+        response_name = :"lock_response_#{:erlang.phash2(request_id)}"
+        Process.register(self(), response_name)
+
+        try do
+          remote_pid =
+            Node.spawn(node, fn ->
+              result = handle_lock_request(resource_id, lock_ref, timestamp, requesting_node)
+              send({response_name, node()}, {:lock_response, request_id, result})
+            end)
+
+          # Monitor the remote process to detect failures
+          monitor_ref = Process.monitor(remote_pid)
+
+          receive do
+            {:lock_response, ^request_id, result} ->
+              Process.demonitor(monitor_ref, [:flush])
+              send(caller_pid, {:async_result, request_id, result})
+
+            {:DOWN, ^monitor_ref, :process, ^remote_pid, _reason} ->
+              send(caller_pid, {:async_result, request_id, :error})
+          after
+            timeout ->
+              Process.demonitor(monitor_ref, [:flush])
+              Process.exit(remote_pid, :timeout)
+              send(caller_pid, {:async_result, request_id, :error})
+          end
+        catch
+          :error, :badarg ->
+            send(caller_pid, {:async_result, request_id, :error})
+        end
+      end)
+
+    receive do
+      {:async_result, ^request_id, result} -> result
+    after
+      timeout + 100 ->
+        Process.exit(task_pid, :timeout)
+        :error
+    end
+  end
+
+  # Async consensus commit using message passing instead of :rpc.call
+  defp async_consensus_commit(node, consensus_id, value, timeout) do
+    request_id = make_ref()
+    caller_pid = self()
+
+    task_pid =
+      spawn(fn ->
+        response_name = :"commit_response_#{:erlang.phash2(request_id)}"
+        Process.register(self(), response_name)
+
+        try do
+          remote_pid =
+            Node.spawn(node, fn ->
+              result = handle_consensus_commit(consensus_id, value)
+              send({response_name, node()}, {:commit_response, request_id, result})
+            end)
+
+          # Monitor the remote process to detect failures
+          monitor_ref = Process.monitor(remote_pid)
+
+          receive do
+            {:commit_response, ^request_id, result} ->
+              Process.demonitor(monitor_ref, [:flush])
+              send(caller_pid, {:async_result, request_id, result})
+
+            {:DOWN, ^monitor_ref, :process, ^remote_pid, _reason} ->
+              send(caller_pid, {:async_result, request_id, :error})
+          after
+            timeout ->
+              Process.demonitor(monitor_ref, [:flush])
+              Process.exit(remote_pid, :timeout)
+              send(caller_pid, {:async_result, request_id, :error})
+          end
+        catch
+          :error, :badarg ->
+            send(caller_pid, {:async_result, request_id, :error})
+        end
+      end)
+
+    receive do
+      {:async_result, ^request_id, result} -> result
+    after
+      timeout + 100 ->
+        Process.exit(task_pid, :timeout)
+        :error
+    end
   end
 
   ## Public RPC Handlers (called by remote nodes)
@@ -1023,11 +1225,7 @@ defmodule Foundation.Coordination.Primitives do
     if node == Node.self() do
       :ok
     else
-      try do
-        :rpc.call(node, __MODULE__, :handle_consensus_commit, [consensus_id, value], timeout)
-      catch
-        _, _ -> :error
-      end
+      async_consensus_commit(node, consensus_id, value, timeout)
     end
   end
 end
