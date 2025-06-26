@@ -1,4 +1,4 @@
-defmodule Foundation.MABEAM.TelemetryHelpers do
+defmodule MABEAM.TelemetryHelpers do
   @moduledoc """
   Comprehensive telemetry test utilities for MABEAM system testing.
 

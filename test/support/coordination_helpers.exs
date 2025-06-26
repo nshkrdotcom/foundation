@@ -1,4 +1,4 @@
-defmodule Foundation.MABEAM.CoordinationHelpers do
+defmodule MABEAM.CoordinationHelpers do
   @moduledoc """
   Comprehensive coordination test utilities for MABEAM system testing.
 
@@ -11,8 +11,8 @@ defmodule Foundation.MABEAM.CoordinationHelpers do
   - Performance testing for coordination scenarios
   """
 
-  alias Foundation.MABEAM.Coordination
-  alias Foundation.MABEAM.Agent
+  alias MABEAM.Coordination
+  alias MABEAM.Agent
 
   # ============================================================================
   # Protocol Setup Helpers

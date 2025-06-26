@@ -1,4 +1,4 @@
-defmodule Foundation.MABEAM.TestHelpers do
+defmodule MABEAM.TestHelpers do
   @moduledoc """
   Comprehensive test utilities for MABEAM system testing.
 
@@ -11,7 +11,7 @@ defmodule Foundation.MABEAM.TestHelpers do
   - Common assertions
   """
 
-  alias Foundation.MABEAM.{AgentRegistry, Core, Coordination, Types}
+  alias MABEAM.{AgentRegistry, Core, Coordination, Types}
 
   # ============================================================================
   # Agent Test Helpers
@@ -22,7 +22,7 @@ defmodule Foundation.MABEAM.TestHelpers do
   """
   @spec create_test_agent(atom(), keyword()) :: {:ok, pid()} | {:error, term()}
   def create_test_agent(agent_id, opts \\ []) do
-    module = Keyword.get(opts, :module, Foundation.MABEAM.TestAgent)
+    module = Keyword.get(opts, :module, MABEAM.TestAgent)
 
     config = %{
       id: agent_id,
@@ -413,7 +413,7 @@ defmodule Foundation.MABEAM.TestHelpers do
 end
 
 # Basic test agent for use in tests
-defmodule Foundation.MABEAM.TestAgent do
+defmodule MABEAM.TestAgent do
   use GenServer
 
   def start_link(args) do

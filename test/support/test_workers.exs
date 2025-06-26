@@ -1,4 +1,4 @@
-defmodule Foundation.MABEAM.TestWorker do
+defmodule MABEAM.TestWorker do
   @moduledoc """
   Basic test worker for ProcessRegistry testing.
   """
@@ -42,7 +42,7 @@ defmodule Foundation.MABEAM.TestWorker do
   end
 end
 
-defmodule Foundation.MABEAM.MLTestWorker do
+defmodule MABEAM.MLTestWorker do
   @moduledoc """
   ML-specific test worker with NLP and classification capabilities.
   """
@@ -107,7 +107,7 @@ defmodule Foundation.MABEAM.MLTestWorker do
   end
 end
 
-defmodule Foundation.MABEAM.CrashingTestWorker do
+defmodule MABEAM.CrashingTestWorker do
   @moduledoc """
   Test worker that crashes after a specified time for crash testing.
   """
@@ -146,7 +146,7 @@ defmodule Foundation.MABEAM.CrashingTestWorker do
   end
 end
 
-defmodule Foundation.MABEAM.SlowTestWorker do
+defmodule MABEAM.SlowTestWorker do
   @moduledoc """
   Test worker that responds slowly for timeout testing.
   """

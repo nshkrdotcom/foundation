@@ -1,4 +1,4 @@
-defmodule Foundation.MABEAM.SupportInfrastructureTest do
+defmodule MABEAM.SupportInfrastructureTest do
   @moduledoc """
   Tests for Phase 4 Step 3: Support Infrastructure
 
@@ -8,8 +8,8 @@ defmodule Foundation.MABEAM.SupportInfrastructureTest do
 
   use ExUnit.Case, async: false
 
-  alias Foundation.MABEAM.CoordinationHelpers
-  alias Foundation.MABEAM.TelemetryHelpers
+  alias MABEAM.CoordinationHelpers
+  alias MABEAM.TelemetryHelpers
 
   setup do
     # Clean up any existing state
