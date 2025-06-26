@@ -526,107 +526,121 @@ defmodule Foundation.Coordination.Primitives do
     end
   end
 
-  defp do_acquire_lock(resource_id, lock_ref, nodes, timeout) do
-    # Lamport's distributed mutual exclusion
-    timestamp = :erlang.monotonic_time()
-    request_queue = :ets.new(:lock_queue, [:ordered_set, :private])
+  defp do_acquire_lock(resource_id, lock_ref, _nodes, timeout) do
+    # Use :global for true distributed mutual exclusion
+    lock_name = {:distributed_resource_lock, resource_id}
 
-    # Send lock request to all nodes
-    responses =
-      Enum.map(nodes, fn node ->
-        if node == Node.self() do
-          :ets.insert(request_queue, {timestamp, Node.self(), lock_ref})
-          :ok
-        else
-          async_lock_request(node, resource_id, lock_ref, timestamp, Node.self(), timeout)
-        end
-      end)
+    case :global.trans(
+           lock_name,
+           fn ->
+             # Lock acquired successfully within the transaction
+             {:acquired, lock_ref}
+           end,
+           [Node.self() | Node.list()],
+           timeout
+         ) do
+      :aborted ->
+        {:timeout, :global_lock_failed}
 
-    # Check if all nodes acknowledged
-    if Enum.all?(responses, &(&1 == :ok)) do
-      # Wait for all nodes to be ready
-      case wait_for_lock_ready(resource_id, lock_ref, nodes, timeout) do
-        :ready ->
-          {:acquired, lock_ref}
-
-        :timeout ->
-          {:timeout, :not_all_ready}
-          # Note: error case removed as wait_for_lock_ready only returns :ready or :timeout
-          # {:error, reason} ->
-          #   {:error, reason}
-      end
-    else
-      {:error, :request_failed}
+      result ->
+        result
     end
   end
 
   defp do_release_lock(_lock_ref) do
-    # Simple lock release - notify all holders
-    # In production, this would properly clean up distributed state
+    # With :global.trans, locks are automatically released when the transaction completes
+    # No manual cleanup needed
     :ok
   end
 
   defp do_barrier_sync(barrier_id, expected_count, timeout, barrier_ref) do
-    # Register with distributed barrier
-    barrier_state = get_or_create_barrier_state(barrier_id)
+    # Use :global to find or create distributed barrier coordinator
+    case :global.whereis_name({:distributed_barrier, barrier_id}) do
+      :undefined ->
+        # Start new barrier coordinator on this node
+        case Foundation.Coordination.DistributedBarrier.start_link(barrier_id) do
+          {:ok, pid} ->
+            :global.register_name({:distributed_barrier, barrier_id}, pid)
+            barrier_sync_with_timeout(pid, barrier_ref, expected_count, timeout)
 
-    # Add self to barrier participants
-    current_count = increment_barrier_count(barrier_state, barrier_ref)
+          error ->
+            error
+        end
 
-    if current_count >= expected_count do
-      # Barrier complete, notify all waiters
-      notify_barrier_complete(barrier_id)
-      :ok
-    else
-      # Wait for other participants
-      receive do
-        {:barrier_complete, ^barrier_id} -> :ok
-      after
-        timeout -> {:timeout, current_count}
-      end
+      pid when is_pid(pid) ->
+        # Barrier coordinator exists, join it
+        barrier_sync_with_timeout(pid, barrier_ref, expected_count, timeout)
+    end
+  end
+
+  defp barrier_sync_with_timeout(pid, barrier_ref, expected_count, timeout) do
+    # Start the sync in a task and handle timeout ourselves
+    task =
+      Task.async(fn ->
+        Foundation.Coordination.DistributedBarrier.sync(
+          pid,
+          barrier_ref,
+          expected_count,
+          timeout * 10
+        )
+      end)
+
+    case Task.yield(task, timeout) do
+      {:ok, result} ->
+        result
+
+      nil ->
+        # Timeout occurred, get current count and return timeout
+        Task.shutdown(task, :brutal_kill)
+        {:ok, current_count} = Foundation.Coordination.DistributedBarrier.get_count(pid)
+        {:timeout, current_count}
     end
   end
 
   defp do_increment_counter(counter_id, increment) do
-    # Simple distributed counter using ETS
-    # In production, this would use proper distributed state management
-    table = :distributed_counters
+    # Use :global for truly distributed counter coordination
+    lock_name = {:distributed_counter_lock, counter_id}
 
-    try do
-      :ets.lookup(table, counter_id)
-    catch
-      :error, :badarg ->
-        :ets.new(table, [:named_table, :set, :public])
-        []
-    end
-    |> case do
-      [] ->
-        :ets.insert(table, {counter_id, increment})
-        {:ok, increment}
+    case :global.trans(
+           lock_name,
+           fn ->
+             # Get or create counter using global registry
 
-      [{^counter_id, current_value}] ->
-        new_value = current_value + increment
-        :ets.insert(table, {counter_id, new_value})
-        {:ok, new_value}
+             case :global.whereis_name({:distributed_counter, counter_id}) do
+               :undefined ->
+                 # Start new counter GenServer on this node
+                 {:ok, pid} =
+                   Foundation.Coordination.DistributedCounter.start_link(counter_id, increment)
 
-      error ->
-        {:error, {:ets_error, error}}
+                 :global.register_name({:distributed_counter, counter_id}, pid)
+                 {:ok, increment}
+
+               pid when is_pid(pid) ->
+                 # Counter exists, increment it
+                 case GenServer.call(pid, {:increment, increment}, 5000) do
+                   {:ok, new_value} -> {:ok, new_value}
+                   error -> error
+                 end
+             end
+           end,
+           [Node.self() | Node.list()],
+           5000
+         ) do
+      :aborted -> {:error, :global_lock_timeout}
+      result -> result
     end
   end
 
   defp do_get_counter(counter_id) do
-    table = :distributed_counters
-
-    try do
-      case :ets.lookup(table, counter_id) do
-        [] -> {:ok, 0}
-        [{^counter_id, value}] -> {:ok, value}
-        error -> {:error, {:ets_error, error}}
-      end
-    catch
-      :error, :badarg ->
-        # Table doesn't exist, counter is 0
+    case :global.whereis_name({:distributed_counter, counter_id}) do
+      :undefined ->
         {:ok, 0}
+
+      pid when is_pid(pid) ->
+        case GenServer.call(pid, :get_value, 5000) do
+          {:ok, value} -> {:ok, value}
+          error -> error
+        end
     end
   end
 
@@ -647,51 +661,9 @@ defmodule Foundation.Coordination.Primitives do
     end)
   end
 
-  defp wait_for_lock_ready(resource_id, lock_ref, _nodes, timeout) do
-    # Simplified lock readiness check
-    # In production, this would properly coordinate with all nodes
-    receive do
-      {:lock_ready, ^resource_id, ^lock_ref} -> :ready
-    after
-      timeout -> :timeout
-    end
-  end
+  # wait_for_lock_ready function removed - no longer needed with :global.trans approach
 
-  defp get_or_create_barrier_state(barrier_id) do
-    table = :barrier_states
-
-    try do
-      :ets.lookup(table, barrier_id)
-    catch
-      :error, :badarg ->
-        :ets.new(table, [:named_table, :set, :public])
-        []
-    end
-    |> case do
-      [] ->
-        initial_state = %{participants: [], count: 0}
-        :ets.insert(table, {barrier_id, initial_state})
-        initial_state
-
-      [{^barrier_id, state}] ->
-        state
-    end
-  end
-
-  defp increment_barrier_count(barrier_state, barrier_ref) do
-    # Add participant and increment count
-    _new_participants = [barrier_ref | barrier_state.participants]
-    new_count = barrier_state.count + 1
-    new_count
-  end
-
-  defp notify_barrier_complete(barrier_id) do
-    # Notify all processes waiting on this barrier
-    # In production, this would use proper distributed notification
-    spawn(fn ->
-      Process.send_after(self(), {:barrier_complete, barrier_id}, 0)
-    end)
-  end
+  # Barrier functions removed - now handled by DistributedBarrier GenServer
 
   ## Async Message Passing Helpers (replaces RPC calls)
 
@@ -704,29 +676,18 @@ defmodule Foundation.Coordination.Primitives do
     # Spawn a task to handle the async communication
     task_pid =
       spawn(fn ->
-        # Create a unique process name for receiving the response
-        response_name =
-          :"consensus_response_#{:erlang.phash2(request_id)}_#{:erlang.monotonic_time()}"
-
-        # Safely register the process name with error handling
-        try do
-          Process.register(self(), response_name)
-        catch
-          :error, :badarg ->
-            # Registration failed (name already taken), notify caller and exit
-            send(caller_pid, {:async_result, request_id, {:error, :registration_failed}})
-            exit(:registration_failed)
-        end
+        # No dynamic atom creation - use direct PID messaging
+        response_pid = self()
 
         # Send the message to the remote node's registered process
-        # In a real implementation, we'd use a well-known registered process
-        # For now, we'll use a GenServer-style approach
+        # Use Task for better OTP compliance
         try do
           # Use Node.spawn to execute the handler on the remote node
           remote_pid =
             Node.spawn(node, fn ->
               result = handle_consensus_propose(consensus_id, value)
-              send({response_name, node()}, {:consensus_response, request_id, result})
+              # Send response directly to the response_pid (no atoms needed)
+              send(response_pid, {:consensus_response, request_id, result})
             end)
 
           # Monitor the remote process to detect failures
@@ -753,14 +714,6 @@ defmodule Foundation.Coordination.Primitives do
           :error, :badarg ->
             # Node not reachable
             send(caller_pid, {:async_result, request_id, {:error, :node_unreachable}})
-        after
-          # Ensure process name is unregistered for cleanup
-          try do
-            Process.unregister(response_name)
-          catch
-            # Process name might not be registered or already cleaned up
-            :error, :badarg -> :ok
-          end
         end
       end)
 
@@ -782,14 +735,15 @@ defmodule Foundation.Coordination.Primitives do
 
     task_pid =
       spawn(fn ->
-        response_name = :"election_response_#{:erlang.phash2(request_id)}"
-        Process.register(self(), response_name)
+        # No dynamic atom creation - use direct PID messaging
+        response_pid = self()
 
         try do
           remote_pid =
             Node.spawn(node, fn ->
               result = handle_election_message(election_id, requesting_node)
-              send({response_name, node()}, {:election_response, request_id, result})
+              # Send response directly to the response_pid (no atoms needed)
+              send(response_pid, {:election_response, request_id, result})
             end)
 
           # Monitor the remote process to detect failures
@@ -823,53 +777,7 @@ defmodule Foundation.Coordination.Primitives do
     end
   end
 
-  # Async lock request using message passing instead of :rpc.call
-  defp async_lock_request(node, resource_id, lock_ref, timestamp, requesting_node, timeout) do
-    request_id = make_ref()
-    caller_pid = self()
-
-    task_pid =
-      spawn(fn ->
-        response_name = :"lock_response_#{:erlang.phash2(request_id)}"
-        Process.register(self(), response_name)
-
-        try do
-          remote_pid =
-            Node.spawn(node, fn ->
-              result = handle_lock_request(resource_id, lock_ref, timestamp, requesting_node)
-              send({response_name, node()}, {:lock_response, request_id, result})
-            end)
-
-          # Monitor the remote process to detect failures
-          monitor_ref = Process.monitor(remote_pid)
-
-          receive do
-            {:lock_response, ^request_id, result} ->
-              Process.demonitor(monitor_ref, [:flush])
-              send(caller_pid, {:async_result, request_id, result})
-
-            {:DOWN, ^monitor_ref, :process, ^remote_pid, _reason} ->
-              send(caller_pid, {:async_result, request_id, :error})
-          after
-            timeout ->
-              Process.demonitor(monitor_ref, [:flush])
-              Process.exit(remote_pid, :timeout)
-              send(caller_pid, {:async_result, request_id, :error})
-          end
-        catch
-          :error, :badarg ->
-            send(caller_pid, {:async_result, request_id, :error})
-        end
-      end)
-
-    receive do
-      {:async_result, ^request_id, result} -> result
-    after
-      timeout + 100 ->
-        Process.exit(task_pid, :timeout)
-        :error
-    end
-  end
+  # async_lock_request function removed - no longer needed with :global.trans approach
 
   # Async consensus commit using message passing instead of :rpc.call
   defp async_consensus_commit(node, consensus_id, value, timeout) do
@@ -878,14 +786,15 @@ defmodule Foundation.Coordination.Primitives do
 
     task_pid =
       spawn(fn ->
-        response_name = :"commit_response_#{:erlang.phash2(request_id)}"
-        Process.register(self(), response_name)
+        # No dynamic atom creation - use direct PID messaging
+        response_pid = self()
 
         try do
           remote_pid =
             Node.spawn(node, fn ->
               result = handle_consensus_commit(consensus_id, value)
-              send({response_name, node()}, {:commit_response, request_id, result})
+              # Send response directly to the response_pid (no atoms needed)
+              send(response_pid, {:commit_response, request_id, result})
             end)
 
           # Monitor the remote process to detect failures

@@ -36,7 +36,7 @@ defmodule MABEAM.AgentSupervisor do
   alias MABEAM.Agent
   alias Foundation.ProcessRegistry
 
-  @type agent_id :: atom() | binary()
+  @type agent_id :: atom()
   @type supervision_metrics :: %{
           total_agents: non_neg_integer(),
           running_agents: non_neg_integer(),
@@ -87,25 +87,43 @@ defmodule MABEAM.AgentSupervisor do
 
       {:ok, pid} = AgentSupervisor.start_agent(:my_worker)
   """
-  @spec start_agent(agent_id()) :: {:ok, pid()} | {:error, term()}
+  @spec start_agent(agent_id()) ::
+          {:ok, pid()}
+          | {:error, :agent_not_registered | :already_running | :missing_module | term()}
   def start_agent(agent_id) do
-    with {:ok, agent_info} <- Agent.get_agent_info(agent_id),
-         :ok <- validate_agent_startable(agent_info),
-         {:ok, child_spec} <- build_agent_child_spec(agent_info),
-         {:ok, pid} <- DynamicSupervisor.start_child(__MODULE__, child_spec) do
-      # Track the supervised agent
-      track_supervised_agent(agent_id, pid)
+    # Get agent config directly from AgentRegistry to avoid circular dependency
+    with {:ok, agent_config} <- MABEAM.AgentRegistry.get_agent_config(agent_id),
+         {:ok, agent_info_full} <- MABEAM.AgentRegistry.get_agent_status(agent_id) do
+      # Build a simple agent info structure for validation and child spec
+      agent_info = %{
+        id: agent_id,
+        module: agent_config.module,
+        args: get_in(agent_config, [:config, :args]) || [],
+        status: agent_info_full.status
+      }
 
-      # Update agent status to running in registry
-      Agent.update_agent_status(agent_id, pid, :running)
+      with :ok <- validate_agent_startable(agent_info),
+           {:ok, child_spec} <- build_agent_child_spec(agent_info),
+           {:ok, pid} <- DynamicSupervisor.start_child(__MODULE__, child_spec) do
+        # Track the supervised agent
+        do_track_supervised_agent(agent_id, pid)
 
-      {:ok, pid}
+        # Update agent status to running in AgentRegistry directly
+        GenServer.cast(MABEAM.AgentRegistry, {:update_agent_status, agent_id, pid, :running})
+
+        {:ok, pid}
+      else
+        {:error, reason} ->
+          Logger.error("Failed to start supervised agent #{agent_id}: #{inspect(reason)}")
+          {:error, reason}
+      end
     else
       {:error, :not_found} ->
+        Logger.error("Agent #{agent_id} not found in registry")
         {:error, :agent_not_registered}
 
       {:error, reason} ->
-        Logger.error("Failed to start supervised agent #{agent_id}: #{inspect(reason)}")
+        Logger.error("Failed to get agent config for #{agent_id}: #{inspect(reason)}")
         {:error, reason}
     end
   end
@@ -130,7 +148,7 @@ defmodule MABEAM.AgentSupervisor do
   def stop_agent(agent_id) do
     case get_supervised_agent_pid(agent_id) do
       {:ok, pid} ->
-        # Terminate the child
+        # DynamicSupervisor.terminate_child expects the child PID, not ID
         case DynamicSupervisor.terminate_child(__MODULE__, pid) do
           :ok ->
             untrack_supervised_agent(agent_id)
@@ -138,8 +156,14 @@ defmodule MABEAM.AgentSupervisor do
             :ok
 
           {:error, :not_found} ->
-            # Agent already stopped, clean up tracking
+            # Child not found in supervisor, use direct termination
+            if Process.alive?(pid) do
+              # Use proper OTP shutdown - trust the process to handle :shutdown
+              Process.exit(pid, :shutdown)
+            end
+
             untrack_supervised_agent(agent_id)
+            Agent.update_agent_status(agent_id, nil, :stopped)
             :ok
         end
 
@@ -341,6 +365,19 @@ defmodule MABEAM.AgentSupervisor do
     )
   end
 
+  ## Agent Tracking (Direct Function Calls)
+  # Note: DynamicSupervisor doesn't support GenServer callbacks
+  # Use direct function calls for tracking instead
+
+  @doc """
+  Track a supervised agent for internal use.
+  Called by AgentRegistry to avoid circular dependencies.
+  """
+  @spec track_supervised_agent(agent_id(), pid()) :: :ok
+  def track_supervised_agent(agent_id, pid) do
+    do_track_supervised_agent(agent_id, pid)
+  end
+
   ## Private Functions
 
   defp validate_agent_startable(agent_info) do
@@ -368,7 +405,7 @@ defmodule MABEAM.AgentSupervisor do
     {:ok, child_spec}
   end
 
-  defp track_supervised_agent(agent_id, pid) do
+  defp do_track_supervised_agent(agent_id, pid) do
     supervised_agents = get_all_supervised_agents()
 
     updated_agents =

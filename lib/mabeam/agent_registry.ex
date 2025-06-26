@@ -98,7 +98,6 @@ defmodule MABEAM.AgentRegistry do
 
   @type registry_state :: %{
           agents: %{agent_id() => agent_info()},
-          dynamic_supervisor: pid() | nil,
           health_check_interval: non_neg_integer(),
           cleanup_interval: non_neg_integer(),
           started_at: DateTime.t(),
@@ -120,10 +119,11 @@ defmodule MABEAM.AgentRegistry do
   def init(opts) do
     Logger.info("Starting Foundation MABEAM AgentRegistry with full functionality")
 
-    # Simple GenServer state initialization
+    # Simple GenServer state initialization - no supervisor management
     state = %{
       agents: %{},
-      dynamic_supervisor: nil,
+      # Map of PID -> {agent_id, monitor_ref} for tracking monitored processes
+      monitors: %{},
       cleanup_interval: Keyword.get(opts, :cleanup_interval, 60_000),
       health_check_interval: Keyword.get(opts, :health_check_interval, 30_000),
       total_registrations: 0,
@@ -155,21 +155,15 @@ defmodule MABEAM.AgentRegistry do
         :ok
     end
 
-    # Start dynamic supervisor for agent processes
-    {:ok, supervisor_pid} =
-      DynamicSupervisor.start_link(
-        strategy: :one_for_one,
-        name: :"#{__MODULE__}.DynamicSupervisor"
-      )
-
-    state = %{state | dynamic_supervisor: supervisor_pid}
+    # Remove duplicate supervisor - AgentSupervisor handles process supervision
+    # AgentRegistry only manages configuration and status
 
     # Schedule periodic health checks and cleanup
     # 30 seconds
     schedule_health_check_tick(30_000)
     schedule_cleanup_tick(state.cleanup_interval)
 
-    Logger.info("AgentRegistry initialized with dynamic supervisor #{inspect(supervisor_pid)}")
+    Logger.info("AgentRegistry initialized - process supervision delegated to AgentSupervisor")
     {:noreply, state}
   end
 
@@ -229,11 +223,29 @@ defmodule MABEAM.AgentRegistry do
         {:reply, {:error, :not_found}, state}
 
       agent_info ->
+        # Clean up monitoring first
+        new_monitors =
+          case agent_info.pid do
+            nil ->
+              state.monitors
+
+            pid ->
+              case Map.get(state.monitors, pid) do
+                {^agent_id, monitor_ref} ->
+                  Process.demonitor(monitor_ref, [:flush])
+                  Map.delete(state.monitors, pid)
+
+                _ ->
+                  state.monitors
+              end
+          end
+
         # Stop agent if running
         case agent_info.status do
           :running ->
             if agent_info.pid && Process.alive?(agent_info.pid) do
-              DynamicSupervisor.terminate_child(state.dynamic_supervisor, agent_info.pid)
+              # Delegate to AgentSupervisor for process management
+              MABEAM.AgentSupervisor.stop_agent(agent_id)
             end
 
           _ ->
@@ -241,7 +253,7 @@ defmodule MABEAM.AgentRegistry do
         end
 
         new_agents = Map.delete(state.agents, agent_id)
-        new_state = %{state | agents: new_agents}
+        new_state = %{state | agents: new_agents, monitors: new_monitors}
 
         # Emit telemetry event
         emit_telemetry_event(:agent_deregistered, %{agent_id: agent_id}, %{})
@@ -265,8 +277,12 @@ defmodule MABEAM.AgentRegistry do
         {:reply, {:error, :already_running}, state}
 
       agent_info ->
-        case start_agent_process(agent_info, state.dynamic_supervisor) do
+        # Pass the agent config directly to AgentSupervisor to avoid circular dependency
+        case start_agent_via_supervisor(agent_id, agent_info.config) do
           {:ok, pid} ->
+            # Monitor the agent process for crash detection
+            monitor_ref = Process.monitor(pid)
+
             updated_agent_info = %{
               agent_info
               | status: :running,
@@ -275,15 +291,28 @@ defmodule MABEAM.AgentRegistry do
             }
 
             new_agents = Map.put(state.agents, agent_id, updated_agent_info)
-            new_state = %{state | agents: new_agents, total_starts: state.total_starts + 1}
+            new_monitors = Map.put(state.monitors, pid, {agent_id, monitor_ref})
 
-            # Register agent in ProcessRegistry
-            ProcessRegistry.register(:production, {:agent, agent_id}, pid, %{
-              agent_id: agent_id,
-              module: agent_info.config.module,
-              type: agent_info.config.type,
-              started_at: updated_agent_info.started_at
-            })
+            new_state = %{
+              state
+              | agents: new_agents,
+                monitors: new_monitors,
+                total_starts: state.total_starts + 1
+            }
+
+            # Register agent in ProcessRegistry (if available)
+            try do
+              ProcessRegistry.register(:production, {:agent, agent_id}, pid, %{
+                agent_id: agent_id,
+                module: agent_info.config.module,
+                type: agent_info.config.type,
+                started_at: updated_agent_info.started_at
+              })
+            rescue
+              ArgumentError ->
+                # ProcessRegistry not available, skip registration
+                :ok
+            end
 
             # Emit telemetry event
             emit_telemetry_event(:agent_started, %{agent_id: agent_id, pid: pid}, agent_info.config)
@@ -325,18 +354,42 @@ defmodule MABEAM.AgentRegistry do
         {:reply, {:error, :not_running}, state}
 
       agent_info ->
+        # Clean up monitoring first
+        new_monitors =
+          case agent_info.pid do
+            nil ->
+              state.monitors
+
+            pid ->
+              case Map.get(state.monitors, pid) do
+                {^agent_id, monitor_ref} ->
+                  Process.demonitor(monitor_ref, [:flush])
+                  Map.delete(state.monitors, pid)
+
+                _ ->
+                  state.monitors
+              end
+          end
+
         # Terminate the agent process
         if agent_info.pid && Process.alive?(agent_info.pid) do
-          DynamicSupervisor.terminate_child(state.dynamic_supervisor, agent_info.pid)
+          # Delegate to AgentSupervisor for process management
+          MABEAM.AgentSupervisor.stop_agent(agent_id)
         end
 
-        # Unregister from ProcessRegistry
-        ProcessRegistry.unregister(:production, {:agent, agent_id})
+        # Unregister from ProcessRegistry (if available)
+        try do
+          ProcessRegistry.unregister(:production, {:agent, agent_id})
+        rescue
+          ArgumentError ->
+            # ProcessRegistry not available, skip unregistration
+            :ok
+        end
 
         updated_agent_info = %{agent_info | status: :registered, pid: nil, started_at: nil}
 
         new_agents = Map.put(state.agents, agent_id, updated_agent_info)
-        new_state = %{state | agents: new_agents}
+        new_state = %{state | agents: new_agents, monitors: new_monitors}
 
         # Emit telemetry event
         emit_telemetry_event(:agent_stopped, %{agent_id: agent_id}, agent_info.config)
@@ -360,6 +413,14 @@ defmodule MABEAM.AgentRegistry do
 
   @impl true
   def handle_call({:get_agent_status, agent_id}, _from, state) do
+    case Map.get(state.agents, agent_id) do
+      nil -> {:reply, {:error, :not_found}, state}
+      agent_info -> {:reply, {:ok, agent_info}, state}
+    end
+  end
+
+  @impl true
+  def handle_call({:get_agent_info, agent_id}, _from, state) do
     case Map.get(state.agents, agent_id) do
       nil -> {:reply, {:error, :not_found}, state}
       agent_info -> {:reply, {:ok, agent_info}, state}
@@ -401,8 +462,15 @@ defmodule MABEAM.AgentRegistry do
   @impl true
   def handle_call({:get_agent_supervisor, agent_id}, _from, state) do
     case Map.get(state.agents, agent_id) do
-      nil -> {:reply, {:error, :not_found}, state}
-      _agent_info -> {:reply, {:ok, state.dynamic_supervisor}, state}
+      nil ->
+        {:reply, {:error, :not_found}, state}
+
+      _agent_info ->
+        # Return the global AgentSupervisor PID
+        case Process.whereis(MABEAM.AgentSupervisor) do
+          nil -> {:reply, {:error, :supervisor_not_running}, state}
+          pid -> {:reply, {:ok, pid}, state}
+        end
     end
   end
 
@@ -413,15 +481,32 @@ defmodule MABEAM.AgentRegistry do
         {:reply, {:error, :not_found}, state}
 
       _agent_info ->
-        children = DynamicSupervisor.count_children(state.dynamic_supervisor)
+        # Get the actual supervisor PID
+        supervisor_pid =
+          case Process.whereis(MABEAM.AgentSupervisor) do
+            nil -> nil
+            pid -> pid
+          end
+
+        # Delegate supervisor health to AgentSupervisor
+        supervisor_health = MABEAM.AgentSupervisor.get_system_performance()
+
+        # Calculate children count
+        children_count =
+          case supervisor_pid do
+            nil ->
+              0
+
+            pid ->
+              %{active: count} = DynamicSupervisor.count_children(pid)
+              count
+          end
 
         health = %{
-          status: :healthy,
-          supervisor_pid: state.dynamic_supervisor,
-          children_count: children.active,
-          specs_count: children.specs,
-          supervisors_count: children.supervisors,
-          workers_count: children.workers
+          status: if(supervisor_pid, do: :healthy, else: :unhealthy),
+          supervisor_pid: supervisor_pid,
+          children_count: children_count,
+          supervisor_metrics: supervisor_health
         }
 
         {:reply, {:ok, health}, state}
@@ -495,29 +580,24 @@ defmodule MABEAM.AgentRegistry do
   end
 
   @impl true
-  def handle_cast({:process_died, pid, reason}, state) do
-    # Find agent by PID and mark as failed
-    case find_agent_by_pid(state.agents, pid) do
-      {agent_id, agent_info} ->
-        Logger.warning("Agent #{agent_id} process died: #{inspect(reason)}")
+  def handle_cast({:update_agent_status, agent_id, pid, status}, state) do
+    case Map.get(state.agents, agent_id) do
+      nil ->
+        {:noreply, state}
 
+      agent_info ->
         updated_agent_info = %{
           agent_info
-          | status: :failed,
-            pid: nil,
-            restart_count: agent_info.restart_count + 1
+          | status: status,
+            pid: pid,
+            started_at: if(status == :running, do: DateTime.utc_now(), else: agent_info.started_at)
         }
 
         new_agents = Map.put(state.agents, agent_id, updated_agent_info)
-        new_state = %{state | agents: new_agents, total_failures: state.total_failures + 1}
+        new_state = %{state | agents: new_agents}
 
-        # Emit telemetry event
-        emit_telemetry_event(:agent_died, %{agent_id: agent_id, reason: reason}, agent_info.config)
-
+        Logger.debug("Updated agent #{agent_id} status to #{status}")
         {:noreply, new_state}
-
-      nil ->
-        {:noreply, state}
     end
   end
 
@@ -544,10 +624,52 @@ defmodule MABEAM.AgentRegistry do
   end
 
   @impl true
-  def handle_info({:DOWN, _ref, :process, pid, reason}, state) do
-    # Handle process monitoring
-    GenServer.cast(self(), {:process_died, pid, reason})
-    {:noreply, state}
+  def handle_info({:DOWN, monitor_ref, :process, pid, reason}, state) do
+    # Handle process monitoring - find agent by PID and update status
+    case Map.get(state.monitors, pid) do
+      {agent_id, ^monitor_ref} ->
+        # Process was monitored and died
+        Logger.warning("Agent #{agent_id} process died: #{inspect(reason)}")
+
+        # Update agent status to failed
+        case Map.get(state.agents, agent_id) do
+          nil ->
+            # Agent was already removed, just clean up monitors
+            new_monitors = Map.delete(state.monitors, pid)
+            {:noreply, %{state | monitors: new_monitors}}
+
+          agent_info ->
+            updated_agent_info = %{
+              agent_info
+              | status: :failed,
+                pid: nil,
+                restart_count: agent_info.restart_count + 1
+            }
+
+            new_agents = Map.put(state.agents, agent_id, updated_agent_info)
+            new_monitors = Map.delete(state.monitors, pid)
+
+            new_state = %{
+              state
+              | agents: new_agents,
+                monitors: new_monitors,
+                total_failures: state.total_failures + 1
+            }
+
+            # Emit telemetry event
+            emit_telemetry_event(
+              :agent_crashed,
+              %{agent_id: agent_id, restart_count: updated_agent_info.restart_count},
+              %{reason: reason}
+            )
+
+            {:noreply, new_state}
+        end
+
+      _ ->
+        # Unknown monitored process, ignore
+        {:noreply, state}
+    end
   end
 
   @impl true
@@ -606,6 +728,14 @@ defmodule MABEAM.AgentRegistry do
   @spec get_agent_status(agent_id()) :: {:ok, agent_info()} | {:error, term()}
   def get_agent_status(agent_id) do
     GenServer.call(__MODULE__, {:get_agent_status, agent_id})
+  end
+
+  @doc """
+  Get complete agent information including status, config, and metadata.
+  """
+  @spec get_agent_info(agent_id()) :: {:ok, agent_info()} | {:error, term()}
+  def get_agent_info(agent_id) do
+    GenServer.call(__MODULE__, {:get_agent_info, agent_id})
   end
 
   @doc """
@@ -714,24 +844,7 @@ defmodule MABEAM.AgentRegistry do
     end
   end
 
-  defp start_agent_process(agent_info, dynamic_supervisor) do
-    child_spec = %{
-      id: agent_info.id,
-      start: {agent_info.config.module, :start_link, [agent_info.config.config]},
-      restart: :temporary,
-      shutdown: 5000,
-      type: :worker
-    }
-
-    case DynamicSupervisor.start_child(dynamic_supervisor, child_spec) do
-      {:ok, pid} ->
-        Process.monitor(pid)
-        {:ok, pid}
-
-      error ->
-        error
-    end
-  end
+  # start_agent_process function removed - AgentSupervisor handles process management
 
   defp calculate_agent_metrics(pid) when is_pid(pid) do
     case Process.alive?(pid) do
@@ -799,17 +912,33 @@ defmodule MABEAM.AgentRegistry do
   end
 
   defp perform_agent_health_check(agent_info) do
-    case agent_info.pid do
+    case agent_info.status do
+      # Failed agents are unhealthy regardless of PID
+      :failed ->
+        {:error, :process_dead}
+
       # Registered but not running is fine
-      nil ->
+      :registered ->
         :ok
 
-      pid when is_pid(pid) ->
-        if Process.alive?(pid) do
-          :ok
-        else
-          {:error, :process_dead}
+      # Running agents need PID check
+      :running ->
+        case agent_info.pid do
+          nil ->
+            # This shouldn't happen - running agent should have PID
+            {:error, :process_dead}
+
+          pid when is_pid(pid) ->
+            if Process.alive?(pid) do
+              :ok
+            else
+              {:error, :process_dead}
+            end
         end
+
+      # Any other status (like :stopping)
+      _ ->
+        :ok
     end
   end
 
@@ -834,10 +963,6 @@ defmodule MABEAM.AgentRegistry do
       total_starts: state.total_starts,
       total_failures: state.total_failures
     }
-  end
-
-  defp find_agent_by_pid(agents, pid) do
-    Enum.find(agents, fn {_id, agent_info} -> agent_info.pid == pid end)
   end
 
   defp perform_periodic_health_checks(state) do
@@ -871,6 +996,43 @@ defmodule MABEAM.AgentRegistry do
       # Ignore telemetry errors
       _ -> :ok
     end
+  end
+
+  defp start_agent_via_supervisor(agent_id, agent_config) do
+    # Get the agent arguments from the config field, handling both maps and keyword lists
+    agent_args =
+      case agent_config do
+        %{config: %{args: args}} -> args
+        %{config: config_map} when is_map(config_map) -> config_map
+        %{config: config_list} when is_list(config_list) -> config_list
+        _ -> %{}
+      end
+
+    # Create child spec directly
+    child_spec = %{
+      id: agent_id,
+      start: {agent_config.module, :start_link, [agent_args]},
+      restart: :permanent,
+      shutdown: 5000,
+      type: :worker
+    }
+
+    # Start via DynamicSupervisor and track in AgentSupervisor
+    case DynamicSupervisor.start_child(MABEAM.AgentSupervisor, child_spec) do
+      {:ok, pid} ->
+        # Track the agent in AgentSupervisor's tracking system
+        track_agent_in_supervisor(agent_id, pid)
+        {:ok, pid}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp track_agent_in_supervisor(agent_id, pid) do
+    # Call AgentSupervisor's internal tracking directly
+    # This avoids circular dependency and GenServer callback issues
+    MABEAM.AgentSupervisor.track_supervised_agent(agent_id, pid)
   end
 
   # ============================================================================

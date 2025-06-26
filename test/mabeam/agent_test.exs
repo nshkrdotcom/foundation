@@ -488,9 +488,10 @@ defmodule MABEAM.AgentTest do
 
   defp safely_unregister_agent(agent_id) do
     try do
-      # Just remove from registry without stopping the process to avoid killing test processes
+      # Remove from both ProcessRegistry and AgentRegistry
       agent_key = {:agent, agent_id}
       ProcessRegistry.unregister(:production, agent_key)
+      MABEAM.AgentRegistry.deregister_agent(agent_id)
     rescue
       _ -> :ok
     end
