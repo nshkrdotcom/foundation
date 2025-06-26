@@ -132,70 +132,71 @@ defmodule Foundation.Application do
     },
 
     # MABEAM Phase - Multi-agent orchestration services
-    mabeam_core: %{
-      module: Foundation.MABEAM.Core,
-      args: [],
-      dependencies: [:process_registry, :telemetry_service],
-      startup_phase: :mabeam,
-      health_check_interval: 30_000,
-      restart_strategy: :permanent
-    },
-    mabeam_agent_registry: %{
-      module: Foundation.MABEAM.AgentRegistry,
-      args: [],
-      dependencies: [:process_registry, :mabeam_core],
-      startup_phase: :mabeam,
-      health_check_interval: 30_000,
-      restart_strategy: :permanent
-    },
-    mabeam_coordination: %{
-      module: Foundation.MABEAM.Coordination,
-      args: [],
-      dependencies: [:mabeam_agent_registry],
-      startup_phase: :mabeam,
-      health_check_interval: 30_000,
-      restart_strategy: :permanent
-    },
-    mabeam_economics: %{
-      module: Foundation.MABEAM.Economics,
-      args: [],
-      dependencies: [:mabeam_agent_registry, :mabeam_coordination],
-      startup_phase: :mabeam,
-      health_check_interval: 30_000,
-      restart_strategy: :permanent
-    },
-    mabeam_telemetry: %{
-      module: Foundation.MABEAM.Telemetry,
-      args: [],
-      dependencies: [:process_registry],
-      startup_phase: :mabeam,
-      health_check_interval: 30_000,
-      restart_strategy: :permanent
-    },
-    mabeam_agent_supervisor: %{
-      module: Foundation.MABEAM.AgentSupervisor,
-      args: [],
-      dependencies: [:mabeam_agent_registry],
-      startup_phase: :mabeam,
-      health_check_interval: 30_000,
-      restart_strategy: :permanent
-    },
-    mabeam_load_balancer: %{
-      module: Foundation.MABEAM.LoadBalancer,
-      args: [],
-      dependencies: [:mabeam_agent_registry],
-      startup_phase: :mabeam,
-      health_check_interval: 45_000,
-      restart_strategy: :permanent
-    },
-    mabeam_performance_monitor: %{
-      module: Foundation.MABEAM.PerformanceMonitor,
-      args: [],
-      dependencies: [:mabeam_agent_registry],
-      startup_phase: :mabeam,
-      health_check_interval: 60_000,
-      restart_strategy: :permanent
-    }
+    # MABEAM services moved to MABEAM.Application - see lib/mabeam/application.ex
+    # mabeam_core: %{
+    #   module: Foundation.MABEAM.Core,
+    #   args: [],
+    #   dependencies: [:process_registry, :telemetry_service],
+    #   startup_phase: :mabeam,
+    #   health_check_interval: 30_000,
+    #   restart_strategy: :permanent
+    # },
+    # mabeam_agent_registry: %{
+    #   module: Foundation.MABEAM.AgentRegistry,
+    #   args: [],
+    #   dependencies: [:process_registry, :mabeam_core],
+    #   startup_phase: :mabeam,
+    #   health_check_interval: 30_000,
+    #   restart_strategy: :permanent
+    # },
+    # mabeam_coordination: %{
+    #   module: Foundation.MABEAM.Coordination,
+    #   args: [],
+    #   dependencies: [:mabeam_agent_registry],
+    #   startup_phase: :mabeam,
+    #   health_check_interval: 30_000,
+    #   restart_strategy: :permanent
+    # },
+    # mabeam_economics: %{
+    #   module: Foundation.MABEAM.Economics,
+    #   args: [],
+    #   dependencies: [:mabeam_agent_registry, :mabeam_coordination],
+    #   startup_phase: :mabeam,
+    #   health_check_interval: 30_000,
+    #   restart_strategy: :permanent
+    # },
+    # mabeam_telemetry: %{
+    #   module: Foundation.MABEAM.Telemetry,
+    #   args: [],
+    #   dependencies: [:process_registry],
+    #   startup_phase: :mabeam,
+    #   health_check_interval: 30_000,
+    #   restart_strategy: :permanent
+    # },
+    # mabeam_agent_supervisor: %{
+    #   module: Foundation.MABEAM.AgentSupervisor,
+    #   args: [],
+    #   dependencies: [:mabeam_agent_registry],
+    #   startup_phase: :mabeam,
+    #   health_check_interval: 30_000,
+    #   restart_strategy: :permanent
+    # },
+    # mabeam_load_balancer: %{
+    #   module: Foundation.MABEAM.LoadBalancer,
+    #   args: [],
+    #   dependencies: [:mabeam_agent_registry],
+    #   startup_phase: :mabeam,
+    #   health_check_interval: 45_000,
+    #   restart_strategy: :permanent
+    # },
+    # mabeam_performance_monitor: %{
+    #   module: Foundation.MABEAM.PerformanceMonitor,
+    #   args: [],
+    #   dependencies: [:mabeam_agent_registry],
+    #   startup_phase: :mabeam,
+    #   health_check_interval: 60_000,
+    #   restart_strategy: :permanent
+    # }
   }
 
   @impl true
