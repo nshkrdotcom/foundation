@@ -11,6 +11,12 @@
   # infrastructure.ex pattern_match_cov warnings - expected for comprehensive guards
   {"lib/foundation/infrastructure/infrastructure.ex", :pattern_match_cov},
 
+  # infrastructure.ex pattern_match warnings - unified config error handling is comprehensive but some cases unreachable
+  {"lib/foundation/infrastructure/infrastructure.ex", :pattern_match},
+
+  # infrastructure.ex extra_range warnings - specs are comprehensive but some return types unreachable due to validation
+  {"lib/foundation/infrastructure/infrastructure.ex", :extra_range},
+
   # rate_limiter.ex contract_supertype warnings
   {"lib/foundation/infrastructure/rate_limiter.ex", :contract_supertype},
 

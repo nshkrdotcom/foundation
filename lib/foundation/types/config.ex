@@ -125,7 +125,9 @@ defmodule Foundation.Types.Config do
           strategy: :lifo
         },
         enabled: true
-      }
+      },
+      # Dynamic protection configurations - added for unified config
+      protection: %{}
     }
   ]
 
@@ -221,7 +223,8 @@ defmodule Foundation.Types.Config do
               strategy: :lifo | :fifo
             },
             enabled: boolean()
-          }
+          },
+          protection: %{atom() => map()}
         }
 
   @type t :: %__MODULE__{

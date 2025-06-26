@@ -27,7 +27,9 @@ defmodule Foundation.Logic.ConfigLogic do
     [:infrastructure, :rate_limiting, :enabled],
     [:infrastructure, :circuit_breaker, :enabled],
     [:infrastructure, :connection_pool, :enabled],
-    [:infrastructure, :rate_limiting, :cleanup_interval]
+    [:infrastructure, :rate_limiting, :cleanup_interval],
+    # Protection configuration paths - support for dynamic protection rules
+    [:infrastructure, :protection]
   ]
 
   @doc """
@@ -41,8 +43,13 @@ defmodule Foundation.Logic.ConfigLogic do
   """
   @spec updatable_path?(config_path()) :: boolean()
   def updatable_path?(path) when is_list(path) do
-    path in @updatable_paths
+    path in @updatable_paths or protection_path?(path)
   end
+
+  # Check if path is a valid protection configuration path
+  @spec protection_path?(config_path()) :: boolean()
+  defp protection_path?([:infrastructure, :protection | _rest]), do: true
+  defp protection_path?(_path), do: false
 
   @doc """
   Update a configuration value at the given path.

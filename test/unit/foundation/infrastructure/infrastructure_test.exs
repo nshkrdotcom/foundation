@@ -135,4 +135,46 @@ defmodule Foundation.InfrastructureTest do
                Infrastructure.execute_protected(:rate_limiter, config, failing_operation)
     end
   end
+
+  describe "protection configuration" do
+    @valid_protection_config %{
+      circuit_breaker: %{failure_threshold: 5, recovery_time: 30_000},
+      rate_limiter: %{scale: 60_000, limit: 100},
+      connection_pool: %{size: 10, max_overflow: 5}
+    }
+
+    test "configure_protection/2 stores valid configuration" do
+      protection_key = :test_api_config
+
+      assert :ok = Infrastructure.configure_protection(protection_key, @valid_protection_config)
+      assert {:ok, stored_config} = Infrastructure.get_protection_config(protection_key)
+      assert stored_config == @valid_protection_config
+    end
+
+    test "configure_protection/2 rejects invalid configuration" do
+      protection_key = :test_invalid_config
+      invalid_config = %{invalid: "config"}
+
+      assert {:error, _reason} = Infrastructure.configure_protection(protection_key, invalid_config)
+    end
+
+    test "get_protection_config/1 returns not_found for non-existent keys" do
+      # {System.unique_integer()}
+      non_existent_key = :does_not_exist_
+
+      assert {:error, :not_found} = Infrastructure.get_protection_config(non_existent_key)
+    end
+
+    test "list_protection_keys/0 includes configured keys" do
+      # {System.unique_integer()}
+      protection_key = :test_list_key_
+
+      # Configure protection
+      assert :ok = Infrastructure.configure_protection(protection_key, @valid_protection_config)
+
+      # Verify it appears in the list
+      keys = Infrastructure.list_protection_keys()
+      assert protection_key in keys
+    end
+  end
 end

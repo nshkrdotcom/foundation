@@ -70,7 +70,6 @@ defmodule Foundation.Infrastructure do
   @type execution_result :: {:ok, term()} | {:error, term()}
 
   @default_timeout 5_000
-  @agent_name __MODULE__.ConfigAgent
 
   ## Public API
 
@@ -187,7 +186,7 @@ defmodule Foundation.Infrastructure do
   @doc """
   Configures protection rules for a specific key.
 
-  Stores configuration in internal state for runtime access and validation.
+  Stores configuration in main ConfigServer for unified configuration management.
 
   ## Parameters
   - `protection_key` - Identifier for protection configuration
@@ -201,16 +200,21 @@ defmodule Foundation.Infrastructure do
   def configure_protection(protection_key, config) do
     case validate_protection_config(config) do
       :ok ->
-        # Ensure Agent is started
-        ensure_config_agent_started()
+        # Store in main ConfigServer instead of private Agent
+        config_path = [:infrastructure, :protection, protection_key]
 
-        # Store in Agent instead of ConfigServer
-        Agent.update(@agent_name, fn state ->
-          Map.put(state, protection_key, config)
-        end)
+        case Foundation.Config.update(config_path, config) do
+          :ok ->
+            Logger.info("Configured protection for #{protection_key}")
+            :ok
 
-        Logger.info("Configured protection for #{protection_key}")
-        :ok
+          {:error, reason} ->
+            Logger.warning(
+              "Failed to store protection config for #{protection_key}: #{inspect(reason)}"
+            )
+
+            {:error, reason}
+        end
 
       {:error, reason} ->
         Logger.warning("Invalid protection config for #{protection_key}: #{inspect(reason)}")
@@ -230,15 +234,12 @@ defmodule Foundation.Infrastructure do
   """
   @spec get_protection_config(protection_key()) :: {:ok, any()} | {:error, any()}
   def get_protection_config(protection_key) do
-    with :ok <- ensure_config_agent_started() do
-      get_config_from_agent(protection_key)
-    end
-  end
+    config_path = [:infrastructure, :protection, protection_key]
 
-  defp get_config_from_agent(protection_key) do
-    case Agent.get(@agent_name, fn state -> Map.get(state, protection_key) end) do
-      nil -> {:error, :not_found}
-      config -> {:ok, config}
+    case Foundation.Config.get(config_path) do
+      {:ok, config} -> {:ok, config}
+      {:error, %Foundation.Types.Error{error_type: :config_path_not_found}} -> {:error, :not_found}
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -273,9 +274,11 @@ defmodule Foundation.Infrastructure do
   """
   @spec list_protection_keys() :: [protection_key()]
   def list_protection_keys do
-    case ensure_config_agent_started() do
-      :ok ->
-        Agent.get(@agent_name, fn state -> Map.keys(state) end)
+    config_path = [:infrastructure, :protection]
+
+    case Foundation.Config.get(config_path) do
+      {:ok, protection_configs} when is_map(protection_configs) ->
+        Map.keys(protection_configs)
 
       {:error, _} ->
         []
@@ -390,21 +393,6 @@ defmodule Foundation.Infrastructure do
   end
 
   ## Private Functions
-
-  @spec ensure_config_agent_started() :: :ok | {:error, term()}
-  defp ensure_config_agent_started do
-    case Process.whereis(@agent_name) do
-      nil ->
-        case Agent.start_link(fn -> %{} end, name: @agent_name) do
-          {:ok, _pid} -> :ok
-          {:error, {:already_started, _pid}} -> :ok
-          {:error, reason} -> {:error, reason}
-        end
-
-      _pid ->
-        :ok
-    end
-  end
 
   @spec check_rate_limit(protection_options()) :: {:ok, :allowed} | {:error, term()}
   defp check_rate_limit(options) do

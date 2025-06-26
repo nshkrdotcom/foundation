@@ -247,6 +247,9 @@ defmodule Foundation.Infrastructure.IntegrationTest do
     end
 
     test "listing protection keys" do
+      # Get current keys before adding test keys
+      initial_keys = Infrastructure.list_protection_keys()
+
       # Configure multiple protections
       configs = [
         {:list_test_1,
@@ -267,9 +270,12 @@ defmodule Foundation.Infrastructure.IntegrationTest do
         assert :ok = Infrastructure.configure_protection(key, config)
       end
 
-      # Fix: Agent implementation now works and returns the configured keys
+      # Verify our test keys are now in the list
       keys = Infrastructure.list_protection_keys()
-      assert Enum.sort(keys) == [:list_test_1, :list_test_2]
+      assert :list_test_1 in keys
+      assert :list_test_2 in keys
+      # Should have at least our test keys plus any existing ones
+      assert length(keys) >= length(initial_keys) + 2
     end
   end
 
