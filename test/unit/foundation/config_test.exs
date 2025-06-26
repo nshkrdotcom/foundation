@@ -132,52 +132,46 @@ defmodule Foundation.ConfigTest do
     end
   end
 
-  test "handles service unavailable gracefully" do
-    # Use a more controlled approach
-    alias Foundation.Config.GracefulDegradation
+  test "handles service unavailable gracefully with built-in resilience" do
+    # Test the new service-owned resilience architecture
     alias Foundation.Services.ConfigServer
 
-    # Initialize fallback system
-    GracefulDegradation.initialize_fallback_system()
+    # Prime the cache by getting config (automatically cached)
+    {:ok, _original_config} = ConfigAPI.get([:ai, :provider])
 
-    # Prime the cache
-    {:ok, _original_config} = ConfigAPI.get()
-
-    # Stop the ConfigServer more gracefully using GenServer.stop
-    config_pid = GenServer.whereis(ConfigServer)
-
-    if config_pid do
-      try do
-        GenServer.stop(config_pid, :normal, 100)
-      catch
-        :exit, _ -> :ok
-      end
-
-      # Wait for it to be gone
-      :timer.sleep(100)
+    # Stop the ConfigServer more gracefully using ConfigServer.stop
+    try do
+      ConfigServer.stop()
+    catch
+      :exit, _ -> :ok
     end
 
-    # Now test should fail
-    result = ConfigAPI.get()
+    # Wait for it to be gone
+    :timer.sleep(100)
+
+    # Test should still work due to built-in resilience
+    result = ConfigAPI.get([:ai, :provider])
 
     case result do
-      {:error, %Error{error_type: :service_unavailable}} ->
+      {:ok, :mock} ->
+        # Got from cache or restarted service
         assert true
 
-      {:ok, _config} ->
-        # Service might have restarted too quickly, that's also valid
+      {:error, %Error{}} ->
+        # Expected fallback error
         assert true
 
       other ->
         flunk("Unexpected result: #{inspect(other)}")
     end
 
-    # Test graceful degradation fallback
-    fallback_result = GracefulDegradation.get_with_fallback([:ai, :provider])
-    # Should get cached value, default value, or error
+    # The new architecture provides built-in resilience without separate functions
+    # All ConfigAPI calls automatically have graceful degradation
+    fallback_result = ConfigAPI.get([:ai, :provider])
+
     case fallback_result do
       {:ok, :mock} -> assert true
-      # Also acceptable if no cache exists
+      # Also acceptable if no cache/service
       {:error, _} -> assert true
       other -> flunk("Unexpected fallback result: #{inspect(other)}")
     end

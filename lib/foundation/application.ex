@@ -77,7 +77,7 @@ defmodule Foundation.Application do
 
     # Foundation Services Phase - Core business logic
     config_server: %{
-      module: Foundation.Services.ConfigServer,
+      module: Foundation.Services.ConfigServer.GenServer,
       args: [namespace: :production],
       dependencies: [:process_registry],
       startup_phase: :foundation_services,
