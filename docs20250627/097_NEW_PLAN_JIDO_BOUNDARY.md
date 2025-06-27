@@ -7,25 +7,25 @@ Let's refine the architecture and the `Boundary` setup to reflect this. We'll re
 The core three tiers remain the same, but the top-level interface changes.
 
 ```mermaid
-graph TD
-    subgraph Tier 4: API & Integration Layer
+graph LR
+    subgraph T4["Tier&nbsp;4:&nbsp;API&nbsp;&&nbsp;Integration&nbsp;Layer"]
         A[JidoOS.API Facade]
     end
 
-    subgraph Tier 3: Business & Coordination Logic (The "MABEAM" Agents)
+    subgraph T3["Tier&nbsp;3:&nbsp;Business&nbsp;&&nbsp;Coordination&nbsp;Logic&nbsp;(The&nbsp;MABEAM&nbsp;Agents)"]
         B1[AuctioneerAgent]
         B2[MarketplaceAgent]
         B3[LoadBalancerAgent]
         B4[YourApp::DataProcessingAgent]
     end
 
-    subgraph Tier 2: Jido Agent Runtime
+    subgraph T2["Tier&nbsp;2:&nbsp;Jido&nbsp;Agent&nbsp;Runtime"]
         C1[Jido.Agent Model]
         C2[Jido.Exec Engine]
         C3[Jido.Signal Bus & Router]
     end
 
-    subgraph Tier 1: Core Infrastructure Layer (The Kernel)
+    subgraph T1["Tier&nbsp;1:&nbsp;Core&nbsp;Infrastructure&nbsp;Layer&nbsp;(The&nbsp;Kernel)"]
         D1[Supervisors]
         D2[Process Registry]
         D3[Resilience Patterns]

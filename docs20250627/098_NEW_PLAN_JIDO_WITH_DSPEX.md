@@ -15,26 +15,26 @@ Our unified system (which we'll call `JidoOS` for clarity) provides the runtime 
 ### Revised Architecture Diagram with `ElixirML`
 
 ```mermaid
-graph TD
-    subgraph Tier 4: ElixirML Framework (The "ML OS")
+graph LR
+    subgraph T4["Tier&nbsp;4:&nbsp;ElixirML&nbsp;Framework&nbsp;(The&nbsp;ML&nbsp;OS)"]
         A1["DSPEx.Teleprompter (e.g., BEACON, SIMBA)"]
         A2["DSPEx.Program / Predict"]
         A3["ElixirML.Variable & Schema System"]
     end
 
-    subgraph Tier 3: Jido MABEAM & App-Specific Agents
+    subgraph T3["Tier&nbsp;3:&nbsp;Jido&nbsp;MABEAM&nbsp;&&nbsp;App&nbsp;Specific&nbsp;Agents"]
         B1["JidoMabeam.Agents.AuctioneerAgent"]
         B2["ElixirML.Process.ProgramWorker (as a Jido.Agent)"]
         B3["JidoMabeam.Agents.LoadBalancerAgent"]
     end
 
-    subgraph Tier 2: Jido Agent Runtime
-        C1["Jido.Agent Model & `use Jido.Agent`"]
-        C2["Jido.Exec & `use Jido.Action`"]
+    subgraph T2["Tier&nbsp;2:&nbsp;Jido&nbsp;Agent&nbsp;Runtime"]
+        C1["Jido.Agent Model & \`use Jido.Agent\`"]
+        C2["Jido.Exec & \`use Jido.Action\`"]
         C3["Jido.Signal Bus & Router"]
     end
 
-    subgraph Tier 1: Foundation Kernel
+    subgraph T1["Tier&nbsp;1:&nbsp;Foundation&nbsp;Kernel"]
         D1["Process/Subsystem Supervisors"]
         D2["Process Registry"]
         D3["Resilience Patterns (Circuit Breaker)"]
