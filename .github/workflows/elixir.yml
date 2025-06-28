@@ -116,6 +116,8 @@ jobs:
     # Step: Compile the project treating any warnings as errors.
     # Customize this step if a different behavior is desired.
     - name: Compiles without warnings
+      env:
+        MIX_ENV: dev
       run: mix compile --warnings-as-errors
 
     # Step: Check that the checked in code has already been formatted.
