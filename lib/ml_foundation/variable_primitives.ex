@@ -445,11 +445,11 @@ defmodule MLFoundation.VariablePrimitives do
     var_names = MapSet.new(variables, & &1.name)
 
     Enum.reduce_while(constraints, :ok, fn constraint, _acc ->
-      validate_single_constraint(constraint, var_names)
+      validate_space_constraint(constraint, var_names)
     end)
   end
 
-  defp validate_single_constraint({:coupled, var_list, _fn}, var_names) do
+  defp validate_space_constraint({:coupled, var_list, _fn}, var_names) do
     if Enum.all?(var_list, &MapSet.member?(var_names, &1)) do
       {:cont, :ok}
     else
@@ -457,7 +457,7 @@ defmodule MLFoundation.VariablePrimitives do
     end
   end
 
-  defp validate_single_constraint(_, _var_names) do
+  defp validate_space_constraint(_, _var_names) do
     {:cont, :ok}
   end
 
@@ -594,7 +594,7 @@ defmodule MLFoundation.VariablePrimitives do
 
   defp validate_value_constraints(value, constraints) do
     Enum.reduce_while(constraints, :ok, fn constraint, _acc ->
-      if validate_single_constraint(value, constraint) do
+      if validate_value_constraint(value, constraint) do
         {:cont, :ok}
       else
         {:halt, {:error, {:constraint_violation, constraint}}}
@@ -602,15 +602,15 @@ defmodule MLFoundation.VariablePrimitives do
     end)
   end
 
-  defp validate_single_constraint(value, {:bounds, min, max}) do
+  defp validate_value_constraint(value, {:bounds, min, max}) do
     value >= min and value <= max
   end
 
-  defp validate_single_constraint(value, {:in, allowed_values}) do
+  defp validate_value_constraint(value, {:in, allowed_values}) do
     value in allowed_values
   end
 
-  defp validate_single_constraint(value, {:custom, validator}) do
+  defp validate_value_constraint(value, {:custom, validator}) do
     validator.(value)
   end
 
