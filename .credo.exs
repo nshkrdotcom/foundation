@@ -4,8 +4,8 @@
     %{
       name: "default",
       files: %{
-        included: ["lib/", "scripts/"],
-        excluded: [~r"/_build/", ~r"/deps/", ~r"/test/"]
+        included: ["lib/", "test/"],
+        excluded: [~r"/_build/", ~r"/deps/"]
       },
       requires: [],
       strict: false,
@@ -48,7 +48,7 @@
         {Credo.Check.Refactor.CyclomaticComplexity, []},
         {Credo.Check.Refactor.FunctionArity, []},
         {Credo.Check.Refactor.LongQuoteBlocks, []},
-        {Credo.Check.Refactor.MapInto, []},
+        # {Credo.Check.Refactor.MapInto, []}, # requires Elixir < 1.8.0
         {Credo.Check.Refactor.MatchInCondition, []},
         {Credo.Check.Refactor.NegatedConditionsInUnless, []},
         {Credo.Check.Refactor.NegatedConditionsWithElse, []},
@@ -61,7 +61,7 @@
         {Credo.Check.Warning.ExpensiveEmptyEnumCheck, []},
         {Credo.Check.Warning.IExPry, []},
         {Credo.Check.Warning.IoInspect, []},
-        {Credo.Check.Warning.LazyLogging, []},
+        # {Credo.Check.Warning.LazyLogging, []}, # requires Elixir < 1.7.0
         {Credo.Check.Warning.MapGetUnsafePass, []},
         {Credo.Check.Warning.OperationOnSameValues, []},
         {Credo.Check.Warning.OperationWithConstantResult, []},
@@ -80,7 +80,7 @@
     %{
       name: "with_tests",
       files: %{
-        included: ["lib/", "test/", "scripts/"],
+        included: ["lib/", "test/"],
         excluded: [~r"/_build/", ~r"/deps/"]
       },
       requires: [],
@@ -124,7 +124,7 @@
         {Credo.Check.Refactor.CyclomaticComplexity, []},
         {Credo.Check.Refactor.FunctionArity, []},
         {Credo.Check.Refactor.LongQuoteBlocks, []},
-        {Credo.Check.Refactor.MapInto, []},
+        # {Credo.Check.Refactor.MapInto, []}, # requires Elixir < 1.8.0
         {Credo.Check.Refactor.MatchInCondition, []},
         {Credo.Check.Refactor.NegatedConditionsInUnless, []},
         {Credo.Check.Refactor.NegatedConditionsWithElse, []},
@@ -137,7 +137,7 @@
         {Credo.Check.Warning.ExpensiveEmptyEnumCheck, []},
         {Credo.Check.Warning.IExPry, []},
         {Credo.Check.Warning.IoInspect, []},
-        {Credo.Check.Warning.LazyLogging, []},
+        # {Credo.Check.Warning.LazyLogging, []}, # requires Elixir < 1.7.0
         {Credo.Check.Warning.MapGetUnsafePass, []},
         {Credo.Check.Warning.OperationOnSameValues, []},
         {Credo.Check.Warning.OperationWithConstantResult, []},

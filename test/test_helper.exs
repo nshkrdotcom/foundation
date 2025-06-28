@@ -1,6 +1,6 @@
 # Configure Foundation for testing environment
 Application.put_env(:foundation, :registry_impl, nil)
-Application.put_env(:foundation, :coordination_impl, nil) 
+Application.put_env(:foundation, :coordination_impl, nil)
 Application.put_env(:foundation, :infrastructure_impl, nil)
 
 # Start ExUnit
@@ -14,7 +14,7 @@ defmodule TestHelpers do
   @moduledoc """
   Helper functions for Foundation tests.
   """
-  
+
   def create_test_metadata(overrides \\ []) do
     defaults = %{
       capability: :test_capability,
@@ -27,12 +27,12 @@ defmodule TestHelpers do
         cpu_available: 0.8
       }
     }
-    
+
     Map.merge(defaults, Map.new(overrides))
   end
-  
+
   def create_test_agent_pid do
-    spawn(fn -> 
+    spawn(fn ->
       Process.sleep(1000)
     end)
   end
