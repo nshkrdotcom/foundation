@@ -181,6 +181,10 @@ defmodule Foundation.MixProject do
       # Optional integrations
       {:gemini_ex, "~>0.0.2", optional: true},
 
+      # Jido agent framework integration
+      {:jido, github: "agentjido/jido", optional: true},
+      {:jido_action, github: "agentjido/jido_action", optional: true},
+
       # Development and testing
       {:mox, "~> 1.2", only: [:dev, :test]},
       {:meck, "~> 0.9", only: [:dev, :test]},
