@@ -44,6 +44,11 @@ defmodule MABEAM.AgentRegistry do
   use GenServer
   require Logger
 
+  # NOTE: The handle_call/3 clauses are intentionally organized by operation type
+  # (Write Operations, Read Operations, etc.) rather than grouped together.
+  # Each section includes its related helper functions for better code locality
+  # and maintainability. This generates a warning but improves code organization.
+
   alias Foundation.ETSHelpers.MatchSpecCompiler
 
   defstruct main_table: nil,
