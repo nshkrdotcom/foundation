@@ -2,7 +2,7 @@
 
 **A comprehensive Elixir infrastructure and observability library providing essential services for building robust, scalable applications.**
 
-[![CI](https://github.com/nshkrdotcom/foundation/actions/workflows/elixir.yaml/badge.svg)](https://github.com/nshkrdotcom/foundation/actions/workflows/elixir.yaml)
+[![CI](https://github.com/nshkrdotcom/foundation/actions/workflows/elixir.yml/badge.svg)](https://github.com/nshkrdotcom/foundation/actions/workflows/elixir.yml)
 [![Elixir](https://img.shields.io/badge/elixir-1.18.3-purple.svg)](https://elixir-lang.org)
 [![OTP](https://img.shields.io/badge/otp-27.3.3-blue.svg)](https://www.erlang.org)
 [![Hex version badge](https://img.shields.io/hexpm/v/foundation.svg)](https://hex.pm/packages/foundation)
