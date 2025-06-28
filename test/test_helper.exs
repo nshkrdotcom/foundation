@@ -9,6 +9,22 @@ ExUnit.start()
 # Add meck for mocking if needed in tests
 Code.ensure_loaded(:meck)
 
+# Ensure protocol implementations are loaded
+# The protocol implementation is in test/support which is compiled in test env
+# We need to ensure the protocol itself is loaded
+Code.ensure_loaded(Foundation.Registry)
+
+# In CI, protocols might be consolidated before test support files are available
+# Explicitly compile the implementation module to ensure it's available
+if Mix.env() == :test do
+  # Check if the implementation module is already loaded
+  impl_module = Module.concat([Foundation.Registry, PID])
+
+  unless Code.ensure_loaded?(impl_module) do
+    Code.require_file("test/support/agent_registry_pid_impl.ex", __DIR__ <> "/..")
+  end
+end
+
 # Test helper functions for creating mock implementations
 defmodule TestHelpers do
   @moduledoc """

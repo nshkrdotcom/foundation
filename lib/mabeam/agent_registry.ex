@@ -12,10 +12,14 @@ defmodule MABEAM.AgentRegistry do
 
   ## Concurrency Model
 
-  **All Operations**:
+  **Write Operations**:
   - Serialized through GenServer for consistency
-  - ETS tables are private to the GenServer process
-  - Typical latency: 1-10 microseconds for reads, 100-500 microseconds for writes
+  - Typical latency: 100-500 microseconds
+
+  **Read Operations**:
+  - Direct ETS access for maximum performance
+  - Lock-free concurrent reads
+  - Typical latency: 1-10 microseconds
 
   ## Scaling Considerations
 
@@ -44,7 +48,6 @@ defmodule MABEAM.AgentRegistry do
             node_index: nil,
             resource_index: nil,
             monitors: nil,
-            pending_registrations: nil,
             registry_id: nil
 
   # Required metadata fields for agents
@@ -83,8 +86,8 @@ defmodule MABEAM.AgentRegistry do
     [main_table_name, capability_idx_name, health_idx_name, node_idx_name, resource_idx_name]
     |> Enum.each(&safe_ets_delete/1)
 
-    # Tables are private to this process - no direct external access
-    table_opts = [:private, read_concurrency: true, write_concurrency: true]
+    # Tables are public for direct read access, with concurrent read/write optimization
+    table_opts = [:public, read_concurrency: true, write_concurrency: true]
 
     state = %__MODULE__{
       main_table: :ets.new(main_table_name, [:set | table_opts]),
@@ -93,11 +96,10 @@ defmodule MABEAM.AgentRegistry do
       node_index: :ets.new(node_idx_name, [:bag | table_opts]),
       resource_index: :ets.new(resource_idx_name, [:ordered_set | table_opts]),
       monitors: %{},
-      pending_registrations: %{},
       registry_id: registry_id
     }
 
-    Logger.info("MABEAM.AgentRegistry (#{registry_id}) started with private ETS tables")
+    Logger.info("MABEAM.AgentRegistry (#{registry_id}) started with public ETS tables")
 
     {:ok, state}
   end
@@ -126,23 +128,35 @@ defmodule MABEAM.AgentRegistry do
   # Write Operations
 
   def handle_call({:register, agent_id, pid, metadata}, _from, state) do
-    case validate_agent_metadata(metadata) do
-      :ok ->
-        # Start monitoring immediately to catch early process death
-        monitor_ref = Process.monitor(pid)
+    with :ok <- validate_agent_metadata(metadata),
+         true <- Process.alive?(pid),
+         false <- :ets.member(state.main_table, agent_id) do
+      # Atomic registration within single GenServer call
+      monitor_ref = Process.monitor(pid)
 
-        # Store in pending registrations
-        new_pending = Map.put(state.pending_registrations, monitor_ref, {agent_id, pid, metadata})
-        new_state = %{state | pending_registrations: new_pending}
+      # Insert into main table
+      entry = {agent_id, pid, metadata, :os.timestamp()}
+      :ets.insert(state.main_table, entry)
 
-        # Send commit message to self
-        send(self(), {:commit_registration, monitor_ref})
+      # Update all indexes
+      update_all_indexes(state, agent_id, metadata)
 
-        Logger.debug(
-          "Started registration for agent #{inspect(agent_id)} with monitor ref #{inspect(monitor_ref)}"
-        )
+      # Track monitor reference
+      new_monitors = Map.put(state.monitors, monitor_ref, agent_id)
 
-        {:reply, :ok, new_state}
+      Logger.debug(
+        "Registered agent #{inspect(agent_id)} with capabilities #{inspect(metadata.capability)}"
+      )
+
+      {:reply, :ok, %{state | monitors: new_monitors}}
+    else
+      false ->
+        # Process is dead
+        {:reply, {:error, :process_not_alive}, state}
+
+      true ->
+        # Agent already exists
+        {:reply, {:error, :already_exists}, state}
 
       error ->
         {:reply, error, state}
@@ -250,16 +264,20 @@ defmodule MABEAM.AgentRegistry do
                 {:ok, results}
               rescue
                 e ->
-                  # Fall back to application-level filtering if match spec fails
+                  # Fall back to application-level filtering when match spec fails
                   Logger.debug(
-                    "Match spec query failed, falling back to filtering: #{Exception.message(e)}"
+                    "Match spec execution failed: #{Exception.message(e)}. Using application-level filtering."
                   )
 
                   do_application_level_query(criteria, state)
               end
 
-            {:error, _reason} ->
+            {:error, reason} ->
               # Fall back to application-level filtering for unsupported criteria
+              Logger.debug(
+                "Cannot compile criteria to match spec: #{inspect(reason)}. Using application-level filtering."
+              )
+
               do_application_level_query(criteria, state)
           end
 
@@ -291,87 +309,39 @@ defmodule MABEAM.AgentRegistry do
     {:reply, "2.0", state}
   end
 
-  # Handle two-phase commit for registrations
-  def handle_info({:commit_registration, monitor_ref}, state) do
-    case Map.get(state.pending_registrations, monitor_ref) do
-      nil ->
-        # Already processed or cancelled
-        {:noreply, state}
+  def handle_call({:get_table_names}, _from, state) do
+    table_names = %{
+      main: state.main_table,
+      capability_index: state.capability_index,
+      health_index: state.health_index,
+      node_index: state.node_index,
+      resource_index: state.resource_index
+    }
 
-      {agent_id, pid, metadata} ->
-        commit_pending_registration(monitor_ref, agent_id, pid, metadata, state)
-    end
+    {:reply, {:ok, table_names}, state}
   end
 
   def handle_info({:DOWN, monitor_ref, :process, _pid, reason}, state) do
-    # Check pending registrations first
-    case Map.get(state.pending_registrations, monitor_ref) do
-      {agent_id, _pid, _metadata} ->
-        # Process died during registration, discard pending entry
-        Logger.info(
-          "Agent #{inspect(agent_id)} died during registration (#{inspect(reason)}), discarding"
-        )
-
-        new_pending = Map.delete(state.pending_registrations, monitor_ref)
-        {:noreply, %{state | pending_registrations: new_pending}}
-
+    case Map.get(state.monitors, monitor_ref) do
       nil ->
-        # Check active monitors
-        case Map.get(state.monitors, monitor_ref) do
-          nil ->
-            # Unknown monitor, ignore
-            {:noreply, state}
+        # Unknown monitor, ignore
+        {:noreply, state}
 
-          agent_id ->
-            Logger.info("Agent #{inspect(agent_id)} process died (#{inspect(reason)}), cleaning up")
+      agent_id ->
+        Logger.info("Agent #{inspect(agent_id)} process died (#{inspect(reason)}), cleaning up")
 
-            # Clean up agent registration
-            :ets.delete(state.main_table, agent_id)
-            clear_agent_from_indexes(state, agent_id)
+        # Clean up agent registration
+        :ets.delete(state.main_table, agent_id)
+        clear_agent_from_indexes(state, agent_id)
 
-            # Remove from monitors
-            new_monitors = Map.delete(state.monitors, monitor_ref)
+        # Remove from monitors
+        new_monitors = Map.delete(state.monitors, monitor_ref)
 
-            {:noreply, %{state | monitors: new_monitors}}
-        end
+        {:noreply, %{state | monitors: new_monitors}}
     end
   end
 
   # --- Private Helpers ---
-
-  defp commit_pending_registration(monitor_ref, agent_id, pid, metadata, state) do
-    # Check if process is still alive
-    if Process.alive?(pid) do
-      # Commit the registration
-      entry = {agent_id, pid, metadata, :os.timestamp()}
-
-      case :ets.insert_new(state.main_table, entry) do
-        true ->
-          # Update all indexes atomically
-          update_all_indexes(state, agent_id, metadata)
-
-          # Move from pending to active monitors
-          new_monitors = Map.put(state.monitors, monitor_ref, agent_id)
-          new_pending = Map.delete(state.pending_registrations, monitor_ref)
-
-          Logger.debug(
-            "Committed registration for agent #{inspect(agent_id)} with capabilities #{inspect(metadata.capability)}"
-          )
-
-          {:noreply, %{state | monitors: new_monitors, pending_registrations: new_pending}}
-
-        false ->
-          # Registration already exists, clean up
-          Process.demonitor(monitor_ref, [:flush])
-          new_pending = Map.delete(state.pending_registrations, monitor_ref)
-          {:noreply, %{state | pending_registrations: new_pending}}
-      end
-    else
-      # Process died before commit, clean up
-      new_pending = Map.delete(state.pending_registrations, monitor_ref)
-      {:noreply, %{state | pending_registrations: new_pending}}
-    end
-  end
 
   defp do_application_level_query(criteria, state) do
     all_agents = :ets.tab2list(state.main_table)

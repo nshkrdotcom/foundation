@@ -49,12 +49,8 @@ defmodule MABEAM.AgentRegistryTest do
       metadata = valid_metadata()
       :ok = Foundation.register("agent1", agent1, metadata, registry)
 
-      # Two-phase commit means the second registration attempt should succeed initially
-      # but the actual registration will fail when committed
-      assert :ok = Foundation.register("agent1", agent1, metadata, registry)
-
-      # Give time for commit to process
-      :timer.sleep(50)
+      # Single-phase registration means duplicate attempts fail immediately
+      assert {:error, :already_exists} = Foundation.register("agent1", agent1, metadata, registry)
 
       # Verify only one registration exists
       assert {:ok, {^agent1, _}} = Foundation.lookup("agent1", registry)

@@ -2,8 +2,9 @@ defmodule Foundation do
   @moduledoc """
   Stateless facade for the Foundation Protocol Platform.
 
-  Supports both configured defaults and explicit implementation pass-through for
-  maximum flexibility in testing, composition, and multi-tenant scenarios.
+  This facade provides convenient access to the application-configured default
+  implementations of Foundation protocols. For advanced scenarios requiring
+  multiple implementations or dynamic dispatch, use the protocols directly.
 
   ## Configuration
 
@@ -15,15 +16,34 @@ defmodule Foundation do
         coordination_impl: MyApp.AgentCoordination,
         infrastructure_impl: MyApp.AgentInfrastructure
 
-  ## Explicit Pass-Through
+  ## Usage Patterns
 
-  All functions support an optional implementation parameter for direct usage:
+  ### Single Implementation (Most Common)
 
-      # Use configured default
-      Foundation.register("key", pid, %{capability: :inference})
+  Use the facade for convenient access to your configured defaults:
 
-      # Use explicit implementation (great for testing)
-      Foundation.register("key", pid, %{capability: :inference}, MyTestRegistry)
+      # Uses the configured registry implementation
+      Foundation.register("agent_1", pid, %{capability: :inference})
+      Foundation.lookup("agent_1")
+
+  ### Multiple Implementations
+
+  Bypass the facade and use protocols directly when you need multiple backends:
+
+      # Different registries for different agent types
+      {:ok, ml_registry} = MLAgentRegistry.start_link()
+      {:ok, http_registry} = HTTPWorkerRegistry.start_link()
+      
+      Foundation.Registry.register(ml_registry, "ml_agent", pid1, meta1)
+      Foundation.Registry.register(http_registry, "worker", pid2, meta2)
+
+  ### Testing
+
+  The facade accepts an optional implementation parameter for testing:
+
+      # In tests, pass a specific implementation
+      test_registry = start_supervised!(TestRegistry)
+      Foundation.register("key", pid, meta, test_registry)
 
   ## Protocol Versions
 
