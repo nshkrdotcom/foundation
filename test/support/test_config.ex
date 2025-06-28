@@ -50,8 +50,14 @@ defmodule Foundation.TestConfig do
         {:ok, registry} = MABEAM.AgentRegistry.start_link(name: unique_id)
 
         on_exit(fn ->
-          if Process.alive?(registry) do
-            GenServer.stop(registry)
+          try do
+            if Process.alive?(registry) do
+              GenServer.stop(registry, :normal, 5000)
+            end
+          catch
+            :exit, {:noproc, _} -> :ok
+            :exit, {:normal, _} -> :ok
+            _, _ -> :ok
           end
         end)
 
