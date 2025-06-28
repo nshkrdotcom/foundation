@@ -762,12 +762,10 @@ defmodule MLFoundation.AgentPatterns.OptimizerAgent do
   end
 
   defp optimize_loop(current, current_score, iteration, state, step_fn) do
-    cond do
-      iteration >= state.max_iterations ->
-        {:ok, %{solution: current, score: current_score, iterations: iteration}}
-
-      true ->
-        perform_optimization_step(current, current_score, iteration, state, step_fn)
+    if iteration >= state.max_iterations do
+      {:ok, %{solution: current, score: current_score, iterations: iteration}}
+    else
+      perform_optimization_step(current, current_score, iteration, state, step_fn)
     end
   end
 

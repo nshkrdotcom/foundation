@@ -445,18 +445,20 @@ defmodule MLFoundation.VariablePrimitives do
     var_names = MapSet.new(variables, & &1.name)
 
     Enum.reduce_while(constraints, :ok, fn constraint, _acc ->
-      case constraint do
-        {:coupled, var_list, _fn} ->
-          if Enum.all?(var_list, &MapSet.member?(var_names, &1)) do
-            {:cont, :ok}
-          else
-            {:halt, {:error, :unknown_variables_in_constraint}}
-          end
-
-        _ ->
-          {:cont, :ok}
-      end
+      validate_single_constraint(constraint, var_names)
     end)
+  end
+
+  defp validate_single_constraint({:coupled, var_list, _fn}, var_names) do
+    if Enum.all?(var_list, &MapSet.member?(var_names, &1)) do
+      {:cont, :ok}
+    else
+      {:halt, {:error, :unknown_variables_in_constraint}}
+    end
+  end
+
+  defp validate_single_constraint(_, _var_names) do
+    {:cont, :ok}
   end
 
   defp lookup_variable(name, nil) do

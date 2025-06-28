@@ -391,35 +391,38 @@ defmodule MABEAM.AgentRegistry do
   def handle_call({:batch_register, agents}, _from, state) when is_list(agents) do
     Logger.debug("Executing batch registration for #{length(agents)} agents")
 
-    # Check resource availability for batch if ResourceManager available
-    resource_check =
-      if Process.whereis(Foundation.ResourceManager) do
-        Foundation.ResourceManager.acquire_resource(:batch_register, %{
-          count: length(agents),
-          registry_id: state.registry_id
-        })
-      else
-        {:ok, nil}
-      end
-
-    case resource_check do
+    case acquire_batch_registration_resource(agents, state) do
       {:ok, resource_token} ->
-        # Execute batch registration atomically
-        result = execute_batch_register(agents, state, [], resource_token)
-
-        case result do
-          {:ok, registered_ids, new_state} ->
-            {:reply, {:ok, registered_ids}, new_state}
-
-          {:error, reason, partial_ids, _state} ->
-            # Release resource on failure
-            if resource_token, do: Foundation.ResourceManager.release_resource(resource_token)
-            {:reply, {:error, reason, partial_ids}, state}
-        end
+        execute_batch_registration_with_resource(agents, state, resource_token)
 
       {:error, reason} ->
         {:reply, {:error, {:resource_exhausted, reason}}, state}
     end
+  end
+
+  defp acquire_batch_registration_resource(agents, state) do
+    if Process.whereis(Foundation.ResourceManager) do
+      Foundation.ResourceManager.acquire_resource(:batch_register, %{
+        count: length(agents),
+        registry_id: state.registry_id
+      })
+    else
+      {:ok, nil}
+    end
+  end
+
+  defp execute_batch_registration_with_resource(agents, state, resource_token) do
+    result = execute_batch_register(agents, state, [], resource_token)
+    handle_batch_register_result(result, state, resource_token)
+  end
+
+  defp handle_batch_register_result({:ok, registered_ids, new_state}, _state, _resource_token) do
+    {:reply, {:ok, registered_ids}, new_state}
+  end
+
+  defp handle_batch_register_result({:error, reason, partial_ids, _}, state, resource_token) do
+    if resource_token, do: Foundation.ResourceManager.release_resource(resource_token)
+    {:reply, {:error, reason, partial_ids}, state}
   end
 
   def handle_info({:DOWN, monitor_ref, :process, _pid, reason}, state) do
