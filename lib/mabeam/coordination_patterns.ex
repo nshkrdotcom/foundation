@@ -23,7 +23,7 @@ defmodule MABEAM.CoordinationPatterns do
   """
 
   require Logger
-  alias Foundation.{Registry, Coordination}
+  alias Foundation.{Coordination, Registry}
 
   # Leader Election Pattern
 
@@ -549,11 +549,9 @@ defmodule MABEAM.CoordinationPatterns do
   end
 
   defp execute_agent_work(agent_pid, work_items, operation_fn, timeout) do
-    try do
-      GenServer.call(agent_pid, {:execute_work, work_items, operation_fn}, timeout)
-    catch
-      :exit, reason -> {:error, {:agent_error, reason}}
-    end
+    GenServer.call(agent_pid, {:execute_work, work_items, operation_fn}, timeout)
+  catch
+    :exit, reason -> {:error, {:agent_error, reason}}
   end
 
   defp collect_agent_votes(agents, proposal, consensus_ref) do

@@ -297,11 +297,9 @@ defmodule JidoFoundation.Examples do
     end
 
     defp custom_health_check(agent_pid) do
-      try do
-        GenServer.call(agent_pid, :health_check, 1000)
-      catch
-        :exit, _ -> :unhealthy
-      end
+      GenServer.call(agent_pid, :health_check, 1000)
+    catch
+      :exit, _ -> :unhealthy
     end
 
     defp calculate_health(state) do

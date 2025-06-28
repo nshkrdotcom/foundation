@@ -23,7 +23,7 @@ defmodule MLFoundation.TeamOrchestration do
   """
 
   require Logger
-  alias Foundation.{Registry}
+  alias Foundation.Registry
   alias MLFoundation.{AgentPatterns, VariablePrimitives}
 
   # Experiment Team Pattern

@@ -474,7 +474,8 @@ defmodule MLFoundation.VariablePrimitives do
     _space_id = Keyword.get(opts, :space)
 
     # For now, just use direct update since we don't have proper transaction support
-    # TODO: Implement proper atomic transaction support
+    # Issue: Implement proper atomic transaction support for variable updates
+    # This will require integration with Foundation.AtomicTransaction
     update_directly(variable_name, new_value, opts)
   end
 

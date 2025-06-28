@@ -24,7 +24,7 @@ defmodule MLFoundation.DistributedOptimization do
   """
 
   require Logger
-  alias Foundation.{Registry, AtomicTransaction}
+  alias Foundation.{AtomicTransaction, Registry}
 
   # Federated Optimization Pattern
 
@@ -828,7 +828,7 @@ defmodule MLFoundation.DistributedOptimization.PBTCoordinator do
   end
 
   defp run_pbt_training(objective_fn, opts, state) do
-    max_steps = Keyword.get(opts, :max_steps, 10000)
+    max_steps = Keyword.get(opts, :max_steps, 10_000)
 
     Enum.reduce_while(1..max_steps, state, fn step, acc_state ->
       # Train population members in parallel

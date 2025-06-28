@@ -329,19 +329,15 @@ defmodule MLFoundation.AgentPatterns.PipelineAgent do
   end
 
   defp execute_stage(stage, data) when is_function(stage, 1) do
-    try do
-      {:ok, stage.(data)}
-    rescue
-      e -> {:error, e}
-    end
+    {:ok, stage.(data)}
+  rescue
+    e -> {:error, e}
   end
 
   defp execute_stage(stage_pid, data) when is_pid(stage_pid) do
-    try do
-      GenServer.call(stage_pid, {:process, data}, 5000)
-    catch
-      :exit, reason -> {:error, {:stage_failed, reason}}
-    end
+    GenServer.call(stage_pid, {:process, data}, 5000)
+  catch
+    :exit, reason -> {:error, {:stage_failed, reason}}
   end
 
   defp compensate_error(data, _reason) do
@@ -406,19 +402,15 @@ defmodule MLFoundation.AgentPatterns.EnsembleAgent do
   end
 
   defp get_prediction(member, input) when is_function(member, 1) do
-    try do
-      {:ok, member.(input)}
-    rescue
-      e -> {:error, e}
-    end
+    {:ok, member.(input)}
+  rescue
+    e -> {:error, e}
   end
 
   defp get_prediction(member_pid, input) when is_pid(member_pid) do
-    try do
-      GenServer.call(member_pid, {:predict, input}, 5000)
-    catch
-      :exit, reason -> {:error, reason}
-    end
+    GenServer.call(member_pid, {:predict, input}, 5000)
+  catch
+    :exit, reason -> {:error, reason}
   end
 
   defp aggregate_responses(responses, :majority, _weights) do
@@ -686,11 +678,9 @@ defmodule MLFoundation.AgentPatterns.TransformerAgent do
   end
 
   defp apply_single_transformation(data, transformation) when is_function(transformation, 1) do
-    try do
-      {:ok, transformation.(data)}
-    rescue
-      e -> {:error, e}
-    end
+    {:ok, transformation.(data)}
+  rescue
+    e -> {:error, e}
   end
 
   defp apply_batched_transformation(data, transformation, batch_size) do

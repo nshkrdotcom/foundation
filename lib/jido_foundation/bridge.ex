@@ -358,7 +358,7 @@ defmodule JidoFoundation.Bridge do
       )
   """
   def start_and_register_agent(agent_module, agent_config, bridge_opts \\ []) do
-    with {:ok, agent_pid} <- apply(agent_module, :start_link, [agent_config]),
+    with {:ok, agent_pid} <- agent_module.start_link(agent_config),
          :ok <- register_agent(agent_pid, bridge_opts) do
       {:ok, agent_pid}
     else
