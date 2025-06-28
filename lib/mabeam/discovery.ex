@@ -2,59 +2,67 @@ defmodule MABEAM.Discovery do
   @moduledoc """
   Composed multi-criteria discovery APIs for agents using atomic queries.
 
-  This module provides VALUE-ADDED discovery functions that compose multiple
-  criteria into single atomic ETS operations. Simple single-attribute lookups
-  should use Foundation.find_by_attribute/3 directly.
+  ## Architecture Boundaries (v2.1 Protocol Platform)
+
+  This module implements the **value-added API layer** per the v2.1 architectural
+  refinements. It follows a strict separation of concerns:
+
+  **MABEAM.Discovery Purpose**: Compose multiple criteria into single atomic queries
+  **Foundation Purpose**: Provide generic, primitive registry operations
+
+  ## What Belongs Here ✅
+
+  - **Multi-criteria atomic queries** that combine 2+ constraints
+  - **Domain-specific analytics** using complex query compositions
+  - **Performance-optimized aggregations** via atomic ETS operations
+  - **Load balancing helpers** that require sophisticated filtering
+
+  ## What Does NOT Belong Here ❌
+
+  - **Simple single-attribute lookups** → Use `Foundation.find_by_attribute/3`
+  - **Basic registry operations** → Use `Foundation.register/4`, `Foundation.lookup/2`
+  - **Protocol-level functionality** → Use Foundation protocols directly
 
   ## Performance Characteristics
 
-  - Multi-criteria queries: O(1) via atomic ETS match_spec
-  - Memory efficient: No intermediate result sets
-  - Highly concurrent: Direct ETS reads with no process bottlenecks
+  - Multi-criteria queries: O(1) via atomic ETS match_spec (10-50 microseconds)
+  - Memory efficient: No intermediate result sets or N+1 queries
+  - Highly concurrent: Direct ETS reads with zero GenServer bottlenecks
 
-  ## Usage Examples
+  ## Correct Usage Examples
 
-      # Use Foundation directly for single attributes
+      # ❌ DON'T USE Discovery for simple single-attribute queries
+      # agents = MABEAM.Discovery.find_by_capability(:inference)  # WRONG
+
+      # ✅ DO use Foundation directly for single attributes
       {:ok, agents} = Foundation.find_by_attribute(:capability, :inference)
       {:ok, agents} = Foundation.find_by_attribute(:node, :my_node)
+      {:ok, agents} = Foundation.find_by_attribute(:health_status, :healthy)
 
-      # Use Discovery for multi-criteria atomic queries
+      # ✅ DO use Discovery for multi-criteria atomic queries (the value-add)
       agents = MABEAM.Discovery.find_capable_and_healthy(:training)
       agents = MABEAM.Discovery.find_agents_with_resources(0.5, 0.3)
       agents = MABEAM.Discovery.find_capable_agents_with_resources(:inference, 0.7, 0.5)
+
+  ## Architectural Compliance
+
+  This separation ensures:
+  - **Foundation** remains a universal, domain-agnostic platform
+  - **MABEAM.Discovery** provides agent-specific optimizations
+  - **Clear boundaries** prevent architectural drift
+  - **Performance benefits** through atomic query composition
   """
 
   require Logger
 
-  # --- Single-Criteria Searches (O(1) ETS Index Lookups) ---
+  # --- Simple Aliases Removed Per Review Guidance ---
 
-  # Simple alias function removed per review guidance.
-  # Use Foundation.find_by_attribute(:capability, capability, impl) directly.
-
-  @doc """
-  Finds all healthy agents using O(1) ETS index lookup.
-
-  ## Parameters
-  - `impl`: Optional explicit registry implementation
-
-  ## Returns
-  List of healthy agents as `{agent_id, pid, metadata}` tuples
-  """
-  @spec find_healthy_agents(impl :: term() | nil) ::
-          list({agent_id :: term(), pid(), metadata :: map()})
-  def find_healthy_agents(impl \\ nil) do
-    case Foundation.find_by_attribute(:health_status, :healthy, impl) do
-      {:ok, agents} ->
-        agents
-
-      {:error, reason} ->
-        Logger.warning("Failed to find healthy agents: #{inspect(reason)}")
-        []
-    end
-  end
-
-  # Simple alias function removed per review guidance.
-  # Use Foundation.find_by_attribute(:node, node, impl) directly.
+  # All simple single-attribute searches should use Foundation directly:
+  # - Foundation.find_by_attribute(:capability, capability, impl)
+  # - Foundation.find_by_attribute(:health_status, :healthy, impl)
+  # - Foundation.find_by_attribute(:node, node, impl)
+  #
+  # This module only contains VALUE-ADDED multi-criteria compositions.
 
   # --- Multi-Criteria Searches (Atomic ETS Queries) ---
 

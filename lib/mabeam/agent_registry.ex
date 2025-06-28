@@ -44,7 +44,7 @@ defmodule MABEAM.AgentRegistry do
   use GenServer
   require Logger
 
-  alias MABEAM.AgentRegistry.MatchSpecCompiler
+  alias Foundation.ETSHelpers.MatchSpecCompiler
 
   defstruct main_table: nil,
             capability_index: nil,
@@ -76,55 +76,38 @@ defmodule MABEAM.AgentRegistry do
   end
 
   def init(opts) do
-    # Generate unique registry ID for table names
+    # Use the registry ID for logging but not for dynamic atom creation
     registry_id = Keyword.get(opts, :id, :default)
 
-    # Create unique table names for this instance
-    main_table_name = :"agent_main_#{registry_id}"
-    capability_idx_name = :"agent_capability_idx_#{registry_id}"
-    health_idx_name = :"agent_health_idx_#{registry_id}"
-    node_idx_name = :"agent_node_idx_#{registry_id}"
-    resource_idx_name = :"agent_resource_idx_#{registry_id}"
-
-    # Clean up any existing tables from previous runs
-    [main_table_name, capability_idx_name, health_idx_name, node_idx_name, resource_idx_name]
-    |> Enum.each(&safe_ets_delete/1)
-
-    # Tables are public for direct read access, with concurrent read/write optimization
+    # Create anonymous ETS tables tied to this process for safety
+    # No dynamic atom creation - tables are anonymous and garbage collected with process
     table_opts = [:public, read_concurrency: true, write_concurrency: true]
 
     state = %__MODULE__{
-      main_table: :ets.new(main_table_name, [:set | table_opts]),
-      capability_index: :ets.new(capability_idx_name, [:bag | table_opts]),
-      health_index: :ets.new(health_idx_name, [:bag | table_opts]),
-      node_index: :ets.new(node_idx_name, [:bag | table_opts]),
-      resource_index: :ets.new(resource_idx_name, [:ordered_set | table_opts]),
+      main_table: :ets.new(:agent_main, [:set | table_opts]),
+      capability_index: :ets.new(:agent_capability_idx, [:bag | table_opts]),
+      health_index: :ets.new(:agent_health_idx, [:bag | table_opts]),
+      node_index: :ets.new(:agent_node_idx, [:bag | table_opts]),
+      resource_index: :ets.new(:agent_resource_idx, [:ordered_set | table_opts]),
       monitors: %{},
       registry_id: registry_id
     }
 
-    Logger.info("MABEAM.AgentRegistry (#{registry_id}) started with public ETS tables")
+    Logger.info(
+      "MABEAM.AgentRegistry (#{registry_id}) started with anonymous ETS tables (process-managed)"
+    )
 
     {:ok, state}
   end
 
   def terminate(_reason, state) do
-    Logger.info("MABEAM.AgentRegistry (#{state.registry_id}) terminating, cleaning up ETS tables")
+    Logger.info(
+      "MABEAM.AgentRegistry (#{state.registry_id}) terminating, ETS tables will be automatically garbage collected"
+    )
 
-    # Clean up ETS tables
-    safe_ets_delete(state.main_table)
-    safe_ets_delete(state.capability_index)
-    safe_ets_delete(state.health_index)
-    safe_ets_delete(state.node_index)
-    safe_ets_delete(state.resource_index)
+    # Anonymous ETS tables are automatically garbage collected when the process dies
+    # No manual cleanup needed - this makes the implementation more robust
     :ok
-  end
-
-  defp safe_ets_delete(table) do
-    :ets.delete(table)
-  rescue
-    # Table already deleted or doesn't exist
-    ArgumentError -> :ok
   end
 
   # --- GenServer Implementation for ALL Operations ---
@@ -135,24 +118,31 @@ defmodule MABEAM.AgentRegistry do
     with :ok <- validate_agent_metadata(metadata),
          true <- Process.alive?(pid),
          false <- :ets.member(state.main_table, agent_id) do
-      # Atomic registration within single GenServer call
+      # Atomic registration - all operations in single GenServer call
+      # This provides atomicity through GenServer serialization
       monitor_ref = Process.monitor(pid)
-
-      # Insert into main table
       entry = {agent_id, pid, metadata, :os.timestamp()}
-      :ets.insert(state.main_table, entry)
 
-      # Update all indexes
-      update_all_indexes(state, agent_id, metadata)
+      # Use insert_new for additional safety - fails if key already exists
+      case :ets.insert_new(state.main_table, entry) do
+        true ->
+          # Update all indexes atomically within same call
+          update_all_indexes(state, agent_id, metadata)
 
-      # Track monitor reference
-      new_monitors = Map.put(state.monitors, monitor_ref, agent_id)
+          # Track monitor reference
+          new_monitors = Map.put(state.monitors, monitor_ref, agent_id)
 
-      Logger.debug(
-        "Registered agent #{inspect(agent_id)} with capabilities #{inspect(metadata.capability)}"
-      )
+          Logger.debug(
+            "Registered agent #{inspect(agent_id)} with capabilities #{inspect(metadata.capability)}"
+          )
 
-      {:reply, :ok, %{state | monitors: new_monitors}}
+          {:reply, :ok, %{state | monitors: new_monitors}}
+
+        false ->
+          # Cleanup monitor and return error
+          Process.demonitor(monitor_ref, [:flush])
+          {:reply, {:error, :already_exists}, state}
+      end
     else
       false ->
         # Process is dead
@@ -170,15 +160,17 @@ defmodule MABEAM.AgentRegistry do
   def handle_call({:update_metadata, agent_id, new_metadata}, _from, state) do
     with :ok <- validate_agent_metadata(new_metadata),
          [{^agent_id, pid, _old_metadata, _timestamp}] <- :ets.lookup(state.main_table, agent_id) do
+      # Atomic metadata update - all operations in single GenServer call
+      # This provides atomicity through GenServer serialization
+
       # Update main table
       :ets.insert(state.main_table, {agent_id, pid, new_metadata, :os.timestamp()})
 
-      # Clear old indexes and rebuild
+      # Clear old indexes and rebuild atomically within same call
       clear_agent_from_indexes(state, agent_id)
       update_all_indexes(state, agent_id, new_metadata)
 
       Logger.debug("Updated metadata for agent #{inspect(agent_id)}")
-
       {:reply, :ok, state}
     else
       [] -> {:reply, {:error, :not_found}, state}
@@ -189,10 +181,7 @@ defmodule MABEAM.AgentRegistry do
   def handle_call({:unregister, agent_id}, _from, state) do
     case :ets.lookup(state.main_table, agent_id) do
       [{^agent_id, _pid, _metadata, _timestamp}] ->
-        :ets.delete(state.main_table, agent_id)
-        clear_agent_from_indexes(state, agent_id)
-
-        # Find and remove monitor for this agent
+        # Find monitor reference
         monitor_ref =
           state.monitors
           |> Enum.find(fn {_ref, id} -> id == agent_id end)
@@ -201,6 +190,12 @@ defmodule MABEAM.AgentRegistry do
             nil -> nil
           end
 
+        # Atomic unregistration - all operations in single GenServer call
+        # This provides atomicity through GenServer serialization
+        :ets.delete(state.main_table, agent_id)
+        clear_agent_from_indexes(state, agent_id)
+
+        # Clean up monitor
         new_monitors =
           if monitor_ref do
             Process.demonitor(monitor_ref, [:flush])
@@ -210,7 +205,6 @@ defmodule MABEAM.AgentRegistry do
           end
 
         Logger.debug("Unregistered agent #{inspect(agent_id)}")
-
         {:reply, :ok, %{state | monitors: new_monitors}}
 
       [] ->
@@ -334,13 +328,13 @@ defmodule MABEAM.AgentRegistry do
       agent_id ->
         Logger.info("Agent #{inspect(agent_id)} process died (#{inspect(reason)}), cleaning up")
 
-        # Clean up agent registration
+        # Atomic cleanup - all operations in single GenServer message handler
+        # This provides atomicity through GenServer serialization
         :ets.delete(state.main_table, agent_id)
         clear_agent_from_indexes(state, agent_id)
 
         # Remove from monitors
         new_monitors = Map.delete(state.monitors, monitor_ref)
-
         {:noreply, %{state | monitors: new_monitors}}
     end
   end

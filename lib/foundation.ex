@@ -553,6 +553,7 @@ defmodule Foundation do
         else
           Map.put(acc, protocol, {current_version, required_version})
         end
+
       {:error, reason} ->
         Map.put(acc, protocol, {:error, reason})
     end
@@ -567,10 +568,12 @@ defmodule Foundation do
 
   defp get_protocol_version(:coordination) do
     impl = coordination_impl()
+
     if function_exported?(Foundation.Coordination, :protocol_version, 1) do
       Foundation.Coordination.protocol_version(impl)
     else
-      {:ok, "1.0"}  # Default version if not implemented
+      # Default version if not implemented
+      {:ok, "1.0"}
     end
   rescue
     _ -> {:error, :implementation_not_configured}
@@ -578,10 +581,12 @@ defmodule Foundation do
 
   defp get_protocol_version(:infrastructure) do
     impl = infrastructure_impl()
+
     if function_exported?(Foundation.Infrastructure, :protocol_version, 1) do
       Foundation.Infrastructure.protocol_version(impl)
     else
-      {:ok, "1.0"}  # Default version if not implemented
+      # Default version if not implemented
+      {:ok, "1.0"}
     end
   rescue
     _ -> {:error, :implementation_not_configured}

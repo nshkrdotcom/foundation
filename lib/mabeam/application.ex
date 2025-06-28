@@ -34,6 +34,24 @@ defmodule MABEAM.Application do
   def start(_type, _args) do
     Logger.info("Starting MABEAM Multi-Agent Infrastructure")
 
+    # Verify protocol version compatibility before starting
+    case verify_protocol_compatibility() do
+      :ok ->
+        Logger.debug("Protocol compatibility verification passed")
+        do_start_mabeam()
+
+      {:error, incompatibilities} ->
+        Logger.critical("MABEAM startup failed due to incompatible Foundation protocol versions:")
+
+        for {protocol, issue} <- incompatibilities do
+          Logger.critical("  - #{protocol}: #{format_compatibility_issue(issue)}")
+        end
+
+        {:error, {:incompatible_protocols, incompatibilities}}
+    end
+  end
+
+  defp do_start_mabeam do
     # Check if we should start backends
     start_backends = Application.get_env(:mabeam, :start_backends, true)
 
@@ -89,6 +107,37 @@ defmodule MABEAM.Application do
   end
 
   # --- Private Helper Functions ---
+
+  # Protocol version requirements for MABEAM
+  @required_protocols %{
+    registry: "1.1",
+    coordination: "1.0",
+    infrastructure: "1.0"
+  }
+
+  defp verify_protocol_compatibility do
+    # Configure Foundation first so we can check the implementations
+    configure_foundation()
+
+    # Verify each required protocol version
+    case Foundation.verify_protocol_compatibility(@required_protocols) do
+      :ok -> :ok
+      {:error, incompatibilities} -> {:error, incompatibilities}
+    end
+  rescue
+    error ->
+      Logger.error("Protocol compatibility check failed: #{Exception.message(error)}")
+      {:error, %{general: {:error, Exception.message(error)}}}
+  end
+
+  defp format_compatibility_issue({current_version, required_version})
+       when is_binary(current_version) and is_binary(required_version) do
+    "requires #{required_version}, but found #{current_version}"
+  end
+
+  defp format_compatibility_issue({:error, reason}) do
+    "error: #{inspect(reason)}"
+  end
 
   defp configure_foundation do
     # Configure Foundation to use MABEAM implementations
