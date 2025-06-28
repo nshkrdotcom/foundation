@@ -33,7 +33,7 @@ defmodule Foundation do
       # Different registries for different agent types
       {:ok, ml_registry} = MLAgentRegistry.start_link()
       {:ok, http_registry} = HTTPWorkerRegistry.start_link()
-      
+
       Foundation.Registry.register(ml_registry, "ml_agent", pid1, meta1)
       Foundation.Registry.register(http_registry, "worker", pid2, meta2)
 
@@ -55,13 +55,38 @@ defmodule Foundation do
   # --- Configuration Access ---
 
   defp registry_impl do
-    Application.get_env(:foundation, :registry_impl) ||
-      raise """
-      Foundation.Registry implementation not configured.
+    case Application.get_env(:foundation, :registry_impl) do
+      nil ->
+        raise """
+        Foundation.Registry implementation not configured.
 
-      Add to your config:
-      config :foundation, registry_impl: YourRegistryImpl
-      """
+        Add to your config:
+            config :foundation, registry_impl: YourRegistryImpl
+
+        Available MABEAM implementation:
+            config :foundation, registry_impl: MABEAM.AgentRegistry
+
+        For testing:
+            config :foundation, registry_impl: MockRegistry
+        """
+
+      impl ->
+        # Validate implementation is loadable
+        unless Code.ensure_loaded?(impl) do
+          raise """
+          Registry implementation #{inspect(impl)} cannot be loaded.
+
+          Please verify:
+          1. Module exists and is compiled
+          2. Dependencies are available
+          3. Application is started
+
+          Current load path: #{inspect(:code.get_path())}
+          """
+        end
+
+        impl
+    end
   end
 
   defp coordination_impl do
@@ -123,8 +148,10 @@ defmodule Foundation do
   @spec lookup(key :: term(), impl :: term() | nil) ::
           {:ok, {pid(), map()}} | :error
   def lookup(key, impl \\ nil) do
-    actual_impl = impl || registry_impl()
-    Foundation.Registry.lookup(actual_impl, key)
+    Foundation.PerformanceMonitor.time_operation(:registry_lookup, fn ->
+      actual_impl = impl || registry_impl()
+      Foundation.Registry.lookup(actual_impl, key)
+    end)
   end
 
   @doc """
@@ -142,8 +169,10 @@ defmodule Foundation do
   @spec find_by_attribute(attribute :: atom(), value :: term(), impl :: term() | nil) ::
           {:ok, list({key :: term(), pid(), map()})} | {:error, term()}
   def find_by_attribute(attribute, value, impl \\ nil) do
-    actual_impl = impl || registry_impl()
-    Foundation.Registry.find_by_attribute(actual_impl, attribute, value)
+    Foundation.PerformanceMonitor.time_operation(:registry_find_by_attribute, fn ->
+      actual_impl = impl || registry_impl()
+      Foundation.Registry.find_by_attribute(actual_impl, attribute, value)
+    end)
   end
 
   @doc """
@@ -171,8 +200,10 @@ defmodule Foundation do
   @spec query([Foundation.Registry.criterion()], impl :: term() | nil) ::
           {:ok, list({key :: term(), pid(), map()})} | {:error, term()}
   def query(criteria, impl \\ nil) do
-    actual_impl = impl || registry_impl()
-    Foundation.Registry.query(actual_impl, criteria)
+    Foundation.PerformanceMonitor.time_operation(:registry_query, fn ->
+      actual_impl = impl || registry_impl()
+      Foundation.Registry.query(actual_impl, criteria)
+    end)
   end
 
   @doc """
@@ -451,5 +482,117 @@ defmodule Foundation do
   def check_rate_limit(limiter_id, identifier, impl \\ nil) do
     actual_impl = impl || infrastructure_impl()
     Foundation.Infrastructure.check_rate_limit(actual_impl, limiter_id, identifier)
+  end
+
+  # --- Protocol Versioning ---
+
+  @doc """
+  Returns protocol version information for all configured implementations.
+
+  ## Returns
+  Map containing version information for each protocol implementation.
+
+  ## Examples
+      %{
+        registry: {:ok, "1.1"},
+        coordination: {:ok, "1.0"},
+        infrastructure: {:ok, "1.0"}
+      } = Foundation.protocol_versions()
+  """
+  @spec protocol_versions() :: %{
+          registry: {:ok, String.t()} | {:error, term()},
+          coordination: {:ok, String.t()} | {:error, term()},
+          infrastructure: {:ok, String.t()} | {:error, term()}
+        }
+  def protocol_versions do
+    %{
+      registry: get_protocol_version(:registry),
+      coordination: get_protocol_version(:coordination),
+      infrastructure: get_protocol_version(:infrastructure)
+    }
+  end
+
+  @doc """
+  Verifies that all configured implementations support required protocol versions.
+
+  ## Parameters
+  - `required_versions`: Map of protocol => minimum required version
+
+  ## Examples
+      required = %{registry: "1.1", coordination: "1.0"}
+      case Foundation.verify_protocol_compatibility(required) do
+        :ok -> start_application()
+        {:error, incompatible} -> handle_version_error(incompatible)
+      end
+  """
+  @spec verify_protocol_compatibility(map()) :: :ok | {:error, map()}
+  def verify_protocol_compatibility(required_versions) do
+    current_versions = protocol_versions()
+    incompatible = find_incompatible_versions(required_versions, current_versions)
+
+    if map_size(incompatible) == 0 do
+      :ok
+    else
+      {:error, incompatible}
+    end
+  end
+
+  # --- Private Helper Functions ---
+
+  defp find_incompatible_versions(required_versions, current_versions) do
+    Enum.reduce(required_versions, %{}, fn {protocol, required_version}, acc ->
+      check_protocol_compatibility(protocol, required_version, current_versions, acc)
+    end)
+  end
+
+  defp check_protocol_compatibility(protocol, required_version, current_versions, acc) do
+    case Map.get(current_versions, protocol) do
+      {:ok, current_version} ->
+        if version_compatible?(current_version, required_version) do
+          acc
+        else
+          Map.put(acc, protocol, {current_version, required_version})
+        end
+      {:error, reason} ->
+        Map.put(acc, protocol, {:error, reason})
+    end
+  end
+
+  defp get_protocol_version(:registry) do
+    impl = registry_impl()
+    Foundation.Registry.protocol_version(impl)
+  rescue
+    _ -> {:error, :implementation_not_configured}
+  end
+
+  defp get_protocol_version(:coordination) do
+    impl = coordination_impl()
+    if function_exported?(Foundation.Coordination, :protocol_version, 1) do
+      Foundation.Coordination.protocol_version(impl)
+    else
+      {:ok, "1.0"}  # Default version if not implemented
+    end
+  rescue
+    _ -> {:error, :implementation_not_configured}
+  end
+
+  defp get_protocol_version(:infrastructure) do
+    impl = infrastructure_impl()
+    if function_exported?(Foundation.Infrastructure, :protocol_version, 1) do
+      Foundation.Infrastructure.protocol_version(impl)
+    else
+      {:ok, "1.0"}  # Default version if not implemented
+    end
+  rescue
+    _ -> {:error, :implementation_not_configured}
+  end
+
+  defp version_compatible?(current, required) do
+    # Simple version comparison - can be enhanced for semantic versioning
+    Version.compare(current, required) != :lt
+  rescue
+    _ ->
+      # Fallback for non-semver versions
+      current >= required
   end
 end

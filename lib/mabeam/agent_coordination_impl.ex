@@ -47,4 +47,8 @@ defimpl Foundation.Coordination, for: MABEAM.AgentCoordination do
   def get_lock_status(coordination_pid, lock_id) do
     GenServer.call(coordination_pid, {:get_lock_status, lock_id})
   end
+
+  def protocol_version(_coordination_pid) do
+    {:ok, "1.0"}
+  end
 end

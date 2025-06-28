@@ -19,12 +19,12 @@ Code.ensure_loaded!(Foundation.Registry)
 if Mix.env() == :test do
   # Check if the PID implementation is already available
   impl_module = Foundation.Registry.impl_for(self())
-  
+
   # Only compile if not already loaded
   if impl_module == Foundation.Registry.Any do
     support_path = Path.join([__DIR__, "support"])
     impl_file = Path.join(support_path, "agent_registry_pid_impl.ex")
-    
+
     if File.exists?(impl_file) do
       Code.compile_file(impl_file)
     end

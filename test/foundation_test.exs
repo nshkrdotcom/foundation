@@ -47,6 +47,11 @@ defmodule FoundationTest do
       [{:test_key, self(), %{capability: :test}}]
     end
 
+    def protocol_version(_impl) do
+      send(self(), {:protocol_version_called})
+      {:ok, "1.1"}
+    end
+
     def update_metadata(_impl, key, metadata) do
       send(self(), {:update_metadata_called, key, metadata})
       :ok
@@ -103,6 +108,11 @@ defmodule FoundationTest do
       send(self(), {:get_lock_status_called, lock_id})
       {:ok, :available}
     end
+
+    def protocol_version(_impl) do
+      send(self(), {:coordination_protocol_version_called})
+      {:ok, "1.0"}
+    end
   end
 
   defimpl Foundation.Infrastructure, for: MockInfrastructure do
@@ -144,6 +154,11 @@ defmodule FoundationTest do
     def get_resource_usage(_impl, resource_id) do
       send(self(), {:get_resource_usage_called, resource_id})
       {:ok, %{}}
+    end
+
+    def protocol_version(_impl) do
+      send(self(), {:infrastructure_protocol_version_called})
+      {:ok, "1.0"}
     end
   end
 

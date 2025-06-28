@@ -37,4 +37,8 @@ defimpl Foundation.Registry, for: PID do
   def list_all(registry_pid, filter_fn) do
     GenServer.call(registry_pid, {:list_all, filter_fn})
   end
+
+  def protocol_version(registry_pid) do
+    GenServer.call(registry_pid, {:protocol_version})
+  end
 end

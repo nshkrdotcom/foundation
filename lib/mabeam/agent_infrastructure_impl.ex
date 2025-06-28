@@ -43,4 +43,8 @@ defimpl Foundation.Infrastructure, for: MABEAM.AgentInfrastructure do
   def get_resource_usage(infrastructure_pid, resource_id) do
     GenServer.call(infrastructure_pid, {:get_resource_usage, resource_id})
   end
+
+  def protocol_version(_infrastructure_pid) do
+    {:ok, "1.0"}
+  end
 end

@@ -1,14 +1,18 @@
 defmodule MABEAM.AgentRegistry do
   @moduledoc """
-  High-performance agent registry with pure GenServer implementation.
+  High-performance agent registry with v2.1 Protocol Platform architecture.
 
-  ## Architecture: Pure GenServer Pattern
+  ## Architecture: Write-Through-Process, Read-From-Table Pattern
 
-  All operations (both read and write) go through the GenServer process to ensure:
+  **Write Operations** go through GenServer for consistency:
   - Atomic operations across all tables
   - Consistent state management
   - Proper isolation between registry instances
-  - No global state dependencies
+
+  **Read Operations** use direct ETS access for performance:
+  - Lock-free concurrent reads via protocol implementation
+  - No GenServer bottleneck
+  - Table names cached in process dictionary
 
   ## Concurrency Model
 

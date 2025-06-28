@@ -118,4 +118,8 @@ defimpl Foundation.Registry, for: MABEAM.AgentRegistry do
   defp apply_filter(results, filter_fn) do
     Enum.filter(results, fn {_id, _pid, metadata} -> filter_fn.(metadata) end)
   end
+
+  def protocol_version(_registry_pid) do
+    {:ok, "1.1"}
+  end
 end

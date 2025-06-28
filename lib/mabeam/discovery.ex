@@ -1,29 +1,26 @@
 defmodule MABEAM.Discovery do
   @moduledoc """
-  Domain-specific discovery APIs for agents using atomic queries.
+  Composed multi-criteria discovery APIs for agents using atomic queries.
 
-  All multi-criteria searches use atomic ETS operations for maximum performance,
-  avoiding N+1 query patterns and application-level filtering.
+  This module provides VALUE-ADDED discovery functions that compose multiple
+  criteria into single atomic ETS operations. Simple single-attribute lookups
+  should use Foundation.find_by_attribute/3 directly.
 
   ## Performance Characteristics
 
-  - Single attribute lookups: O(1) via ETS indexes
   - Multi-criteria queries: O(1) via atomic ETS match_spec
   - Memory efficient: No intermediate result sets
   - Highly concurrent: Direct ETS reads with no process bottlenecks
 
   ## Usage Examples
 
-      # Find agents by single capability
-      {:ok, agents} = MABEAM.Discovery.find_by_capability(:inference)
+      # Use Foundation directly for single attributes
+      {:ok, agents} = Foundation.find_by_attribute(:capability, :inference)
+      {:ok, agents} = Foundation.find_by_attribute(:node, :my_node)
 
-      # Find healthy agents with specific capability (atomic query)
+      # Use Discovery for multi-criteria atomic queries
       agents = MABEAM.Discovery.find_capable_and_healthy(:training)
-
-      # Find agents with sufficient resources (atomic query)
       agents = MABEAM.Discovery.find_agents_with_resources(0.5, 0.3)
-
-      # Complex multi-criteria search (single atomic query)
       agents = MABEAM.Discovery.find_capable_agents_with_resources(:inference, 0.7, 0.5)
   """
 
@@ -31,26 +28,8 @@ defmodule MABEAM.Discovery do
 
   # --- Single-Criteria Searches (O(1) ETS Index Lookups) ---
 
-  @doc """
-  Finds agents by capability using O(1) ETS index lookup.
-
-  ## Parameters
-  - `capability`: The capability to search for
-  - `impl`: Optional explicit registry implementation
-
-  ## Returns
-  - `{:ok, [{agent_id, pid, metadata}]}` on success
-  - `{:error, term}` on failure
-
-  ## Examples
-      {:ok, inference_agents} = MABEAM.Discovery.find_by_capability(:inference)
-      {:ok, training_agents} = MABEAM.Discovery.find_by_capability(:training)
-  """
-  @spec find_by_capability(capability :: atom(), impl :: term() | nil) ::
-          {:ok, list({agent_id :: term(), pid(), metadata :: map()})} | {:error, term()}
-  def find_by_capability(capability, impl \\ nil) do
-    Foundation.find_by_attribute(:capability, capability, impl)
-  end
+  # Simple alias function removed per review guidance.
+  # Use Foundation.find_by_attribute(:capability, capability, impl) directly.
 
   @doc """
   Finds all healthy agents using O(1) ETS index lookup.
@@ -74,22 +53,8 @@ defmodule MABEAM.Discovery do
     end
   end
 
-  @doc """
-  Finds agents on a specific node using O(1) ETS index lookup.
-
-  ## Parameters
-  - `node`: The node to search for agents on
-  - `impl`: Optional explicit registry implementation
-
-  ## Returns
-  - `{:ok, [{agent_id, pid, metadata}]}` on success
-  - `{:error, term}` on failure
-  """
-  @spec find_agents_on_node(node :: atom(), impl :: term() | nil) ::
-          {:ok, list({agent_id :: term(), pid(), metadata :: map()})} | {:error, term()}
-  def find_agents_on_node(node, impl \\ nil) do
-    Foundation.find_by_attribute(:node, node, impl)
-  end
+  # Simple alias function removed per review guidance.
+  # Use Foundation.find_by_attribute(:node, node, impl) directly.
 
   # --- Multi-Criteria Searches (Atomic ETS Queries) ---
 
@@ -434,14 +399,7 @@ defmodule MABEAM.Discovery do
 
   # --- Testing Support Functions ---
 
-  @doc """
-  Testing helper: find by capability with explicit implementation.
-  """
-  @spec find_by_capability_with_explicit_impl(capability :: atom(), impl :: term()) ::
-          {:ok, list({agent_id :: term(), pid(), metadata :: map()})} | {:error, term()}
-  def find_by_capability_with_explicit_impl(capability, impl) do
-    Foundation.find_by_attribute(:capability, capability, impl)
-  end
+  # Simple alias removed. Use Foundation.find_by_attribute(:capability, capability, impl) directly.
 
   @doc """
   Testing helper: find capable and healthy with explicit implementation.
