@@ -183,20 +183,29 @@ defmodule MLFoundation.VariablePrimitives do
 
     # Use Foundation's atomic transaction
     AtomicTransaction.transact(fn tx ->
-      results =
-        Enum.map(updates, fn {var_name, new_value} ->
-          case update_in_transaction(var_name, new_value, space_id, tx) do
-            {:ok, updated} -> {:ok, {var_name, updated}}
-            error -> error
-          end
-        end)
+      perform_atomic_updates(updates, space_id, tx)
+    end)
+  end
 
-      # Check if all updates succeeded
-      case Enum.find(results, &match?({:error, _}, &1)) do
-        nil -> {:ok, Map.new(results, fn {:ok, pair} -> pair end)}
+  defp perform_atomic_updates(updates, space_id, tx) do
+    results = execute_variable_updates(updates, space_id, tx)
+    process_update_results(results)
+  end
+
+  defp execute_variable_updates(updates, space_id, tx) do
+    Enum.map(updates, fn {var_name, new_value} ->
+      case update_in_transaction(var_name, new_value, space_id, tx) do
+        {:ok, updated} -> {:ok, {var_name, updated}}
         error -> error
       end
     end)
+  end
+
+  defp process_update_results(results) do
+    case Enum.find(results, &match?({:error, _}, &1)) do
+      nil -> {:ok, Map.new(results, fn {:ok, pair} -> pair end)}
+      error -> error
+    end
   end
 
   # Variable Coordination

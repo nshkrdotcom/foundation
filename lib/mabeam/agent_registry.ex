@@ -124,76 +124,87 @@ defmodule MABEAM.AgentRegistry do
   # Write Operations
 
   def handle_call({:register, agent_id, pid, metadata}, _from, state) do
-    # Check resource availability first if ResourceManager is available
-    resource_check =
-      if Process.whereis(Foundation.ResourceManager) do
-        Foundation.ResourceManager.acquire_resource(:register_agent, %{
-          agent_id: agent_id,
-          registry_id: state.registry_id
-        })
-      else
-        {:ok, nil}
-      end
-
-    case resource_check do
+    case acquire_registration_resource(agent_id, state.registry_id) do
       {:ok, resource_token} ->
-        # Proceed with registration
-        result =
-          with :ok <- validate_agent_metadata(metadata),
-               true <- Process.alive?(pid),
-               false <- :ets.member(state.main_table, agent_id) do
-            # Atomic registration - all operations in single GenServer call
-            # This provides atomicity through GenServer serialization
-            monitor_ref = Process.monitor(pid)
-            entry = {agent_id, pid, metadata, :os.timestamp()}
-
-            # Use insert_new for additional safety - fails if key already exists
-            case :ets.insert_new(state.main_table, entry) do
-              true ->
-                # Update all indexes atomically within same call
-                update_all_indexes(state, agent_id, metadata)
-
-                # Track monitor reference
-                new_monitors = Map.put(state.monitors, monitor_ref, agent_id)
-
-                Logger.debug(
-                  "Registered agent #{inspect(agent_id)} with capabilities #{inspect(metadata.capability)}"
-                )
-
-                {:reply, :ok, %{state | monitors: new_monitors}}
-
-              false ->
-                # Cleanup monitor and return error
-                Process.demonitor(monitor_ref, [:flush])
-                {:reply, {:error, :already_exists}, state}
-            end
-          else
-            false ->
-              # Process is dead
-              {:reply, {:error, :process_not_alive}, state}
-
-            true ->
-              # Agent already exists
-              {:reply, {:error, :already_exists}, state}
-
-            error ->
-              {:reply, error, state}
-          end
-
-        # Release resource token if registration failed
-        case result do
-          {:reply, :ok, _} ->
-            result
-
-          error_result ->
-            if resource_token, do: Foundation.ResourceManager.release_resource(resource_token)
-            error_result
-        end
+        register_with_resource(agent_id, pid, metadata, state, resource_token)
 
       {:error, reason} ->
         Logger.warning("Resource manager denied registration: #{inspect(reason)}")
         {:reply, {:error, {:resource_exhausted, reason}}, state}
     end
+  end
+
+  defp acquire_registration_resource(agent_id, registry_id) do
+    if Process.whereis(Foundation.ResourceManager) do
+      Foundation.ResourceManager.acquire_resource(:register_agent, %{
+        agent_id: agent_id,
+        registry_id: registry_id
+      })
+    else
+      {:ok, nil}
+    end
+  end
+
+  defp register_with_resource(agent_id, pid, metadata, state, resource_token) do
+    result = perform_registration(agent_id, pid, metadata, state)
+
+    # Release resource token if registration failed
+    case result do
+      {:reply, :ok, _} ->
+        result
+
+      error_result ->
+        if resource_token, do: Foundation.ResourceManager.release_resource(resource_token)
+        error_result
+    end
+  end
+
+  defp perform_registration(agent_id, pid, metadata, state) do
+    with :ok <- validate_agent_metadata(metadata),
+         :ok <- validate_process_alive(pid),
+         :ok <- validate_agent_not_exists(state.main_table, agent_id) do
+      atomic_register(agent_id, pid, metadata, state)
+    else
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  defp validate_process_alive(pid) do
+    if Process.alive?(pid), do: :ok, else: {:error, :process_not_alive}
+  end
+
+  defp validate_agent_not_exists(table, agent_id) do
+    if :ets.member(table, agent_id), do: {:error, :already_exists}, else: :ok
+  end
+
+  defp atomic_register(agent_id, pid, metadata, state) do
+    monitor_ref = Process.monitor(pid)
+    entry = {agent_id, pid, metadata, :os.timestamp()}
+
+    case :ets.insert_new(state.main_table, entry) do
+      true ->
+        complete_registration(agent_id, metadata, monitor_ref, state)
+
+      false ->
+        # Cleanup monitor and return error
+        Process.demonitor(monitor_ref, [:flush])
+        {:reply, {:error, :already_exists}, state}
+    end
+  end
+
+  defp complete_registration(agent_id, metadata, monitor_ref, state) do
+    # Update all indexes atomically within same call
+    update_all_indexes(state, agent_id, metadata)
+
+    # Track monitor reference
+    new_monitors = Map.put(state.monitors, monitor_ref, agent_id)
+
+    Logger.debug(
+      "Registered agent #{inspect(agent_id)} with capabilities #{inspect(metadata.capability)}"
+    )
+
+    {:reply, :ok, %{state | monitors: new_monitors}}
   end
 
   def handle_call({:update_metadata, agent_id, new_metadata}, _from, state) do
@@ -418,28 +429,36 @@ defmodule MABEAM.AgentRegistry do
         {:noreply, state}
 
       agent_id ->
-        Logger.info("Agent #{inspect(agent_id)} process died (#{inspect(reason)}), cleaning up")
+        handle_agent_down(agent_id, monitor_ref, reason, state)
+    end
+  end
 
-        # Atomic cleanup - all operations in single GenServer message handler
-        # This provides atomicity through GenServer serialization
-        :ets.delete(state.main_table, agent_id)
-        clear_agent_from_indexes(state, agent_id)
+  defp handle_agent_down(agent_id, monitor_ref, reason, state) do
+    Logger.info("Agent #{inspect(agent_id)} process died (#{inspect(reason)}), cleaning up")
 
-        # Remove from monitors
-        new_monitors = Map.delete(state.monitors, monitor_ref)
+    # Atomic cleanup - all operations in single GenServer message handler
+    # This provides atomicity through GenServer serialization
+    :ets.delete(state.main_table, agent_id)
+    clear_agent_from_indexes(state, agent_id)
 
-        # Notify ResourceManager about cleanup if available
-        if Process.whereis(Foundation.ResourceManager) do
-          spawn(fn ->
-            Foundation.ResourceManager.release_resource(%{
-              id: agent_id,
-              type: :register_agent,
-              metadata: %{agent_id: agent_id, cleanup_reason: reason}
-            })
-          end)
-        end
+    # Remove from monitors
+    new_monitors = Map.delete(state.monitors, monitor_ref)
 
-        {:noreply, %{state | monitors: new_monitors}}
+    # Notify ResourceManager about cleanup if available
+    notify_resource_manager_cleanup(agent_id, reason)
+
+    {:noreply, %{state | monitors: new_monitors}}
+  end
+
+  defp notify_resource_manager_cleanup(agent_id, reason) do
+    if Process.whereis(Foundation.ResourceManager) do
+      spawn(fn ->
+        Foundation.ResourceManager.release_resource(%{
+          id: agent_id,
+          type: :register_agent,
+          metadata: %{agent_id: agent_id, cleanup_reason: reason}
+        })
+      end)
     end
   end
 

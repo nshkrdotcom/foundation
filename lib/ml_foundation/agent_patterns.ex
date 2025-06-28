@@ -687,16 +687,21 @@ defmodule MLFoundation.AgentPatterns.TransformerAgent do
     results =
       data
       |> Enum.chunk_every(batch_size)
-      |> Enum.map(fn batch ->
-        Enum.map(batch, fn item ->
-          case apply_single_transformation(item, transformation) do
-            {:ok, result} -> result
-            {:error, _} = error -> error
-          end
-        end)
-      end)
-      |> List.flatten()
+      |> Enum.flat_map(&transform_batch(&1, transformation))
 
+    validate_transformation_results(results)
+  end
+
+  defp transform_batch(batch, transformation) do
+    Enum.map(batch, fn item ->
+      case apply_single_transformation(item, transformation) do
+        {:ok, result} -> result
+        {:error, _} = error -> error
+      end
+    end)
+  end
+
+  defp validate_transformation_results(results) do
     if Enum.any?(results, &match?({:error, _}, &1)) do
       {:error, :transformation_failed}
     else
@@ -757,30 +762,38 @@ defmodule MLFoundation.AgentPatterns.OptimizerAgent do
   end
 
   defp optimize_loop(current, current_score, iteration, state, step_fn) do
-    if iteration >= state.max_iterations do
-      {:ok, %{solution: current, score: current_score, iterations: iteration}}
+    cond do
+      iteration >= state.max_iterations ->
+        {:ok, %{solution: current, score: current_score, iterations: iteration}}
+
+      true ->
+        perform_optimization_step(current, current_score, iteration, state, step_fn)
+    end
+  end
+
+  defp perform_optimization_step(current, current_score, iteration, state, step_fn) do
+    # Generate next candidate
+    candidate = step_fn.(current, state)
+    candidate_score = state.objective_fn.(candidate)
+
+    # Check improvement
+    improvement = abs(candidate_score - current_score)
+
+    if improvement < state.convergence_threshold do
+      {:ok,
+       %{solution: candidate, score: candidate_score, iterations: iteration + 1, converged: true}}
     else
-      # Generate next candidate
-      candidate = step_fn.(current, state)
-      candidate_score = state.objective_fn.(candidate)
+      # Select best and continue
+      {next, next_score} = select_best_candidate(current, current_score, candidate, candidate_score)
+      optimize_loop(next, next_score, iteration + 1, state, step_fn)
+    end
+  end
 
-      # Check improvement
-      improvement = abs(candidate_score - current_score)
-
-      if improvement < state.convergence_threshold do
-        {:ok,
-         %{solution: candidate, score: candidate_score, iterations: iteration + 1, converged: true}}
-      else
-        # Continue optimization
-        {next, next_score} =
-          if candidate_score < current_score do
-            {candidate, candidate_score}
-          else
-            {current, current_score}
-          end
-
-        optimize_loop(next, next_score, iteration + 1, state, step_fn)
-      end
+  defp select_best_candidate(current, current_score, candidate, candidate_score) do
+    if candidate_score < current_score do
+      {candidate, candidate_score}
+    else
+      {current, current_score}
     end
   end
 
