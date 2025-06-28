@@ -7,7 +7,7 @@ defmodule Foundation.Infrastructure.AgentCircuitBreakerTest do
 
   setup do
     namespace = {:test, make_ref()}
-    
+
     # Register test agent
     pid = spawn(fn -> Process.sleep(2000) end)
     agent_metadata = %AgentInfo{
@@ -44,7 +44,7 @@ defmodule Foundation.Infrastructure.AgentCircuitBreakerTest do
 
       assert is_pid(breaker_pid)
 
-      assert {:ok, status} = 
+      assert {:ok, status} =
         AgentCircuitBreaker.get_agent_status(:ml_inference_service, :test_agent)
 
       assert status.agent_id == :test_agent
@@ -230,7 +230,7 @@ defmodule Foundation.Infrastructure.AgentCircuitBreakerTest do
 
       operation = fn ->
         # This would normally receive agent context
-        Agent.update(context_received, fn _ -> 
+        Agent.update(context_received, fn _ ->
           %{agent_id: :test_agent, capability: :inference}
         end)
         {:ok, "with_context"}
@@ -311,14 +311,14 @@ defmodule Foundation.Infrastructure.AgentCircuitBreakerTest do
 
       # Set up telemetry handler to capture events
       events = Agent.start_link(fn -> [] end)
-      
+
       handler_id = :test_circuit_breaker_handler
       :telemetry.attach(
         handler_id,
         [:foundation, :circuit_breaker, :execute],
         fn event, measurements, metadata, _config ->
-          Agent.update(events, fn acc -> 
-            [{event, measurements, metadata} | acc] 
+          Agent.update(events, fn acc ->
+            [{event, measurements, metadata} | acc]
           end)
         end,
         nil
@@ -334,14 +334,14 @@ defmodule Foundation.Infrastructure.AgentCircuitBreakerTest do
       # Check telemetry events were emitted
       Process.sleep(10)  # Allow telemetry to be processed
       captured_events = Agent.get(events, & &1)
-      
+
       assert length(captured_events) > 0
-      
+
       # Find circuit breaker event
       circuit_event = Enum.find(captured_events, fn {event, _measurements, _metadata} ->
         event == [:foundation, :circuit_breaker, :execute]
       end)
-      
+
       assert circuit_event != nil
       {_event, measurements, metadata} = circuit_event
       assert metadata.agent_id == :test_agent

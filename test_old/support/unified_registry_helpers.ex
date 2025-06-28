@@ -2,7 +2,7 @@ defmodule Foundation.TestHelpers.UnifiedRegistry do
   @moduledoc """
   Unified test helpers for the consolidated Foundation.ProcessRegistry.
 
-  This module provides a single, consistent interface for testing both basic 
+  This module provides a single, consistent interface for testing both basic
   service registration and advanced agent management functionality across
   different backend implementations.
 
@@ -142,8 +142,8 @@ defmodule Foundation.TestHelpers.UnifiedRegistry do
   ## Examples
 
       config = create_test_agent_config(:worker1, TestWorker, [])
-      config = create_test_agent_config(:ml_agent, MLWorker, [], 
-        capabilities: [:compute, :ml], 
+      config = create_test_agent_config(:ml_agent, MLWorker, [],
+        capabilities: [:compute, :ml],
         type: :ml_worker
       )
   """

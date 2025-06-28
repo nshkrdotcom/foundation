@@ -8,7 +8,7 @@ defmodule Foundation.ProcessRegistryAgentTest do
   setup do
     # Ensure clean state for each test
     namespace = {:test, make_ref()}
-    
+
     on_exit(fn ->
       # Cleanup any registered agents in test namespace
       try do
@@ -20,7 +20,7 @@ defmodule Foundation.ProcessRegistryAgentTest do
         _ -> :ok
       end
     end)
-    
+
     {:ok, namespace: namespace}
   end
 
@@ -53,7 +53,7 @@ defmodule Foundation.ProcessRegistryAgentTest do
         agent_metadata
       )
 
-      assert {:ok, {^pid, returned_metadata}} = 
+      assert {:ok, {^pid, returned_metadata}} =
         ProcessRegistry.lookup_agent(namespace, :ml_agent_1)
 
       assert %AgentInfo{} = returned_metadata
@@ -84,7 +84,7 @@ defmodule Foundation.ProcessRegistryAgentTest do
 
     test "updates agent metadata", %{namespace: namespace} do
       pid = spawn(fn -> Process.sleep(1000) end)
-      
+
       initial_metadata = %AgentInfo{
         id: :test_agent,
         type: :agent,
@@ -96,15 +96,15 @@ defmodule Foundation.ProcessRegistryAgentTest do
 
       # Update agent health and capabilities
       updated_metadata = %AgentInfo{
-        initial_metadata | 
+        initial_metadata |
         health: :degraded,
         capabilities: [:general, :specialized],
         resource_usage: %{memory: 0.95, cpu: 0.8}
       }
 
       assert :ok = ProcessRegistry.update_agent_metadata(
-        namespace, 
-        :test_agent, 
+        namespace,
+        :test_agent,
         updated_metadata
       )
 
@@ -120,7 +120,7 @@ defmodule Foundation.ProcessRegistryAgentTest do
       # Register multiple agents with different capabilities
       agents = [
         {:nlp_agent_1, [:nlp, :tokenization], :healthy},
-        {:nlp_agent_2, [:nlp, :classification], :healthy}, 
+        {:nlp_agent_2, [:nlp, :classification], :healthy},
         {:ml_agent_1, [:training, :inference], :healthy},
         {:coord_agent_1, [:coordination, :scheduling], :healthy}
       ]
@@ -129,7 +129,7 @@ defmodule Foundation.ProcessRegistryAgentTest do
         pid = spawn(fn -> Process.sleep(1000) end)
         metadata = %AgentInfo{
           id: agent_id,
-          type: :agent, 
+          type: :agent,
           capabilities: capabilities,
           health: health
         }
@@ -139,7 +139,7 @@ defmodule Foundation.ProcessRegistryAgentTest do
       # Test capability-based queries
       nlp_agents = ProcessRegistry.lookup_agents_by_capability(namespace, :nlp)
       assert length(nlp_agents) == 2
-      
+
       agent_ids = Enum.map(nlp_agents, fn {agent_id, _pid, _metadata} -> agent_id end)
       assert :nlp_agent_1 in agent_ids
       assert :nlp_agent_2 in agent_ids
@@ -169,10 +169,10 @@ defmodule Foundation.ProcessRegistryAgentTest do
 
       # Find agents with both :nlp AND :classification
       matching_agents = ProcessRegistry.lookup_agents_by_capabilities(
-        namespace, 
+        namespace,
         [:nlp, :classification]
       )
-      
+
       assert length(matching_agents) == 1
       assert {:multi_agent_1, _pid, _metadata} = hd(matching_agents)
     end
@@ -198,10 +198,10 @@ defmodule Foundation.ProcessRegistryAgentTest do
 
       # Get only healthy agents with NLP capability
       healthy_nlp_agents = ProcessRegistry.lookup_healthy_agents_by_capability(
-        namespace, 
+        namespace,
         :nlp
       )
-      
+
       assert length(healthy_nlp_agents) == 2
       agent_ids = Enum.map(healthy_nlp_agents, fn {id, _pid, _meta} -> id end)
       assert :healthy_agent_1 in agent_ids
@@ -214,7 +214,7 @@ defmodule Foundation.ProcessRegistryAgentTest do
   describe "agent health monitoring" do
     test "tracks agent health changes over time", %{namespace: namespace} do
       pid = spawn(fn -> Process.sleep(1000) end)
-      
+
       initial_metadata = %AgentInfo{
         id: :health_test_agent,
         type: :agent,
@@ -227,11 +227,11 @@ defmodule Foundation.ProcessRegistryAgentTest do
       # Simulate health degradation
       degraded_time = DateTime.utc_now()
       degraded_metadata = %AgentInfo{
-        initial_metadata | 
+        initial_metadata |
         health: :degraded,
         last_health_check: degraded_time
       }
-      
+
       ProcessRegistry.update_agent_metadata(namespace, :health_test_agent, degraded_metadata)
 
       {:ok, {^pid, metadata}} = ProcessRegistry.lookup_agent(namespace, :health_test_agent)
@@ -246,7 +246,7 @@ defmodule Foundation.ProcessRegistryAgentTest do
     test "provides system-wide health overview", %{namespace: namespace} do
       # Register agents with different health states
       health_states = [:healthy, :healthy, :degraded, :unhealthy]
-      
+
       for {i, health} <- Enum.with_index(health_states) do
         pid = spawn(fn -> Process.sleep(1000) end)
         metadata = %AgentInfo{
@@ -259,7 +259,7 @@ defmodule Foundation.ProcessRegistryAgentTest do
       end
 
       health_overview = ProcessRegistry.get_system_health_overview(namespace)
-      
+
       assert health_overview.total_agents == 4
       assert health_overview.healthy_count == 2
       assert health_overview.degraded_count == 1
@@ -271,7 +271,7 @@ defmodule Foundation.ProcessRegistryAgentTest do
   describe "agent resource monitoring" do
     test "tracks agent resource usage", %{namespace: namespace} do
       pid = spawn(fn -> Process.sleep(1000) end)
-      
+
       resource_usage = %{
         memory: 0.75,
         cpu: 0.85,
@@ -295,7 +295,7 @@ defmodule Foundation.ProcessRegistryAgentTest do
         :memory,
         0.7  # threshold
       )
-      
+
       assert length(high_memory_agents) == 1
       assert {:resource_agent, ^pid, _metadata} = hd(high_memory_agents)
     end
@@ -319,7 +319,7 @@ defmodule Foundation.ProcessRegistryAgentTest do
       end
 
       resource_stats = ProcessRegistry.get_resource_usage_stats(namespace)
-      
+
       assert resource_stats.average_memory_usage == 0.7  # (0.5 + 0.7 + 0.9) / 3
       assert resource_stats.max_memory_usage == 0.9
       assert resource_stats.agents_count == 3
@@ -329,7 +329,7 @@ defmodule Foundation.ProcessRegistryAgentTest do
   describe "agent coordination state" do
     test "tracks coordination participation", %{namespace: namespace} do
       pid = spawn(fn -> Process.sleep(1000) end)
-      
+
       coordination_state = %{
         active_consensus: [:model_selection_round_1],
         active_barriers: [:training_phase_complete],
@@ -351,7 +351,7 @@ defmodule Foundation.ProcessRegistryAgentTest do
       assert length(active_coordinators) == 1
 
       consensus_participants = ProcessRegistry.lookup_agents_in_consensus(
-        namespace, 
+        namespace,
         :model_selection_round_1
       )
       assert length(consensus_participants) == 1
@@ -364,13 +364,13 @@ defmodule Foundation.ProcessRegistryAgentTest do
       capability_sets <- list_of(list_of(atom(), min_length: 1), min_length: 1)
     ) do
       namespace = {:test, make_ref()}
-      
+
       # Test concurrent agent registration maintains metadata consistency
       tasks = for i <- 1..agent_count do
         Task.async(fn ->
           pid = spawn(fn -> Process.sleep(100) end)
           capabilities = Enum.at(capability_sets, rem(i, length(capability_sets)))
-          
+
           metadata = %AgentInfo{
             id: :"agent_#{i}",
             type: :agent,
@@ -387,14 +387,14 @@ defmodule Foundation.ProcessRegistryAgentTest do
 
       # Verify all agents registered correctly
       for i <- 1..agent_count do
-        assert {:ok, {_pid, _metadata}} = 
+        assert {:ok, {_pid, _metadata}} =
           ProcessRegistry.lookup_agent(namespace, :"agent_#{i}")
       end
 
       # Test capability-based queries work correctly
       for capability <- Enum.uniq(List.flatten(capability_sets)) do
         agents_with_capability = ProcessRegistry.lookup_agents_by_capability(
-          namespace, 
+          namespace,
           capability
         )
 
@@ -416,17 +416,17 @@ defmodule Foundation.ProcessRegistryAgentTest do
   describe "backward compatibility" do
     test "existing ProcessRegistry API still works", %{namespace: namespace} do
       pid = spawn(fn -> Process.sleep(1000) end)
-      
+
       # Test basic registration (legacy API)
       assert :ok = ProcessRegistry.register(namespace, :legacy_service, pid)
       assert {:ok, ^pid} = ProcessRegistry.lookup(namespace, :legacy_service)
-      
+
       # Test with metadata (legacy API)
       basic_metadata = %{type: :service, version: "1.0"}
       assert :ok = ProcessRegistry.register(namespace, :legacy_with_meta, pid, basic_metadata)
-      
+
       assert {:ok, {^pid, ^basic_metadata}} = ProcessRegistry.lookup(
-        namespace, 
+        namespace,
         :legacy_with_meta
       )
     end
@@ -448,7 +448,7 @@ defmodule Foundation.ProcessRegistryAgentTest do
       # Both should be accessible through their respective APIs
       assert {:ok, ^legacy_pid} = ProcessRegistry.lookup(namespace, :legacy_service)
       assert {:ok, {^agent_pid, %AgentInfo{}}} = ProcessRegistry.lookup_agent(
-        namespace, 
+        namespace,
         :modern_agent
       )
 

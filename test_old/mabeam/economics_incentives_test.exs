@@ -4,7 +4,7 @@ defmodule MABEAM.EconomicsIncentivesTest do
 
   Tests cover:
   - Reputation-based incentive systems
-  - Market-based coordination mechanisms  
+  - Market-based coordination mechanisms
   - Incentive-compatible consensus algorithms
   - Cost-benefit optimization
   - Dynamic pricing mechanisms
@@ -880,7 +880,7 @@ defmodule MABEAM.EconomicsIncentivesTest do
           agent_id: :agent_b,
           task_id: :task_2,
           progress: 0.6,
-          # Above target  
+          # Above target
           current_quality: 0.91,
           # Below expected
           cost_burn_rate: 0.8,
@@ -1038,7 +1038,7 @@ defmodule MABEAM.EconomicsIncentivesTest do
       assert high_demand_change > 1.0
       assert high_demand_price > balanced_price
 
-      # Low demand should decrease prices  
+      # Low demand should decrease prices
       assert low_demand_change < 1.0
       assert low_demand_price < balanced_price
 
@@ -1278,7 +1278,7 @@ defmodule MABEAM.EconomicsIncentivesTest do
       assert risky_slashing.slashed_amount >= 150.0 * 0.25
       assert risky_slashing.remaining_stake < 150.0
 
-      # Verify task abandonment penalty  
+      # Verify task abandonment penalty
       assert average_slashing.penalty_applied == true
       assert average_slashing.slashed_amount >= 100.0 * 0.1
       assert average_slashing.remaining_stake < 100.0

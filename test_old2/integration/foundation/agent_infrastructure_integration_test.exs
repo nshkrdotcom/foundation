@@ -14,7 +14,7 @@ defmodule Foundation.AgentInfrastructureIntegrationTest do
 
   setup do
     namespace = {:test, make_ref()}
-    
+
     # Start all infrastructure services for integration testing
     services = [
       {AgentRateLimiter, [
@@ -85,7 +85,7 @@ defmodule Foundation.AgentInfrastructureIntegrationTest do
       )
 
       # 2. Set up comprehensive infrastructure protection
-      
+
       # Circuit Breaker
       {:ok, _breaker} = AgentCircuitBreaker.start_agent_breaker(
         :ml_service,
@@ -104,7 +104,7 @@ defmodule Foundation.AgentInfrastructureIntegrationTest do
       operation_results = for i <- 1..20 do
         Task.async(fn ->
           operation_id = "integration_op_#{i}"
-          
+
           # Check rate limits
           case AgentRateLimiter.check_rate_with_agent(
             :integration_agent,
@@ -121,10 +121,10 @@ defmodule Foundation.AgentInfrastructureIntegrationTest do
                   ResourceManager.allocate_resources(:integration_agent, %{
                     memory: 100_000_000  # 100MB per operation
                   })
-                  
+
                   # Simulate processing time
                   Process.sleep(10 + :rand.uniform(40))  # 10-50ms
-                  
+
                   # Record telemetry
                   TelemetryService.record_metric(
                     [:integration, :operation, :duration],
@@ -136,7 +136,7 @@ defmodule Foundation.AgentInfrastructureIntegrationTest do
                       namespace: namespace
                     }
                   )
-                  
+
                   # Store completion event
                   event = %Foundation.Types.Event{
                     id: UUID.uuid4(),
@@ -150,19 +150,19 @@ defmodule Foundation.AgentInfrastructureIntegrationTest do
                     timestamp: DateTime.utc_now()
                   }
                   EventStore.store_event(event)
-                  
+
                   # Release resources
                   ResourceManager.release_resources(:integration_agent, %{
                     memory: 100_000_000
                   })
-                  
+
                   {:ok, "operation_#{i}_completed"}
                 end,
                 %{operation_id: operation_id}
               )
-              
+
               result
-            
+
             {:error, _rate_limit_reason} = error ->
               # Record rate limit event
               event = %Foundation.Types.Event{
@@ -173,7 +173,7 @@ defmodule Foundation.AgentInfrastructureIntegrationTest do
                 timestamp: DateTime.utc_now()
               }
               EventStore.store_event(event)
-              
+
               error
           end
         end)
@@ -181,46 +181,46 @@ defmodule Foundation.AgentInfrastructureIntegrationTest do
 
       # 4. Wait for all operations and verify results
       results = Task.await_many(operation_results, 15_000)
-      
+
       successful_operations = Enum.count(results, &match?({:ok, _}, &1))
       rate_limited_operations = Enum.count(results, &match?({:error, :rate_limited}, &1))
       circuit_failures = Enum.count(results, &match?({:error, :circuit_open}, &1))
-      
+
       # Should have mix of successful and protected operations
       assert successful_operations > 0
       assert successful_operations + rate_limited_operations + circuit_failures == 20
-      
+
       # 5. Verify infrastructure state and metrics
-      
+
       # Agent should still be registered and healthy
       assert {:ok, {^pid, updated_metadata}} = ProcessRegistry.lookup_agent(
         namespace,
         :integration_agent
       )
       assert updated_metadata.id == :integration_agent
-      
+
       # Resource manager should show consistent state
       {:ok, resource_status} = ResourceManager.get_agent_resource_status(:integration_agent)
       assert resource_status.current_usage.memory == 0  # All resources released
-      
+
       # Circuit breaker should have recorded operations
       {:ok, circuit_status} = AgentCircuitBreaker.get_agent_status(
         :ml_service,
         :integration_agent
       )
       assert circuit_status.total_operations >= successful_operations
-      
+
       # Rate limiter should have statistics
       rate_stats = AgentRateLimiter.get_agent_stats(:integration_agent)
       assert rate_stats.total_requests >= 20
-      
+
       # Event store should have operation events
       {:ok, events} = EventStore.query_events(%{
         agent_id: :integration_agent,
         namespace: namespace
       })
       assert length(events) >= successful_operations
-      
+
       # Telemetry should have recorded metrics
       TelemetryService.trigger_aggregation()
       {:ok, metrics} = TelemetryService.get_aggregated_metrics(%{
@@ -228,7 +228,7 @@ defmodule Foundation.AgentInfrastructureIntegrationTest do
         namespace: namespace
       })
       assert length(metrics) > 0
-      
+
       # 6. Cleanup
       ProcessRegistry.unregister(namespace, :integration_agent)
     end
@@ -253,7 +253,7 @@ defmodule Foundation.AgentInfrastructureIntegrationTest do
 
         ProcessRegistry.register_agent(namespace, agent_id, pid, metadata)
         ResourceManager.register_agent(agent_id, limits)
-        
+
         # Set up circuit breakers for each agent
         {:ok, _} = AgentCircuitBreaker.start_agent_breaker(
           :multi_agent_service,
@@ -323,11 +323,11 @@ defmodule Foundation.AgentInfrastructureIntegrationTest do
                     {:ok, "processed_by_#{agent_id}"}
                   end
                 )
-              
+
               error -> error
             end
           end
-          
+
           {agent_id, results}
         end)
       end
@@ -338,11 +338,11 @@ defmodule Foundation.AgentInfrastructureIntegrationTest do
 
       # Wait for concurrent load to complete
       load_results = Task.await_many(concurrent_load_tasks, 20_000)
-      
+
       # Verify infrastructure handled coordination and load appropriately
       for {agent_id, results} <- load_results do
         successful_ops = Enum.count(results, &match?({:ok, _}, &1))
-        
+
         # High performance agent should handle more load
         case agent_id do
           :high_perf_agent -> assert successful_ops >= 10
@@ -354,7 +354,7 @@ defmodule Foundation.AgentInfrastructureIntegrationTest do
       # Verify system-wide infrastructure health
       {:ok, system_health} = ResourceManager.get_system_resource_status()
       assert system_health.agent_count == 3
-      
+
       # All agents should have clean resource state
       for {agent_id, _pid} <- agent_pids do
         {:ok, agent_status} = ResourceManager.get_agent_resource_status(agent_id)
@@ -373,7 +373,7 @@ defmodule Foundation.AgentInfrastructureIntegrationTest do
     test "system resilience during cascading failures", %{namespace: namespace} do
       # Set up agents in a dependency chain
       agents = [:primary_agent, :secondary_agent, :backup_agent]
-      
+
       for agent_id <- agents do
         pid = spawn(fn -> Process.sleep(8000) end)
         metadata = %AgentInfo{
@@ -464,7 +464,7 @@ defmodule Foundation.AgentInfrastructureIntegrationTest do
                   end
                 end
               )
-            
+
             error -> error
           end
         end
@@ -478,14 +478,14 @@ defmodule Foundation.AgentInfrastructureIntegrationTest do
 
       # Verify system maintained some level of service despite cascade
       assert successful_count > 0  # Backup agent should have handled some load
-      
+
       # Verify infrastructure detected and responded to failures
       {:ok, primary_status} = AgentCircuitBreaker.get_agent_status(
         :cascade_test_service,
         :primary_agent
       )
       assert primary_status.circuit_state == :open  # Should be open due to failures
-      
+
       # Backup agent should still be operational
       {:ok, backup_status} = AgentCircuitBreaker.get_agent_status(
         :cascade_test_service,
@@ -524,7 +524,7 @@ defmodule Foundation.AgentInfrastructureIntegrationTest do
 
       # Allocate some resources and record initial state
       ResourceManager.allocate_resources(:recovery_test_agent, %{memory: 500_000_000})
-      
+
       # Record some metrics
       TelemetryService.record_metric(
         [:recovery, :test],
@@ -545,11 +545,11 @@ defmodule Foundation.AgentInfrastructureIntegrationTest do
 
       # Simulate service restart by stopping and restarting components
       # (In real scenario, this would be supervisor restart)
-      
+
       # Verify state persistence and recovery
       {:ok, resource_status} = ResourceManager.get_agent_resource_status(:recovery_test_agent)
       assert resource_status.agent_id == :recovery_test_agent
-      
+
       {:ok, events_after} = EventStore.query_events(%{
         agent_id: :recovery_test_agent,
         namespace: namespace
@@ -586,7 +586,7 @@ defmodule Foundation.AgentInfrastructureIntegrationTest do
       agents = for i <- 1..agent_count do
         agent_id = :"perf_agent_#{i}"
         pid = spawn(fn -> Process.sleep(10_000) end)
-        
+
         metadata = %AgentInfo{
           id: agent_id,
           type: :ml_agent,
@@ -623,16 +623,16 @@ defmodule Foundation.AgentInfrastructureIntegrationTest do
                   :counter,
                   %{agent_id: agent_id, namespace: namespace}
                 )
-                
+
                 ResourceManager.allocate_resources(agent_id, %{memory: 10_000_000})
                 ResourceManager.release_resources(agent_id, %{memory: 10_000_000})
-                
+
                 {:ok, i}
-              
+
               error -> error
             end
           end
-          
+
           {agent_id, results}
         end)
       end
@@ -643,17 +643,17 @@ defmodule Foundation.AgentInfrastructureIntegrationTest do
 
       total_duration = end_time - start_time
       total_operations = agent_count * operations_per_agent
-      
+
       # Verify performance metrics
       assert total_duration < 10_000  # Should complete within 10 seconds
-      
+
       total_successful = all_results
                         |> Enum.flat_map(fn {_agent, results} -> results end)
                         |> Enum.count(&match?({:ok, _}, &1))
-      
+
       # Should achieve reasonable throughput even with rate limiting
       assert total_successful > total_operations * 0.5  # At least 50% success rate
-      
+
       operations_per_second = total_successful / (total_duration / 1000)
       assert operations_per_second > 50  # At least 50 ops/second
 

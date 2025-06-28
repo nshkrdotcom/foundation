@@ -1,7 +1,7 @@
 defmodule Foundation.AgentTestHelpers do
   @moduledoc """
   Test helpers for agent-aware testing scenarios.
-  
+
   Provides utilities for creating test agents, managing agent lifecycles,
   and setting up common test scenarios for agent-aware infrastructure.
   """
@@ -13,13 +13,13 @@ defmodule Foundation.AgentTestHelpers do
 
   @doc """
   Starts a test agent with specified capabilities and health.
-  
+
   Returns a tuple of {pid, metadata} for easy cleanup.
   """
   def start_test_agent(agent_id, capabilities \\ [:general], health \\ :healthy, opts \\ []) do
     namespace = Keyword.get(opts, :namespace, {:test, make_ref()})
-    
-    pid = spawn(fn -> 
+
+    pid = spawn(fn ->
       receive do
         :stop -> :ok
       after
@@ -75,7 +75,7 @@ defmodule Foundation.AgentTestHelpers do
   def update_agent_health(agent_id, new_health, namespace \\ {:test, make_ref()}) do
     {:ok, {pid, metadata}} = ProcessRegistry.lookup_agent(namespace, agent_id)
     updated_metadata = %AgentInfo{
-      metadata | 
+      metadata |
       health_metrics: %{status: new_health},
       last_updated: DateTime.utc_now()
     }
@@ -96,7 +96,7 @@ defmodule Foundation.AgentTestHelpers do
   """
   def create_agent_coordination_scenario(agent_ids, coordination_type \\ :consensus, opts \\ []) do
     namespace = Keyword.get(opts, :namespace, {:test, make_ref()})
-    
+
     agents = for agent_id <- agent_ids do
       capabilities = case coordination_type do
         :consensus -> [:coordination, :voting]
@@ -104,10 +104,10 @@ defmodule Foundation.AgentTestHelpers do
         :leader_election -> [:leadership]
         _ -> [:coordination]
       end
-      
+
       {pid, metadata} = start_test_agent(
-        agent_id, 
-        capabilities, 
+        agent_id,
+        capabilities,
         :healthy,
         [namespace: namespace] ++ opts
       )
@@ -133,16 +133,16 @@ defmodule Foundation.AgentTestHelpers do
   """
   def setup_agent_infrastructure(agents_config, opts \\ []) do
     namespace = Keyword.get(opts, :namespace, {:test, make_ref()})
-    
+
     # Start infrastructure services if not already started
     services = []
-    
+
     services = if Keyword.get(opts, :rate_limiter, true) do
       rate_limits = Keyword.get(opts, :rate_limits, %{
         inference: %{requests: 10, window: 1000},
         training: %{requests: 5, window: 2000}
       })
-      
+
       case AgentRateLimiter.start_link([rate_limits: rate_limits]) do
         {:ok, pid} -> [{:rate_limiter, pid} | services]
         {:error, {:already_started, pid}} -> [{:rate_limiter, pid} | services]
@@ -213,7 +213,7 @@ defmodule Foundation.AgentTestHelpers do
     # Cleanup agents
     for {agent_id, pid, _metadata} <- agents do
       stop_test_agent(agent_id, pid, namespace)
-      
+
       # Cleanup resource manager registration
       try do
         ResourceManager.unregister_agent(agent_id)
@@ -237,10 +237,10 @@ defmodule Foundation.AgentTestHelpers do
   """
   def generate_test_events(agent_id, event_types, count \\ 5) do
     correlation_id = "test_correlation_#{:rand.uniform(1000)}"
-    
+
     for i <- 1..count do
       event_type = Enum.random(event_types)
-      
+
       %Foundation.Types.Event{
         id: "test_event_#{agent_id}_#{i}",
         type: event_type,
@@ -261,7 +261,7 @@ defmodule Foundation.AgentTestHelpers do
   """
   def record_test_metrics(agent_id, metric_specs, opts \\ []) do
     namespace = Keyword.get(opts, :namespace, {:test, make_ref()})
-    
+
     for {metric_name, metric_type, values} <- metric_specs do
       for value <- values do
         TelemetryService.record_metric(
@@ -276,7 +276,7 @@ defmodule Foundation.AgentTestHelpers do
         )
       end
     end
-    
+
     # Trigger aggregation if requested
     if Keyword.get(opts, :trigger_aggregation, true) do
       TelemetryService.trigger_aggregation()
@@ -340,7 +340,7 @@ defmodule Foundation.AgentTestHelpers do
         fn -> unquote(condition) end,
         unquote(timeout)
       )
-      
+
       case result do
         :ok -> :ok
         {:error, :timeout} ->
@@ -366,7 +366,7 @@ defmodule Foundation.AgentTestHelpers do
   """
   def validate_infrastructure_health(infrastructure) do
     %{agents: agents, namespace: namespace} = infrastructure
-    
+
     # Check all agents are registered and accessible
     for {agent_id, _pid, _metadata} <- agents do
       assert {:ok, {_pid, _metadata}} = ProcessRegistry.lookup_agent(namespace, agent_id)
@@ -397,15 +397,15 @@ defmodule Foundation.AgentTestHelpers do
         sparse_count = 20
         burst_duration = div(duration_ms, 10)
         sparse_duration = duration_ms - burst_duration
-        
+
         burst_ops = for _i <- 1..burst_count do
           {Enum.random(agents), :inference, %{burst: true}, div(burst_duration, burst_count)}
         end
-        
+
         sparse_ops = for _i <- 1..sparse_count do
           {Enum.random(agents), :inference, %{sparse: true}, div(sparse_duration, sparse_count)}
         end
-        
+
         burst_ops ++ sparse_ops
 
       :ramp_up ->

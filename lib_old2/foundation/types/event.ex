@@ -1,37 +1,37 @@
 defmodule Foundation.Types.Event do
   @moduledoc """
   Comprehensive event type system for Foundation infrastructure.
-  
+
   Provides structured event definitions for all Foundation components,
   with support for agent context, coordination events, and infrastructure
   monitoring. Designed to enable rich observability and event-driven
   architectures in multi-agent environments.
-  
+
   ## Features
-  
+
   - **Structured Event Types**: Predefined schemas for all Foundation events
   - **Agent Context Integration**: Events automatically enriched with agent information
   - **Validation**: Type checking and constraint validation for event data
   - **Serialization**: JSON-compatible event structures for persistence and transport
   - **Correlation**: Event correlation and tracing support
   - **Metadata**: Rich metadata support for debugging and analysis
-  
+
   ## Event Categories
-  
+
   - **System Events**: Application lifecycle, health, configuration changes
   - **Agent Events**: Agent lifecycle, health changes, capability updates
   - **Infrastructure Events**: Circuit breaker trips, rate limits, resource alerts
   - **Coordination Events**: Consensus, barriers, locks, leader election
   - **Performance Events**: Metrics, latency, throughput measurements
-  
+
   ## Usage
-  
+
       # Create a system event
       event = Event.new(:system_started, %{
         components: [:process_registry, :coordination, :telemetry],
         startup_duration: 1500
       })
-      
+
       # Create an agent event with context
       event = Event.new(:agent_health_changed, %{
         agent_id: :ml_agent_1,
@@ -39,7 +39,7 @@ defmodule Foundation.Types.Event do
         new_health: :degraded,
         reason: "memory threshold exceeded"
       })
-      
+
       # Create a coordination event
       event = Event.new(:consensus_completed, %{
         coordination_id: :model_selection,
@@ -48,14 +48,14 @@ defmodule Foundation.Types.Event do
         duration: 250
       })
   """
-  
+
   @type event_id :: String.t()
   @type event_type :: atom()
   @type agent_id :: atom() | String.t()
   @type correlation_id :: String.t()
   @type event_data :: map()
   @type event_metadata :: map()
-  
+
   defstruct [
     :id,
     :type,
@@ -67,7 +67,7 @@ defmodule Foundation.Types.Event do
     :source_node,
     :severity
   ]
-  
+
   @type t :: %__MODULE__{
     id: event_id(),
     type: event_type(),
@@ -79,7 +79,7 @@ defmodule Foundation.Types.Event do
     source_node: atom(),
     severity: :low | :medium | :high | :critical
   }
-  
+
   # Event type definitions with validation schemas
   @event_schemas %{
     # System Events
@@ -98,7 +98,7 @@ defmodule Foundation.Types.Event do
       optional: [:component_health, :metrics],
       severity: :low
     },
-    
+
     # Agent Events
     :agent_started => %{
       required: [:agent_id],
@@ -125,7 +125,7 @@ defmodule Foundation.Types.Event do
       optional: [:trend, :recommendation],
       severity: :high
     },
-    
+
     # Infrastructure Events
     :circuit_breaker_opened => %{
       required: [:circuit_name, :failure_count],
@@ -147,7 +147,7 @@ defmodule Foundation.Types.Event do
       optional: [:agent_id, :trend, :prediction],
       severity: :high
     },
-    
+
     # Coordination Events
     :consensus_started => %{
       required: [:coordination_id, :participants, :proposal],
@@ -189,7 +189,7 @@ defmodule Foundation.Types.Event do
       optional: [:election_duration, :criteria],
       severity: :medium
     },
-    
+
     # Configuration Events
     :config_changed => %{
       required: [:config_path, :old_value, :new_value],
@@ -201,7 +201,7 @@ defmodule Foundation.Types.Event do
       optional: [:agent_id, :attempted_by],
       severity: :high
     },
-    
+
     # Performance Events
     :performance_metric => %{
       required: [:metric_name, :value, :metric_type],
@@ -213,7 +213,7 @@ defmodule Foundation.Types.Event do
       optional: [:agent_id, :trend, :recommendation],
       severity: :high
     },
-    
+
     # Error Events
     :error_occurred => %{
       required: [:error_type, :message],
@@ -226,28 +226,28 @@ defmodule Foundation.Types.Event do
       severity: :medium
     }
   }
-  
+
   @doc """
   Create a new Foundation event with validation and enrichment.
-  
+
   ## Parameters
   - `event_type`: The type of event (must be a known event type)
   - `event_data`: The event-specific data
   - `options`: Additional options for event creation
-  
+
   ## Options
   - `:correlation_id` - Link this event to other related events
   - `:agent_id` - Associate event with a specific agent
   - `:metadata` - Additional metadata for the event
   - `:severity` - Override default severity level
-  
+
   ## Examples
-  
+
       # Basic system event
       event = Event.new(:system_started, %{
         components: [:process_registry, :telemetry]
       })
-      
+
       # Agent event with correlation
       event = Event.new(:agent_health_changed, %{
         agent_id: :ml_agent_1,
@@ -270,17 +270,17 @@ defmodule Foundation.Types.Event do
           source_node: Node.self(),
           severity: determine_severity(event_type, options)
         }
-        
+
         {:ok, enrich_event(event)}
-      
+
       {:error, _} = error ->
         error
     end
   end
-  
+
   @doc """
   Create a new event, raising an exception on validation failure.
-  
+
   Same as `new/3` but raises an exception instead of returning an error tuple.
   """
   @spec new!(event_type(), event_data(), keyword()) :: t()
@@ -290,7 +290,7 @@ defmodule Foundation.Types.Event do
       {:error, reason} -> raise ArgumentError, "Invalid event: #{inspect(reason)}"
     end
   end
-  
+
   @doc """
   Validate event data against the event type schema.
   """
@@ -299,12 +299,12 @@ defmodule Foundation.Types.Event do
     case Map.get(@event_schemas, event_type) do
       nil ->
         {:error, {:unknown_event_type, event_type}}
-      
+
       schema ->
         validate_against_schema(event_data, schema)
     end
   end
-  
+
   @doc """
   Convert an event to a map suitable for JSON serialization.
   """
@@ -322,7 +322,7 @@ defmodule Foundation.Types.Event do
       severity: event.severity
     }
   end
-  
+
   @doc """
   Create an event from a serialized map.
   """
@@ -338,7 +338,7 @@ defmodule Foundation.Types.Event do
           end
         %DateTime{} = dt -> dt
       end
-      
+
       event = %__MODULE__{
         id: Map.get(event_map, "id"),
         type: atomize_key(Map.get(event_map, "type")),
@@ -350,20 +350,20 @@ defmodule Foundation.Types.Event do
         source_node: atomize_key(Map.get(event_map, "source_node")),
         severity: atomize_key(Map.get(event_map, "severity"))
       }
-      
+
       {:ok, event}
     rescue
       error ->
         {:error, {:deserialization_failed, error}}
     end
   end
-  
+
   @doc """
   Get all known event types with their schemas.
   """
   @spec get_event_schemas() :: map()
   def get_event_schemas, do: @event_schemas
-  
+
   @doc """
   Check if an event type is known and valid.
   """
@@ -371,7 +371,7 @@ defmodule Foundation.Types.Event do
   def valid_event_type?(event_type) do
     Map.has_key?(@event_schemas, event_type)
   end
-  
+
   @doc """
   Get the schema for a specific event type.
   """
@@ -382,7 +382,7 @@ defmodule Foundation.Types.Event do
       schema -> {:ok, schema}
     end
   end
-  
+
   @doc """
   Extract agent ID from event data or context.
   """
@@ -393,7 +393,7 @@ defmodule Foundation.Types.Event do
       _ -> Map.get(event.data, :agent_id)
     end
   end
-  
+
   @doc """
   Check if an event is related to a specific agent.
   """
@@ -401,7 +401,7 @@ defmodule Foundation.Types.Event do
   def agent_related?(%__MODULE__{} = event, agent_id) do
     extract_agent_id(event) == agent_id
   end
-  
+
   @doc """
   Check if an event should trigger an alert based on severity.
   """
@@ -409,49 +409,49 @@ defmodule Foundation.Types.Event do
   def alertable?(%__MODULE__{severity: severity}) do
     severity in [:high, :critical]
   end
-  
+
   # Private Implementation
-  
+
   defp validate_against_schema(event_data, schema) do
     # Check required fields
     case check_required_fields(event_data, schema.required) do
       :ok ->
         # Check field types and constraints
         check_field_constraints(event_data, schema)
-      
+
       {:error, _} = error ->
         error
     end
   end
-  
+
   defp check_required_fields(event_data, required_fields) do
     missing_fields = Enum.filter(required_fields, fn field ->
       not Map.has_key?(event_data, field)
     end)
-    
+
     if Enum.empty?(missing_fields) do
       :ok
     else
       {:error, {:missing_required_fields, missing_fields}}
     end
   end
-  
+
   defp check_field_constraints(event_data, schema) do
     # Basic validation - in production you might use a more sophisticated schema library
     all_allowed_fields = schema.required ++ Map.get(schema, :optional, [])
-    
+
     extra_fields = Map.keys(event_data) -- all_allowed_fields
-    
+
     if Enum.empty?(extra_fields) do
       :ok
     else
       {:error, {:unexpected_fields, extra_fields}}
     end
   end
-  
+
   defp extract_agent_context(event_data, options) do
     agent_id = Keyword.get(options, :agent_id) || Map.get(event_data, :agent_id)
-    
+
     case agent_id do
       nil -> nil
       agent_id ->
@@ -461,7 +461,7 @@ defmodule Foundation.Types.Event do
         end
     end
   end
-  
+
   defp get_agent_metadata(agent_id) do
     # Try to get agent metadata from ProcessRegistry
     try do
@@ -469,7 +469,7 @@ defmodule Foundation.Types.Event do
         {:ok, _pid, metadata} ->
           context = Map.take(metadata, [:capability, :health, :resources, :type])
           {:ok, context}
-        
+
         :error ->
           :error
       end
@@ -477,18 +477,18 @@ defmodule Foundation.Types.Event do
       _ -> :error
     end
   end
-  
+
   defp determine_severity(event_type, options) do
     case Keyword.get(options, :severity) do
       nil ->
         schema = Map.get(@event_schemas, event_type, %{})
         Map.get(schema, :severity, :low)
-      
+
       severity ->
         severity
     end
   end
-  
+
   defp enrich_event(event) do
     # Add additional computed metadata
     enriched_metadata = Map.merge(event.metadata, %{
@@ -496,10 +496,10 @@ defmodule Foundation.Types.Event do
       processing_timestamp: DateTime.utc_now(),
       schema_version: "1.0"
     })
-    
+
     %{event | metadata: enriched_metadata}
   end
-  
+
   defp categorize_event(event_type) do
     cond do
       String.starts_with?(Atom.to_string(event_type), "system_") -> :system
@@ -517,12 +517,12 @@ defmodule Foundation.Types.Event do
       true -> :unknown
     end
   end
-  
+
   defp generate_event_id do
     :crypto.strong_rand_bytes(12)
     |> Base.url_encode64(padding: false)
   end
-  
+
   defp atomize_key(nil), do: nil
   defp atomize_key(value) when is_atom(value), do: value
   defp atomize_key(value) when is_binary(value) do

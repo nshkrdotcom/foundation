@@ -85,12 +85,12 @@ defmodule Foundation.ErrorHandler do
       ErrorHandler.with_recovery(fn ->
         risky_operation()
       end)
-      
+
       # With fallback
       ErrorHandler.with_recovery(fn ->
         fetch_from_api()
       end, fallback: {:ok, default_value})
-      
+
       # With circuit breaker
       ErrorHandler.with_recovery(fn ->
         external_service_call()

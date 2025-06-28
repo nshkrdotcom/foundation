@@ -7,7 +7,7 @@ defmodule Foundation.ProcessRegistry.Backend.Horde do
   basic functionality with plans for full distribution capabilities.
 
   When libcluster and horde dependencies are added, this module will provide:
-  - Distributed process registration across BEAM clusters  
+  - Distributed process registration across BEAM clusters
   - Automatic failover and process migration
   - Consistent hashing for optimal distribution
   - CRDT-based conflict resolution
@@ -16,7 +16,7 @@ defmodule Foundation.ProcessRegistry.Backend.Horde do
 
   - Multi-node process registry with automatic sync
   - Process migration during node failures
-  - Distributed metadata indexing 
+  - Distributed metadata indexing
   - Cross-cluster service discovery
   - Partition tolerance with eventual consistency
 

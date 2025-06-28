@@ -19,7 +19,7 @@ defmodule Foundation.Test.RegistryTestHelper do
       setup do
         Foundation.Test.RegistryTestHelper.setup_registry()
       end
-      
+
       test "something", %{registry: registry, foundation_opts: opts} do
         Foundation.register("key", self(), %{}, opts)
       end

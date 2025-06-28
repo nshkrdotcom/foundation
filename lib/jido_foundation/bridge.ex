@@ -25,7 +25,7 @@ defmodule JidoFoundation.Bridge do
       # Register a Jido agent with Foundation
       {:ok, agent} = Jido.Agent.start_link(MyAgent, config)
       :ok = JidoFoundation.Bridge.register_agent(agent, [:capability1, :capability2])
-      
+
       # Execute protected action
       JidoFoundation.Bridge.execute_protected(agent, :risky_action, args)
   """
@@ -46,7 +46,7 @@ defmodule JidoFoundation.Bridge do
 
   ## Examples
 
-      JidoFoundation.Bridge.register_agent(agent_pid, 
+      JidoFoundation.Bridge.register_agent(agent_pid,
         capabilities: [:planning, :execution],
         metadata: %{version: "1.0"}
       )
@@ -141,8 +141,25 @@ defmodule JidoFoundation.Bridge do
   def execute_protected(agent_pid, action_fun, opts \\ []) when is_function(action_fun, 0) do
     service_id = Keyword.get(opts, :service_id, {:jido_agent, agent_pid})
 
+    # Wrap the action function to handle crashes gracefully
+    protected_fun = fn ->
+      try do
+        action_fun.()
+      catch
+        :exit, reason ->
+          Logger.warning("Jido action process exited: #{inspect(reason)}")
+          fallback = Keyword.get(opts, :fallback, {:error, :process_exit})
+          if is_function(fallback, 0), do: fallback.(), else: fallback
+
+        kind, reason ->
+          Logger.warning("Jido action crashed: #{kind} #{inspect(reason)}")
+          fallback = Keyword.get(opts, :fallback, {:error, :action_crash})
+          if is_function(fallback, 0), do: fallback.(), else: fallback
+      end
+    end
+
     Foundation.ErrorHandler.with_recovery(
-      action_fun,
+      protected_fun,
       Keyword.merge(opts,
         strategy: :circuit_break,
         circuit_breaker: service_id,
@@ -152,6 +169,108 @@ defmodule JidoFoundation.Bridge do
         }
       )
     )
+  end
+
+  @doc """
+  Executes a Jido action with retry logic and Foundation infrastructure support.
+
+  ## Options
+
+  - `:max_retries` - Maximum number of retry attempts (default: 3)
+  - `:backoff_strategy` - Backoff strategy `:exponential` or `:linear` (default: `:exponential`)
+  - `:base_delay` - Base delay in milliseconds (default: 100)
+  - `:max_delay` - Maximum delay in milliseconds (default: 30_000)
+  - `:retryable_errors` - List of error atoms that should trigger retries (default: all errors)
+  - `:timeout` - Action timeout in milliseconds
+  - `:service_id` - Circuit breaker identifier (defaults to agent PID)
+
+  ## Examples
+
+      JidoFoundation.Bridge.execute_with_retry(agent, fn ->
+        Jido.Action.execute(agent, :flaky_action, params)
+      end, max_retries: 3, backoff_strategy: :exponential)
+  """
+  def execute_with_retry(agent_pid, action_fun, opts \\ []) when is_function(action_fun, 0) do
+    retry_config = %{
+      max_retries: Keyword.get(opts, :max_retries, 3),
+      backoff_strategy: Keyword.get(opts, :backoff_strategy, :exponential),
+      base_delay: Keyword.get(opts, :base_delay, 100),
+      max_delay: Keyword.get(opts, :max_delay, 30_000),
+      retryable_errors: Keyword.get(opts, :retryable_errors, :all),
+      service_id: Keyword.get(opts, :service_id, {:jido_agent_retry, agent_pid})
+    }
+
+    do_execute_with_retry(agent_pid, action_fun, 1, retry_config)
+  end
+
+  defp do_execute_with_retry(agent_pid, action_fun, attempt, retry_config) do
+    # Execute the action with circuit breaker protection
+    result = execute_protected(agent_pid, action_fun, service_id: retry_config.service_id)
+
+    case result do
+      {:ok, _} = success ->
+        success
+
+      {:error, reason} when attempt < retry_config.max_retries ->
+        handle_retry_attempt(agent_pid, action_fun, attempt, retry_config, reason, result)
+
+      error ->
+        # Max retries exceeded or other error
+        Logger.warning(
+          "Max retries exceeded for agent #{inspect(agent_pid)}, " <>
+            "final result: #{inspect(error)}"
+        )
+
+        error
+    end
+  end
+
+  defp handle_retry_attempt(agent_pid, action_fun, attempt, retry_config, reason, result) do
+    # Check if this error is retryable
+    if should_retry?(reason, retry_config.retryable_errors) do
+      # Calculate delay
+      delay =
+        calculate_delay(
+          attempt,
+          retry_config.backoff_strategy,
+          retry_config.base_delay,
+          retry_config.max_delay
+        )
+
+      # Log retry attempt
+      Logger.info(
+        "Retrying Jido action for agent #{inspect(agent_pid)}, " <>
+          "attempt #{attempt}/#{retry_config.max_retries}, delay: #{delay}ms"
+      )
+
+      # Wait before retry (this is acceptable in the retry mechanism)
+      if delay > 0, do: Process.sleep(delay)
+
+      # Recursive retry
+      do_execute_with_retry(agent_pid, action_fun, attempt + 1, retry_config)
+    else
+      # Non-retryable error, return immediately
+      Logger.info("Non-retryable error for agent #{inspect(agent_pid)}: #{inspect(reason)}")
+      result
+    end
+  end
+
+  defp should_retry?(_reason, :all), do: true
+
+  defp should_retry?(reason, retryable_errors) when is_list(retryable_errors) do
+    reason in retryable_errors
+  end
+
+  defp calculate_delay(attempt, :exponential, base_delay, max_delay) do
+    # Exponential backoff: base_delay * 2^(attempt-1)
+    delay = base_delay * :math.pow(2, attempt - 1)
+    min(trunc(delay), max_delay)
+  end
+
+  defp calculate_delay(attempt, :linear, base_delay, max_delay) do
+    # Linear backoff: base_delay * attempt
+    delay = base_delay * attempt
+    min(delay, max_delay)
   end
 
   @doc """
@@ -258,7 +377,7 @@ defmodule JidoFoundation.Bridge do
         {agent1_pid, [capabilities: [:planning]]},
         {agent2_pid, [capabilities: [:execution]]}
       ]
-      
+
       {:ok, registered} = batch_register_agents(agents)
   """
   def batch_register_agents(agents, opts \\ []) when is_list(agents) do
@@ -341,6 +460,339 @@ defmodule JidoFoundation.Bridge do
             # Invalid status, continue monitoring
             monitor_agent_health(agent_pid, health_check, interval, registry)
         end
+    end
+  end
+
+  # Signal integration and routing functions
+
+  @doc """
+  Starts the signal routing system for Jido signals.
+
+  This creates a global signal router that listens to all Jido signal
+  telemetry events and routes them to subscribed handlers.
+
+  ## Examples
+
+      {:ok, router_pid} = Bridge.start_signal_router()
+  """
+  def start_signal_router(opts \\ []) do
+    JidoFoundation.SignalRouter.start_link(opts)
+  end
+
+  @doc """
+  Subscribes a handler to receive signals of a specific type.
+
+  Supports wildcard patterns using '*' at the end of signal types.
+
+  ## Examples
+
+      # Subscribe to exact signal type
+      Bridge.subscribe_to_signals("task.completed", handler_pid)
+
+      # Subscribe to all error signals
+      Bridge.subscribe_to_signals("error.*", handler_pid)
+  """
+  def subscribe_to_signals(signal_type, handler_pid) do
+    JidoFoundation.SignalRouter.subscribe(signal_type, handler_pid)
+  end
+
+  @doc """
+  Unsubscribes a handler from receiving signals of a specific type.
+  """
+  def unsubscribe_from_signals(signal_type, handler_pid) do
+    JidoFoundation.SignalRouter.unsubscribe(signal_type, handler_pid)
+  end
+
+  @doc """
+  Gets all current signal subscriptions.
+  """
+  def get_signal_subscriptions do
+    JidoFoundation.SignalRouter.get_subscriptions()
+  end
+
+  @doc """
+  Emits a Jido signal through Foundation telemetry system.
+
+  ## Examples
+
+      signal = %{type: "task.completed", source: "agent://123", data: %{result: "success"}}
+      Bridge.emit_signal(agent_pid, signal)
+  """
+  def emit_signal(agent_pid, signal) do
+    # Extract signal data for telemetry
+    signal_id = Map.get(signal, :id, System.unique_integer())
+    signal_type = Map.get(signal, :type, "unknown")
+
+    # Emit telemetry event for the signal
+    :telemetry.execute(
+      [:jido, :signal, :emitted],
+      %{signal_id: signal_id},
+      %{
+        agent_id: agent_pid,
+        signal_type: signal_type,
+        framework: :jido,
+        timestamp: System.system_time(:microsecond)
+      }
+    )
+
+    :ok
+  end
+
+  @doc """
+  Converts a Jido signal to CloudEvents v1.0.2 format.
+
+  ## Examples
+
+      signal = %{id: 123, type: "task.completed", source: "agent://123", data: %{}}
+      cloudevent = Bridge.signal_to_cloudevent(signal)
+  """
+  def signal_to_cloudevent(signal) do
+    # Extract signal data
+    signal_id = Map.get(signal, :id, System.unique_integer())
+    signal_type = Map.get(signal, :type, "unknown")
+    source = Map.get(signal, :source, "unknown")
+    data = Map.get(signal, :data, %{})
+    time = Map.get(signal, :time, DateTime.utc_now())
+    metadata = Map.get(signal, :metadata, %{})
+
+    # Build CloudEvent structure
+    %{
+      specversion: "1.0",
+      type: signal_type,
+      source: source,
+      id: to_string(signal_id),
+      time: DateTime.to_iso8601(time),
+      datacontenttype: "application/json",
+      data: data,
+      subject: Map.get(metadata, :subject),
+      extensions: Map.drop(metadata, [:subject])
+    }
+  end
+
+  @doc """
+  Emits a signal with protection against handler failures.
+
+  This function ensures that even if signal handlers crash, the emission
+  process continues gracefully.
+
+  ## Examples
+
+      result = Bridge.emit_signal_protected(agent_pid, signal)
+      # => :ok (even if some handlers crash)
+  """
+  def emit_signal_protected(agent_pid, signal) do
+    emit_signal(agent_pid, signal)
+  catch
+    kind, reason ->
+      Logger.warning("Signal emission failed: #{kind} #{inspect(reason)}")
+      :ok
+  end
+
+  # MABEAM coordination functions
+
+  @doc """
+  Coordinates communication between two Jido agents.
+
+  Sends a coordination message from one agent to another through
+  the MABEAM coordination system.
+
+  ## Examples
+
+      coordination_message = %{action: :collaborate, task_type: :data_processing}
+      Bridge.coordinate_agents(sender_agent, receiver_agent, coordination_message)
+  """
+  def coordinate_agents(sender_agent, receiver_agent, message) do
+    # Send coordination message directly to the receiving agent
+    send(receiver_agent, {:mabeam_coordination, sender_agent, message})
+
+    # Emit coordination telemetry
+    emit_agent_event(
+      sender_agent,
+      :coordination,
+      %{
+        messages_sent: 1
+      },
+      %{
+        target_agent: receiver_agent,
+        message_type: Map.get(message, :action, :unknown),
+        coordination_type: :direct
+      }
+    )
+
+    :ok
+  catch
+    kind, reason ->
+      Logger.warning("Agent coordination failed: #{kind} #{inspect(reason)}")
+      {:error, :coordination_failed}
+  end
+
+  @doc """
+  Distributes a task from a coordinator agent to a worker agent.
+
+  ## Examples
+
+      task = %{id: "task_1", type: :data_analysis, data: %{records: 1000}}
+      Bridge.distribute_task(coordinator_agent, worker_agent, task)
+  """
+  def distribute_task(coordinator_agent, worker_agent, task) do
+    # Send task to worker agent
+    send(worker_agent, {:mabeam_task, task.id, task})
+
+    # Emit task distribution telemetry
+    emit_agent_event(
+      coordinator_agent,
+      :task_distribution,
+      %{
+        tasks_distributed: 1
+      },
+      %{
+        target_agent: worker_agent,
+        task_id: task.id,
+        task_type: Map.get(task, :type, :unknown)
+      }
+    )
+
+    :ok
+  catch
+    kind, reason ->
+      Logger.warning("Task distribution failed: #{kind} #{inspect(reason)}")
+      {:error, :distribution_failed}
+  end
+
+  @doc """
+  Delegates a task from a higher-level agent to a lower-level agent in a hierarchy.
+
+  Similar to distribute_task but with hierarchical semantics.
+
+  ## Examples
+
+      task = %{id: "complex_task", type: :analysis, subtasks: [...]}
+      Bridge.delegate_task(supervisor_agent, manager_agent, task)
+  """
+  def delegate_task(delegator_agent, delegate_agent, task) do
+    # Send delegation message
+    send(delegate_agent, {:mabeam_task, task.id, task})
+
+    # Emit delegation telemetry
+    emit_agent_event(
+      delegator_agent,
+      :task_delegation,
+      %{
+        tasks_delegated: 1
+      },
+      %{
+        delegate_agent: delegate_agent,
+        task_id: task.id,
+        task_type: Map.get(task, :type, :unknown),
+        delegation_level: :hierarchical
+      }
+    )
+
+    :ok
+  catch
+    kind, reason ->
+      Logger.warning("Task delegation failed: #{kind} #{inspect(reason)}")
+      {:error, :delegation_failed}
+  end
+
+  @doc """
+  Creates a MABEAM coordination context for multiple agents.
+
+  This sets up a coordination environment where multiple agents can
+  collaborate on complex tasks.
+
+  ## Examples
+
+      agents = [agent1, agent2, agent3]
+      {:ok, coordination_context} = Bridge.create_coordination_context(agents, %{
+        coordination_type: :collaborative,
+        timeout: 30_000
+      })
+  """
+  def create_coordination_context(agents, opts \\ []) do
+    coordination_id = System.unique_integer()
+    coordination_type = Keyword.get(opts, :coordination_type, :general)
+    timeout = Keyword.get(opts, :timeout, 30_000)
+
+    context = %{
+      id: coordination_id,
+      type: coordination_type,
+      agents: agents,
+      created_at: DateTime.utc_now(),
+      timeout: timeout,
+      status: :active
+    }
+
+    # Notify all agents of the coordination context
+    Enum.each(agents, fn agent ->
+      try do
+        send(agent, {:mabeam_coordination_context, coordination_id, context})
+      catch
+        # Ignore errors for dead agents
+        _, _ -> :ok
+      end
+    end)
+
+    # Emit context creation telemetry
+    :telemetry.execute(
+      [:jido, :coordination, :context_created],
+      %{agent_count: length(agents)},
+      %{coordination_id: coordination_id, coordination_type: coordination_type}
+    )
+
+    {:ok, context}
+  end
+
+  @doc """
+  Finds agents by capability and coordination requirements.
+
+  Extends the basic agent discovery to include MABEAM coordination metadata.
+
+  ## Examples
+
+      {:ok, collaborative_agents} = Bridge.find_coordinating_agents(
+        capabilities: [:data_processing],
+        coordination_type: :collaborative,
+        max_agents: 5
+      )
+  """
+  def find_coordinating_agents(criteria, opts \\ []) do
+    registry = Keyword.get(opts, :registry)
+    max_agents = Keyword.get(opts, :max_agents, 10)
+    coordination_type = Keyword.get(opts, :coordination_type)
+
+    # Build search criteria
+    base_criteria =
+      case Keyword.get(criteria, :capabilities) do
+        nil ->
+          []
+
+        capabilities when is_list(capabilities) ->
+          Enum.map(capabilities, fn cap -> {[:capability], cap, :eq} end)
+
+        capability ->
+          [{[:capability], capability, :eq}]
+      end
+
+    # Add coordination criteria if specified
+    coordination_criteria =
+      if coordination_type do
+        [{[:mabeam_enabled], true, :eq} | base_criteria]
+      else
+        base_criteria
+      end
+
+    # Add Jido framework filter
+    jido_criteria = [{[:framework], :jido, :eq} | coordination_criteria]
+
+    case Foundation.query(jido_criteria, registry) do
+      {:ok, results} ->
+        # Limit results if requested
+        limited_results = Enum.take(results, max_agents)
+        {:ok, limited_results}
+
+      error ->
+        error
     end
   end
 

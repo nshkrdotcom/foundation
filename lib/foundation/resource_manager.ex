@@ -29,9 +29,9 @@ defmodule Foundation.ResourceManager do
 
       # Check if operation is allowed
       {:ok, token} = Foundation.ResourceManager.acquire_resource(:register_agent, %{size: 1})
-      
+
       # Perform operation...
-      
+
       # Release resource
       Foundation.ResourceManager.release_resource(token)
   """

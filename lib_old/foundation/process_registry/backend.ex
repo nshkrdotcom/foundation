@@ -30,7 +30,7 @@ defmodule Foundation.ProcessRegistry.Backend do
 
   ## Error Handling
 
-  All backend operations should return `{:ok, result}` for success or 
+  All backend operations should return `{:ok, result}` for success or
   `{:error, reason}` for failures. Common error reasons include:
 
   - `:not_found` - Key not found in backend
@@ -78,7 +78,7 @@ defmodule Foundation.ProcessRegistry.Backend do
       # ETS backend initialization
       {:ok, %{table: :process_registry_ets, opts: opts}}
 
-      # Distributed backend initialization  
+      # Distributed backend initialization
       {:ok, %{node_id: :primary, cluster: [:node1, :node2]}}
   """
   @callback init(opts :: init_opts()) :: {:ok, backend_state()} | {:error, term()}

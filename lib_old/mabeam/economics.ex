@@ -5292,7 +5292,7 @@ defmodule MABEAM.Economics do
       # Calculate proportional payout based on severity
       severity_factor =
         case failure_scenario.actual_outcome do
-          # 5% quality gap = 100% severity  
+          # 5% quality gap = 100% severity
           %{quality_gap: gap} -> gap / 0.05
           _ -> 1.0
         end

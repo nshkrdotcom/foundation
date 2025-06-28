@@ -12,7 +12,7 @@ defmodule Foundation.TestConfig do
   Usage in your test module:
 
       use Foundation.TestConfig, :registry
-      
+
       test "something", %{registry: registry} do
         # registry is available here
         Foundation.register("key", self(), %{}, registry)

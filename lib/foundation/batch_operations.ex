@@ -23,9 +23,9 @@ defmodule Foundation.BatchOperations do
         {"agent_1", pid1, %{capability: :ml}},
         {"agent_2", pid2, %{capability: :data}}
       ]
-      
+
       {:ok, results} = Foundation.BatchOperations.batch_register(agents)
-      
+
       # Stream query results
       Foundation.BatchOperations.stream_query([
         {[:capability], :ml, :eq}
@@ -56,9 +56,9 @@ defmodule Foundation.BatchOperations do
         {"agent_1", pid1, metadata1},
         {"agent_2", pid2, metadata2}
       ]
-      
+
       {:ok, results} = BatchOperations.batch_register(agents)
-      
+
       # With error handling
       {:ok, results} = BatchOperations.batch_register(agents, on_error: :continue)
   """
@@ -132,7 +132,7 @@ defmodule Foundation.BatchOperations do
         {"agent_1", %{status: :active}},
         {"agent_2", %{status: :idle}}
       ]
-      
+
       {:ok, results} = BatchOperations.batch_update_metadata(updates)
   """
   def batch_update_metadata(updates, opts \\ []) when is_list(updates) do
@@ -175,10 +175,10 @@ defmodule Foundation.BatchOperations do
         {[:capability], :ml, :eq},
         {[:health_status], :healthy, :eq}
       ])
-      
+
       # With pagination
-      {:ok, agents} = BatchOperations.batch_query(criteria, 
-        limit: 100, 
+      {:ok, agents} = BatchOperations.batch_query(criteria,
+        limit: 100,
         offset: 200
       )
   """

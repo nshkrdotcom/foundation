@@ -7,7 +7,7 @@ defmodule Foundation.Services.AgentTelemetryServiceTest do
 
   setup do
     namespace = {:test, make_ref()}
-    
+
     # Start TelemetryService with test configuration
     {:ok, _pid} = TelemetryService.start_link([
       aggregation_interval: 100,  # Fast aggregation for testing
@@ -249,11 +249,11 @@ defmodule Foundation.Services.AgentTelemetryServiceTest do
       Process.sleep(50)
 
       captured_alerts = Agent.get(alerts_received, & &1)
-      
+
       # Should have both warning and critical alerts
       warning = Enum.find(captured_alerts, &(&1.severity == :warning))
       critical = Enum.find(captured_alerts, &(&1.severity == :critical))
-      
+
       assert warning != nil
       assert critical != nil
       assert critical.current_value == 0.9
@@ -299,11 +299,11 @@ defmodule Foundation.Services.AgentTelemetryServiceTest do
       Process.sleep(50)
 
       captured_alerts = Agent.get(alerts_received, & &1)
-      
+
       # Should have alerts for inference agents only
       inference_alerts = Enum.filter(captured_alerts, &(&1.alert_name == :inference_agents_high_latency))
       assert length(inference_alerts) == 2
-      
+
       alert_agents = Enum.map(inference_alerts, & &1.agent_id)
       assert :ml_agent_1 in alert_agents
       assert :ml_agent_2 in alert_agents
@@ -315,7 +315,7 @@ defmodule Foundation.Services.AgentTelemetryServiceTest do
     test "aggregates metrics across time windows", %{namespace: namespace} do
       # Generate metrics over time
       base_time = System.monotonic_time(:microsecond)
-      
+
       for i <- 1..20 do
         TelemetryService.record_metric(
           [:foundation, :agent, :request_rate],
@@ -344,7 +344,7 @@ defmodule Foundation.Services.AgentTelemetryServiceTest do
       )
 
       assert length(time_series) > 0
-      
+
       # Verify aggregation includes statistical measures
       first_point = hd(time_series)
       assert Map.has_key?(first_point, :avg_value)
@@ -380,7 +380,7 @@ defmodule Foundation.Services.AgentTelemetryServiceTest do
       )
 
       assert length(comparison.agent_metrics) == 3
-      
+
       # Should be sorted by value (highest first)
       [highest, medium, lowest] = comparison.agent_metrics
       assert highest.agent_id == :ml_agent_1
@@ -453,7 +453,7 @@ defmodule Foundation.Services.AgentTelemetryServiceTest do
       })
 
       assert length(health_metrics) > 0
-      
+
       health_metric = hd(health_metrics)
       assert health_metric.current_value == "degraded"
       assert health_metric.agent_context.health == :degraded
@@ -551,7 +551,7 @@ defmodule Foundation.Services.AgentTelemetryServiceTest do
       assert length(inference_group.agents) == 2
       assert :ml_agent_1 in inference_group.agent_ids
       assert :ml_agent_2 in inference_group.agent_ids
-      
+
       # Should have aggregated statistics
       assert inference_group.avg_inference_latency == 150.0
       assert inference_group.agent_count == 2
@@ -616,7 +616,7 @@ defmodule Foundation.Services.AgentTelemetryServiceTest do
 
       # Collect streamed metrics
       metrics_received = Agent.start_link(fn -> [] end)
-      
+
       TelemetryService.register_stream_handler(stream_pid, fn metric ->
         Agent.update(metrics_received, fn acc -> [metric | acc] end)
       end)
@@ -629,7 +629,7 @@ defmodule Foundation.Services.AgentTelemetryServiceTest do
           :gauge,
           %{agent_id: :ml_agent_1, sequence: i, namespace: namespace}
         )
-        
+
         Process.sleep(20)
       end
 
@@ -639,7 +639,7 @@ defmodule Foundation.Services.AgentTelemetryServiceTest do
       # Verify metrics were streamed
       received = Agent.get(metrics_received, & &1)
       assert length(received) == 3
-      
+
       # Should maintain order
       sequences = received |> Enum.reverse() |> Enum.map(&(&1.metadata.sequence))
       assert sequences == [1, 2, 3]
@@ -654,7 +654,7 @@ defmodule Foundation.Services.AgentTelemetryServiceTest do
       })
 
       metrics_received = Agent.start_link(fn -> [] end)
-      
+
       TelemetryService.register_stream_handler(stream_pid, fn metric ->
         Agent.update(metrics_received, fn acc -> [metric | acc] end)
       end)
@@ -687,7 +687,7 @@ defmodule Foundation.Services.AgentTelemetryServiceTest do
     test "automatically cleans up old metrics based on retention policy" do
       # Record old metrics
       old_timestamp = System.os_time(:second) - (2 * 24 * 60 * 60)  # 2 days ago
-      
+
       TelemetryService.record_metric(
         [:foundation, :agent, :old_metric],
         42.0,
@@ -763,7 +763,7 @@ defmodule Foundation.Services.AgentTelemetryServiceTest do
           type,
           %{agent_id: :ml_agent_1}
         )
-        
+
         assert {:error, _reason} = result
       end
 
@@ -774,7 +774,7 @@ defmodule Foundation.Services.AgentTelemetryServiceTest do
         :gauge,
         %{agent_id: :ml_agent_1}
       )
-      
+
       assert :ok = result
     end
 
@@ -793,7 +793,7 @@ defmodule Foundation.Services.AgentTelemetryServiceTest do
 
       # Wait for all metrics to be recorded
       results = Task.await_many(tasks, 5000)
-      
+
       # All should succeed
       assert Enum.all?(results, &(&1 == :ok))
 

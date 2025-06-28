@@ -8,7 +8,7 @@ defmodule Foundation.Services.AgentEventStoreTest do
 
   setup do
     namespace = {:test, make_ref()}
-    
+
     # Start EventStore with test configuration
     {:ok, _pid} = EventStore.start_link([
       storage_backend: :memory,  # Use memory for testing
@@ -352,7 +352,7 @@ defmodule Foundation.Services.AgentEventStoreTest do
   describe "agent performance event tracking" do
     test "tracks agent performance metrics over time", %{namespace: namespace} do
       agent_id = :ml_agent_1
-      
+
       # Generate performance events over time
       performance_events = for i <- 1..10 do
         %Event{
@@ -381,21 +381,21 @@ defmodule Foundation.Services.AgentEventStoreTest do
       )
 
       assert length(timeline) == 10
-      
+
       # Verify performance trend analysis
       values = Enum.map(timeline, &(&1.data.value))
       assert values == Enum.sort(values)  # Should be increasing
-      
+
       # Should include trend analysis
       assert timeline |> hd() |> Map.has_key?(:trend_analysis)
     end
 
     test "aggregates performance metrics by time windows", %{namespace: namespace} do
       agent_id = :ml_agent_2
-      
+
       # Generate many performance events
       base_time = DateTime.utc_now()
-      
+
       events = for i <- 1..100 do
         %Event{
           id: UUID.uuid4(),
@@ -424,7 +424,7 @@ defmodule Foundation.Services.AgentEventStoreTest do
       )
 
       assert length(aggregated) > 0
-      
+
       first_window = hd(aggregated)
       assert Map.has_key?(first_window, :avg_value)
       assert Map.has_key?(first_window, :min_value)
@@ -445,7 +445,7 @@ defmodule Foundation.Services.AgentEventStoreTest do
 
       # Collect streamed events
       events_received = Agent.start_link(fn -> [] end)
-      
+
       # Register stream handler
       EventStore.register_stream_handler(stream_pid, fn event ->
         Agent.update(events_received, fn acc -> [event | acc] end)
@@ -460,7 +460,7 @@ defmodule Foundation.Services.AgentEventStoreTest do
           data: %{sequence: i},
           timestamp: DateTime.utc_now()
         }
-        
+
         EventStore.store_event(event)
         event
       end
@@ -471,7 +471,7 @@ defmodule Foundation.Services.AgentEventStoreTest do
       # Verify events were streamed
       received = Agent.get(events_received, & &1)
       assert length(received) == 5
-      
+
       # Events should maintain order
       sequences = received |> Enum.reverse() |> Enum.map(&(&1.data.sequence))
       assert sequences == [1, 2, 3, 4, 5]
@@ -486,7 +486,7 @@ defmodule Foundation.Services.AgentEventStoreTest do
       })
 
       events_received = Agent.start_link(fn -> [] end)
-      
+
       EventStore.register_stream_handler(stream_pid, fn event ->
         # Slow handler to trigger backpressure
         Process.sleep(50)
@@ -502,7 +502,7 @@ defmodule Foundation.Services.AgentEventStoreTest do
           data: %{sequence: i},
           timestamp: DateTime.utc_now()
         }
-        
+
         EventStore.store_event(event)
         Process.sleep(10)  # Small delay between events
       end
@@ -521,7 +521,7 @@ defmodule Foundation.Services.AgentEventStoreTest do
     test "performs automatic event archival based on age", %{namespace: namespace} do
       # Create old events that should be archived
       old_time = DateTime.add(DateTime.utc_now(), -30, :day)
-      
+
       old_events = for i <- 1..5 do
         %Event{
           id: UUID.uuid4(),
@@ -573,7 +573,7 @@ defmodule Foundation.Services.AgentEventStoreTest do
             data: %{sequence: i},
             timestamp: DateTime.utc_now()
           }
-          
+
           EventStore.store_event(event)
         end
       end
@@ -623,14 +623,14 @@ defmodule Foundation.Services.AgentEventStoreTest do
 
       # Restore storage and verify recovery
       EventStore.restore_storage()
-      
+
       result = EventStore.store_event(event)
       assert :ok = result
     end
 
     test "maintains data consistency during concurrent operations" do
       correlation_id = "consistency-test-#{System.unique_integer()}"
-      
+
       # Launch concurrent event storage operations
       tasks = for i <- 1..20 do
         Task.async(fn ->
@@ -642,21 +642,21 @@ defmodule Foundation.Services.AgentEventStoreTest do
             correlation_id: correlation_id,
             timestamp: DateTime.utc_now()
           }
-          
+
           EventStore.store_event(event)
         end)
       end
 
       # Wait for all operations to complete
       results = Task.await_many(tasks, 5000)
-      
+
       # All operations should succeed
       assert Enum.all?(results, &(&1 == :ok))
 
       # Verify all events were stored correctly
       {:ok, stored_events} = EventStore.get_correlated_events(correlation_id)
       assert length(stored_events) == 20
-      
+
       # Verify sequence integrity
       sequences = Enum.map(stored_events, &(&1.data.sequence))
       assert Enum.sort(sequences) == Enum.to_list(1..20)

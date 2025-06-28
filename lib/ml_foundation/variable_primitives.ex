@@ -46,7 +46,7 @@ defmodule MLFoundation.VariablePrimitives do
         bounds: {0.0001, 1.0},
         scale: :log
       )
-      
+
       # Discrete variable
       {:ok, batch_size} = VariablePrimitives.define_variable(
         :batch_size,
@@ -345,7 +345,7 @@ defmodule MLFoundation.VariablePrimitives do
         min: 0.0001,
         max: 0.1
       )
-      
+
       # Add relationship constraint
       VariablePrimitives.add_constraint(:optimizer_space,
         type: :relationship,

@@ -1,22 +1,22 @@
 defmodule Foundation.Types.Error do
   @moduledoc """
   Unified error type system for the Foundation infrastructure.
-  
+
   Provides a consistent error structure across all Foundation components,
   with support for error categorization, severity levels, and retry strategies.
   Designed for multi-agent environments with rich context information.
-  
+
   ## Features
-  
+
   - **Standardized Structure**: Consistent error format across all components
   - **Severity Classification**: Error prioritization for monitoring and alerting
   - **Retry Strategies**: Built-in guidance for automatic error recovery
   - **Rich Context**: Detailed information for debugging and telemetry
   - **Agent Awareness**: Error attribution to specific agents and capabilities
   - **Distribution Ready**: Serializable for cross-node error propagation
-  
+
   ## Usage
-  
+
       # Basic error creation
       error = Error.new(
         code: 1001,
@@ -24,7 +24,7 @@ defmodule Foundation.Types.Error do
         message: "Invalid input parameters",
         severity: :medium
       )
-      
+
       # Error with context and retry strategy
       error = Error.new(
         code: 2001,
@@ -34,7 +34,7 @@ defmodule Foundation.Types.Error do
         context: %{host: "db.example.com", port: 5432},
         retry_strategy: :exponential_backoff
       )
-      
+
       # Agent-specific error
       error = Error.new(
         code: 3001,
@@ -45,7 +45,7 @@ defmodule Foundation.Types.Error do
         agent_context: %{capability: :inference, health: :degraded}
       )
   """
-  
+
   @type error_code :: pos_integer()
   @type error_type :: atom()
   @type severity :: :low | :medium | :high | :critical
@@ -57,7 +57,7 @@ defmodule Foundation.Types.Error do
     health: :healthy | :degraded | :unhealthy,
     resource_usage: map()
   }
-  
+
   defstruct [
     :code,
     :error_type,
@@ -70,7 +70,7 @@ defmodule Foundation.Types.Error do
     :correlation_id,
     :stack_trace
   ]
-  
+
   @type t :: %__MODULE__{
     code: error_code(),
     error_type: error_type(),
@@ -83,40 +83,40 @@ defmodule Foundation.Types.Error do
     correlation_id: String.t(),
     stack_trace: list() | nil
   }
-  
+
   # Error Code Ranges
   @error_code_ranges %{
     # 1000-1999: General validation and input errors
     validation: 1000..1999,
-    
-    # 2000-2999: Service and infrastructure errors  
+
+    # 2000-2999: Service and infrastructure errors
     infrastructure: 2000..2999,
-    
+
     # 3000-3999: Agent-specific errors
     agent: 3000..3999,
-    
+
     # 4000-4999: Coordination and consensus errors
     coordination: 4000..4999,
-    
+
     # 5000-5999: Circuit breaker and resilience errors
     circuit_breaker: 5000..5999,
-    
+
     # 6000-6999: Rate limiting errors
     rate_limiting: 6000..6999,
-    
+
     # 7000-7999: Process registry errors
     process_registry: 7000..7999,
-    
+
     # 8000-8999: Telemetry and monitoring errors
     telemetry: 8000..8999,
-    
+
     # 9000-9999: Unknown and system errors
     system: 9000..9999
   }
-  
+
   @doc """
   Create a new Foundation error with the specified parameters.
-  
+
   ## Parameters
   - `code`: Unique error code for identification and categorization
   - `error_type`: Semantic error type (atom)
@@ -125,9 +125,9 @@ defmodule Foundation.Types.Error do
   - `context`: Additional error context (optional)
   - `agent_context`: Agent-specific context (optional)
   - `retry_strategy`: Suggested retry approach (optional)
-  
+
   ## Examples
-  
+
       iex> Error.new(
       ...>   code: 1001,
       ...>   error_type: :invalid_input,
@@ -142,11 +142,11 @@ defmodule Foundation.Types.Error do
     error_type = Keyword.fetch!(options, :error_type)
     message = Keyword.fetch!(options, :message)
     severity = Keyword.get(options, :severity, :medium)
-    
+
     context = Keyword.get(options, :context, %{})
     agent_context = Keyword.get(options, :agent_context, nil)
     retry_strategy = Keyword.get(options, :retry_strategy, :none)
-    
+
     %__MODULE__{
       code: code,
       error_type: error_type,
@@ -160,17 +160,17 @@ defmodule Foundation.Types.Error do
       stack_trace: capture_stack_trace()
     }
   end
-  
+
   @doc """
   Create an error from an exception with automatic categorization.
-  
+
   Converts standard Elixir exceptions into Foundation error format,
   attempting to infer appropriate error codes and types.
   """
   @spec from_exception(Exception.t(), keyword()) :: t()
   def from_exception(exception, options \\ []) do
     {code, error_type} = categorize_exception(exception)
-    
+
     base_options = [
       code: code,
       error_type: error_type,
@@ -181,14 +181,14 @@ defmodule Foundation.Types.Error do
         Keyword.get(options, :context, %{})
       )
     ]
-    
+
     merged_options = Keyword.merge(base_options, options)
     new(merged_options)
   end
-  
+
   @doc """
   Add agent context to an existing error.
-  
+
   Useful for enriching errors with agent-specific information
   as they propagate through the system.
   """
@@ -196,10 +196,10 @@ defmodule Foundation.Types.Error do
   def add_agent_context(%__MODULE__{} = error, agent_context) do
     %{error | agent_context: agent_context}
   end
-  
+
   @doc """
   Add additional context to an existing error.
-  
+
   Merges new context with existing context, allowing for
   error enrichment as it moves through different layers.
   """
@@ -208,19 +208,19 @@ defmodule Foundation.Types.Error do
     merged_context = Map.merge(error.context, additional_context)
     %{error | context: merged_context}
   end
-  
+
   @doc """
   Determine if an error is retryable based on its retry strategy.
   """
   @spec retryable?(t()) :: boolean()
   def retryable?(%__MODULE__{retry_strategy: :none}), do: false
   def retryable?(%__MODULE__{retry_strategy: _}), do: true
-  
+
   @doc """
   Check if an error falls within a specific category.
-  
+
   ## Examples
-  
+
       iex> error = Error.new(code: 1001, error_type: :validation_failed, message: "test")
       iex> Error.category?(error, :validation)
       true
@@ -232,7 +232,7 @@ defmodule Foundation.Types.Error do
       range -> code in range
     end
   end
-  
+
   @doc """
   Get the error category based on the error code.
   """
@@ -245,10 +245,10 @@ defmodule Foundation.Types.Error do
       nil -> :unknown
     end
   end
-  
+
   @doc """
   Convert error to a map suitable for JSON serialization.
-  
+
   Useful for API responses, logging, and cross-service communication.
   """
   @spec to_map(t()) :: map()
@@ -266,10 +266,10 @@ defmodule Foundation.Types.Error do
       category: get_category(error)
     }
   end
-  
+
   @doc """
   Create an error from a serialized map.
-  
+
   Inverse of `to_map/1`, useful for deserializing errors
   received from other services or storage.
   """
@@ -284,7 +284,7 @@ defmodule Foundation.Types.Error do
         end
       %DateTime{} = dt -> dt
     end
-    
+
     %__MODULE__{
       code: Map.get(error_map, "code"),
       error_type: atomize_key(Map.get(error_map, "error_type")),
@@ -298,7 +298,7 @@ defmodule Foundation.Types.Error do
       stack_trace: nil
     }
   end
-  
+
   @doc """
   Check if an error should trigger an alert based on severity.
   """
@@ -306,10 +306,10 @@ defmodule Foundation.Types.Error do
   def alertable?(%__MODULE__{severity: severity}) do
     severity in [:high, :critical]
   end
-  
+
   @doc """
   Get suggested retry delay in milliseconds based on retry strategy.
-  
+
   Returns suggested delay for the given attempt number.
   """
   @spec suggested_retry_delay(t(), pos_integer()) :: pos_integer() | nil
@@ -320,9 +320,9 @@ defmodule Foundation.Types.Error do
     min(trunc(:math.pow(2, attempt) * 1_000), 30_000)
   end
   def suggested_retry_delay(%__MODULE__{retry_strategy: :custom}, _attempt), do: 5_000
-  
+
   # Private Implementation
-  
+
   defp categorize_exception(%ArgumentError{}), do: {1002, :invalid_argument}
   defp categorize_exception(%FunctionClauseError{}), do: {1003, :invalid_argument}
   defp categorize_exception(%MatchError{}), do: {1004, :pattern_match_failed}
@@ -332,14 +332,14 @@ defmodule Foundation.Types.Error do
   defp categorize_exception(%SystemLimitError{}), do: {9002, :system_limit_exceeded}
   defp categorize_exception(%ErlangError{}), do: {9003, :erlang_error}
   defp categorize_exception(_), do: {9999, :unknown_exception}
-  
+
   defp generate_correlation_id do
     # Generate a short, unique correlation ID
     :crypto.strong_rand_bytes(8)
     |> Base.url_encode64(padding: false)
     |> String.slice(0, 8)
   end
-  
+
   defp capture_stack_trace do
     # Capture current stack trace, excluding this function
     case Process.info(self(), :current_stacktrace) do
@@ -347,11 +347,11 @@ defmodule Foundation.Types.Error do
         stacktrace
         |> Enum.drop(1)  # Remove this function from trace
         |> Enum.take(10) # Limit to top 10 frames
-      
+
       _ -> nil
     end
   end
-  
+
   defp atomize_key(nil), do: nil
   defp atomize_key(value) when is_atom(value), do: value
   defp atomize_key(value) when is_binary(value) do

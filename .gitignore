@@ -12,5 +12,5 @@ erl_crash.dump
 /config/*.secret.exs
 .elixir_ls/
 repomix-output.xml
-agentjido/
-foundation/
+/agentjido/
+/foundation/

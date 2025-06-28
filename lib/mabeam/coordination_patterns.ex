@@ -210,7 +210,7 @@ defmodule MABEAM.CoordinationPatterns do
 
       # Setup barrier for 5 agents
       {:ok, barrier_id} = CoordinationPatterns.setup_barrier(:phase1, 5)
-      
+
       # In each agent:
       :ok = CoordinationPatterns.wait_at_barrier(:phase1, agent_id)
   """

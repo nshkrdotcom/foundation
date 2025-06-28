@@ -74,15 +74,15 @@ config :foundation,
 
   # MABEAM Configuration (extracted but still part of Foundation config)
   mabeam: [
-    # Feature flag for gradual migration to unified registry  
+    # Feature flag for gradual migration to unified registry
     use_unified_registry: true,
-    
+
     # Legacy registry configuration (when use_unified_registry is false)
     legacy_registry: [
       backend: MABEAM.ProcessRegistry.Backend.LocalETS,
       auto_start: false
     ],
-    
+
     # Migration settings
     migration: [
       auto_migrate_on_start: false,

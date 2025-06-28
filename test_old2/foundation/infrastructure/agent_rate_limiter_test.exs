@@ -7,7 +7,7 @@ defmodule Foundation.Infrastructure.AgentRateLimiterTest do
 
   setup do
     namespace = {:test, make_ref()}
-    
+
     # Start rate limiter with test configuration
     {:ok, _pid} = AgentRateLimiter.start_link([
       rate_limits: %{
@@ -102,7 +102,7 @@ defmodule Foundation.Infrastructure.AgentRateLimiterTest do
       end
 
       training_successes = Enum.count(training_results, &(&1 == :ok))
-      
+
       # Training agent has specialized capability (1.5x multiplier)
       # Training limit is 2 requests per window * 1.5 = 3 requests
       assert training_successes == 3
@@ -128,7 +128,7 @@ defmodule Foundation.Infrastructure.AgentRateLimiterTest do
 
       # Should be rate limited
       assert {:error, :rate_limited} = AgentRateLimiter.check_rate_with_agent(
-        :general_agent, 
+        :general_agent,
         :general
       )
 
@@ -163,7 +163,7 @@ defmodule Foundation.Infrastructure.AgentRateLimiterTest do
       end
 
       successes = Enum.count(results, &(&1 == :ok))
-      
+
       # Unhealthy agents should get reduced limits (e.g., 50% of normal)
       assert successes < 10  # Less than normal healthy limit
     end
@@ -214,7 +214,7 @@ defmodule Foundation.Infrastructure.AgentRateLimiterTest do
       end
 
       successes = Enum.count(results, &(&1 == :ok))
-      
+
       # Should get fewer than normal limit due to high resource usage
       assert successes < 5
     end
@@ -241,7 +241,7 @@ defmodule Foundation.Infrastructure.AgentRateLimiterTest do
       end
 
       successes = Enum.count(results, &(&1 == :ok))
-      
+
       # Should get more than base limit (5) due to low resource usage
       assert successes > 5
     end
@@ -268,7 +268,7 @@ defmodule Foundation.Infrastructure.AgentRateLimiterTest do
       end
 
       stats = AgentRateLimiter.get_agent_stats(:ml_agent_1)
-      
+
       assert stats.total_requests >= 13
       assert stats.successful_requests >= 8
       assert stats.rate_limited_requests >= 0
@@ -282,7 +282,7 @@ defmodule Foundation.Infrastructure.AgentRateLimiterTest do
       AgentRateLimiter.check_rate_with_agent(:training_agent, :training)
 
       overview = AgentRateLimiter.get_system_overview()
-      
+
       assert overview.active_agents >= 3
       assert overview.total_requests >= 3
       assert is_map(overview.requests_by_operation)
@@ -300,7 +300,7 @@ defmodule Foundation.Infrastructure.AgentRateLimiterTest do
 
       # Send burst of requests quickly
       start_time = System.monotonic_time(:millisecond)
-      
+
       burst_results = for _i <- 1..15 do  # More than normal limit
         AgentRateLimiter.check_rate_with_agent(
           :ml_agent_1,
@@ -310,7 +310,7 @@ defmodule Foundation.Infrastructure.AgentRateLimiterTest do
       end
 
       end_time = System.monotonic_time(:millisecond)
-      
+
       # If burst was fast enough, should allow more than base limit
       if (end_time - start_time) < 500 do
         successes = Enum.count(burst_results, &(&1 == :ok))
@@ -325,9 +325,9 @@ defmodule Foundation.Infrastructure.AgentRateLimiterTest do
     test "coordinates rate limits during multi-agent operations", %{namespace: namespace} do
       # Start a coordinated operation involving multiple agents
       coordination_id = "multi_agent_inference_#{System.unique_integer()}"
-      
+
       participants = [:ml_agent_1, :ml_agent_2]
-      
+
       # Reserve capacity for coordinated operation
       reservation_results = for agent_id <- participants do
         AgentRateLimiter.reserve_capacity_for_coordination(
@@ -363,26 +363,26 @@ defmodule Foundation.Infrastructure.AgentRateLimiterTest do
     test "supports dynamic rate limit updates" do
       # Get current limits
       original_limits = AgentRateLimiter.get_current_limits(:ml_agent_1, :inference)
-      
+
       # Update limits dynamically
       new_config = %{
         requests: 20,
         window: 1000,
         burst_allowance: 10
       }
-      
+
       assert :ok = AgentRateLimiter.update_operation_limits(:inference, new_config)
-      
+
       # Verify limits were updated
       updated_limits = AgentRateLimiter.get_current_limits(:ml_agent_1, :inference)
       assert updated_limits.requests == 20
       assert updated_limits.burst_allowance == 10
-      
+
       # Test that new limits are applied
       results = for _i <- 1..25 do
         AgentRateLimiter.check_rate_with_agent(:ml_agent_1, :inference)
       end
-      
+
       successes = Enum.count(results, &(&1 == :ok))
       # ml_agent_1 has high_performance (2x) so 20 * 2 = 40 base + 10 * 2 = 20 burst = 60 total
       # We sent 25, so all should succeed
@@ -395,9 +395,9 @@ defmodule Foundation.Infrastructure.AgentRateLimiterTest do
         window: 0,     # Invalid zero window
         burst_allowance: "invalid"  # Invalid type
       }
-      
+
       assert {:error, :invalid_configuration} = AgentRateLimiter.update_operation_limits(
-        :test_operation, 
+        :test_operation,
         invalid_config
       )
     end
@@ -410,7 +410,7 @@ defmodule Foundation.Infrastructure.AgentRateLimiterTest do
         :inference,
         %{namespace: {:test, make_ref()}}
       )
-      
+
       assert {:error, :agent_not_found} = result
     end
 
@@ -419,7 +419,7 @@ defmodule Foundation.Infrastructure.AgentRateLimiterTest do
         :ml_agent_1,
         :unknown_operation
       )
-      
+
       # Should either default to general limits or return error
       assert result == :ok or match?({:error, :unknown_operation}, result)
     end
@@ -431,9 +431,9 @@ defmodule Foundation.Infrastructure.AgentRateLimiterTest do
           AgentRateLimiter.check_rate_with_agent(:ml_agent_1, :inference)
         end)
       end
-      
+
       results = Task.await_many(tasks, 5000)
-      
+
       # Should have consistent behavior even under concurrency
       successes = Enum.count(results, &(&1 == :ok))
       assert successes <= 20  # Should respect limits even under concurrency
@@ -443,14 +443,14 @@ defmodule Foundation.Infrastructure.AgentRateLimiterTest do
   describe "telemetry and observability" do
     test "emits telemetry events for rate limit decisions" do
       events = Agent.start_link(fn -> [] end)
-      
+
       handler_id = :test_rate_limiter_handler
       :telemetry.attach(
         handler_id,
         [:foundation, :rate_limiter, :check],
         fn event, measurements, metadata, _config ->
-          Agent.update(events, fn acc -> 
-            [{event, measurements, metadata} | acc] 
+          Agent.update(events, fn acc ->
+            [{event, measurements, metadata} | acc]
           end)
         end,
         nil
@@ -461,13 +461,13 @@ defmodule Foundation.Infrastructure.AgentRateLimiterTest do
 
       Process.sleep(10)  # Allow telemetry processing
       captured_events = Agent.get(events, & &1)
-      
+
       assert length(captured_events) > 0
-      
+
       rate_limit_event = Enum.find(captured_events, fn {event, _measurements, _metadata} ->
         event == [:foundation, :rate_limiter, :check]
       end)
-      
+
       assert rate_limit_event != nil
       {_event, measurements, metadata} = rate_limit_event
       assert metadata.agent_id == :ml_agent_1

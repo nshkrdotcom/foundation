@@ -746,7 +746,7 @@ defmodule Foundation.Coordination.PrimitivesTest do
           assert true
       end
 
-      # TODO: Add assertions for message passing once implemented  
+      # TODO: Add assertions for message passing once implemented
       # assert_receive {:lock_request, _resource_id, _lock_ref, _timestamp, _node}
     end
 

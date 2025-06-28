@@ -4,7 +4,7 @@ defmodule MABEAM.CoordinationAdvancedTest do
 
   This test suite validates:
   - Byzantine fault tolerant consensus with PBFT protocol
-  - Weighted consensus with expertise-based voting  
+  - Weighted consensus with expertise-based voting
   - Iterative refinement with multi-round proposal evolution
   - Integration with existing MABEAM coordination infrastructure
   """
@@ -48,7 +48,7 @@ defmodule MABEAM.CoordinationAdvancedTest do
     # Register agents
     Enum.each(agent_configs, &ProcessRegistry.register_agent/1)
 
-    # Start agents  
+    # Start agents
     started_agents =
       for config <- agent_configs do
         {:ok, pid} = ProcessRegistry.start_agent(config.id)
@@ -178,7 +178,7 @@ defmodule MABEAM.CoordinationAdvancedTest do
       {:ok, status_1} = Coordination.get_session_status(session_id_1)
       assert status_1.metadata.task_specification.weighting_strategy == :expertise
 
-      # Test performance weighting  
+      # Test performance weighting
       {:ok, session_id_2} =
         Coordination.start_weighted_consensus(proposal, weighted_agents, weighting: :performance)
 

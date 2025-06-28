@@ -9,7 +9,7 @@ defmodule Foundation.Services.ConfigServer do
 
   ## Key Features
 
-  - **Service-Owned Resilience**: All configuration behavior (success and failure paths) 
+  - **Service-Owned Resilience**: All configuration behavior (success and failure paths)
     is owned by this module
   - **Transparent Fallback**: Graceful degradation is built into every public function
   - **Cache Management**: Automatic caching of successful reads for fallback scenarios

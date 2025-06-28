@@ -7,7 +7,7 @@ defmodule Foundation.Coordination.AgentAwareServiceTest do
 
   setup do
     namespace = {:test, make_ref()}
-    
+
     # Start CoordinationService with test configuration
     {:ok, _pid} = CoordinationService.start_link([
       consensus_timeout: 5000,
@@ -114,7 +114,7 @@ defmodule Foundation.Coordination.AgentAwareServiceTest do
       )
 
       assert result.status == :accepted
-      
+
       # Only agents with inference capability should have participated
       participating_agents = Enum.map(result.participant_votes, & &1.agent_id)
       assert :ml_agent_1 in participating_agents
@@ -147,7 +147,7 @@ defmodule Foundation.Coordination.AgentAwareServiceTest do
 
       # Simulate agent becoming unavailable during consensus
       Process.sleep(500)  # Let consensus start
-      
+
       # Update agent health to critical (simulating failure)
       critical_metadata = %AgentInfo{
         id: :ml_agent_2,
@@ -160,10 +160,10 @@ defmodule Foundation.Coordination.AgentAwareServiceTest do
 
       # Consensus should adapt and complete with available agents
       {:ok, result} = Task.await(consensus_task, 15_000)
-      
+
       assert result.status in [:accepted, :adapted]
       assert result.adaptation_reason != nil
-      assert "agent_unavailable" in result.adaptation_reason or 
+      assert "agent_unavailable" in result.adaptation_reason or
              "health_degraded" in result.adaptation_reason
     end
   end
@@ -244,7 +244,7 @@ defmodule Foundation.Coordination.AgentAwareServiceTest do
       # Verify load consideration in scoring
       ml_agent_2_score = Enum.find(result.candidate_scores, &(&1.agent_id == :ml_agent_2))
       ml_agent_1_score = Enum.find(result.candidate_scores, &(&1.agent_id == :ml_agent_1))
-      
+
       assert ml_agent_2_score.availability_score > ml_agent_1_score.availability_score
     end
 
@@ -317,7 +317,7 @@ defmodule Foundation.Coordination.AgentAwareServiceTest do
 
       # All agents should complete (both have training capabilities or are filtered)
       results = Task.await_many(barrier_tasks, 15_000)
-      
+
       # At least one agent with training capability should succeed
       successful_results = Enum.filter(results, &(&1 == :ok))
       assert length(successful_results) > 0
@@ -377,7 +377,7 @@ defmodule Foundation.Coordination.AgentAwareServiceTest do
 
       # Simulate ml_agent_2 becoming unhealthy during wait
       Process.sleep(500)
-      
+
       unhealthy_metadata = %AgentInfo{
         id: :ml_agent_2,
         type: :agent,
@@ -429,7 +429,7 @@ defmodule Foundation.Coordination.AgentAwareServiceTest do
       )
 
       assert result.status in [:accepted, :modified]
-      
+
       # High resource agent should either be excluded or have modified participation
       if result.status == :modified do
         assert result.modifications =~ "resource_constraints"
@@ -457,12 +457,12 @@ defmodule Foundation.Coordination.AgentAwareServiceTest do
 
       assert allocation_result.status == :allocated
       assert length(allocation_result.agent_allocations) == 3
-      
+
       # Verify fair distribution
       total_allocated_memory = allocation_result.agent_allocations
                               |> Enum.map(& &1.memory_allocation)
                               |> Enum.sum()
-      
+
       assert_in_delta total_allocated_memory, 2.0, 0.1  # Within 10% of requested
 
       # Each agent should have reasonable allocation
@@ -513,13 +513,13 @@ defmodule Foundation.Coordination.AgentAwareServiceTest do
       assert length(negotiation_result.final_allocations) == 2
 
       # Higher priority agent should get larger share
-      ml_agent_1_allocation = Enum.find(negotiation_result.final_allocations, 
+      ml_agent_1_allocation = Enum.find(negotiation_result.final_allocations,
                                       &(&1.agent_id == :ml_agent_1))
-      ml_agent_2_allocation = Enum.find(negotiation_result.final_allocations, 
+      ml_agent_2_allocation = Enum.find(negotiation_result.final_allocations,
                                       &(&1.agent_id == :ml_agent_2))
 
       assert ml_agent_1_allocation.memory_allocation > ml_agent_2_allocation.memory_allocation
-      
+
       # Total should not exceed available
       total_memory = ml_agent_1_allocation.memory_allocation + ml_agent_2_allocation.memory_allocation
       assert total_memory <= 2.0
@@ -533,7 +533,7 @@ defmodule Foundation.Coordination.AgentAwareServiceTest do
       # Perform multiple coordination operations
       for i <- 1..5 do
         proposal = %{action: :performance_test, round: i}
-        
+
         {:ok, _result} = CoordinationService.consensus(
           :"performance_consensus_#{i}",
           participants,
@@ -558,7 +558,7 @@ defmodule Foundation.Coordination.AgentAwareServiceTest do
     test "provides real-time coordination status", %{namespace: namespace} do
       # Start long-running coordination
       participants = [:ml_agent_1, :ml_agent_2]
-      
+
       consensus_task = Task.async(fn ->
         CoordinationService.consensus(
           :long_running_consensus,
@@ -570,7 +570,7 @@ defmodule Foundation.Coordination.AgentAwareServiceTest do
 
       # Check status during operation
       Process.sleep(200)
-      
+
       {:ok, status} = CoordinationService.get_coordination_status(
         :long_running_consensus,
         %{namespace: namespace}
@@ -629,7 +629,7 @@ defmodule Foundation.Coordination.AgentAwareServiceTest do
 
       # Simulate agent failure during coordination
       Process.sleep(500)
-      
+
       # Make ml_agent_2 unavailable
       critical_metadata = %AgentInfo{
         id: :ml_agent_2,
@@ -642,7 +642,7 @@ defmodule Foundation.Coordination.AgentAwareServiceTest do
 
       # Should complete with remaining agents
       {:ok, result} = Task.await(consensus_task, 12_000)
-      
+
       assert result.status in [:accepted, :accepted_with_failures]
       assert result.failed_agents != nil
       assert :ml_agent_2 in result.failed_agents
@@ -670,11 +670,11 @@ defmodule Foundation.Coordination.AgentAwareServiceTest do
       end
 
       results = Task.await_many(tasks, 5000)
-      
+
       # Some should succeed, some should fail
       successes = Enum.count(results, &match?({:ok, _}, &1))
       failures = Enum.count(results, &match?({:error, _}, &1))
-      
+
       assert successes > 0
       assert failures > 0
       assert successes + failures == 10
@@ -728,11 +728,11 @@ defmodule Foundation.Coordination.AgentAwareServiceTest do
 
       assert workflow_result.status == :completed
       assert length(workflow_result.stage_results) == 3
-      
+
       # Verify stages completed in order
       stage_names = Enum.map(workflow_result.stage_results, & &1.stage_name)
       assert stage_names == [:preparation, :execution, :validation]
-      
+
       # All stages should have succeeded
       for stage_result <- workflow_result.stage_results do
         assert stage_result.status == :completed
@@ -775,7 +775,7 @@ defmodule Foundation.Coordination.AgentAwareServiceTest do
       assert {:ok, workflow_result} = result
       assert workflow_result.status == :failed
       assert workflow_result.failed_stage != nil
-      
+
       # Should have attempted rollback
       assert workflow_result.rollback_attempted == true
       assert length(workflow_result.rollback_actions) > 0

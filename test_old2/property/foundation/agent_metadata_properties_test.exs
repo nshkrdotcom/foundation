@@ -24,7 +24,7 @@ defmodule Foundation.AgentMetadataPropertiesTest do
         agents = for i <- 1..agent_count do
           capabilities = Enum.at(capabilities_list, rem(i, length(capabilities_list)))
           health = Enum.at(health_states, rem(i, length(health_states)))
-          
+
           {:"agent_#{i}", capabilities, health}
         end
 
@@ -51,13 +51,13 @@ defmodule Foundation.AgentMetadataPropertiesTest do
 
         # Wait for all registrations
         registration_results = Task.await_many(registration_tasks, 5000)
-        
+
         # All registrations should succeed
         assert Enum.all?(registration_results, &(&1 == :ok))
 
         # Verify all agents can be looked up with correct metadata
         for {agent_id, expected_capabilities, expected_health} <- agents do
-          assert {:ok, {_pid, metadata}} = 
+          assert {:ok, {_pid, metadata}} =
             ProcessRegistry.lookup_agent(namespace, agent_id)
 
           assert metadata.id == agent_id
@@ -69,12 +69,12 @@ defmodule Foundation.AgentMetadataPropertiesTest do
         # Test capability-based queries work correctly
         for capability <- Enum.uniq(List.flatten(capabilities_list)) do
           agents_with_capability = ProcessRegistry.lookup_agents_by_capability(
-            namespace, 
+            namespace,
             capability
           )
 
-          expected_count = Enum.count(agents, fn {_, caps, _} -> 
-            capability in caps 
+          expected_count = Enum.count(agents, fn {_, caps, _} ->
+            capability in caps
           end)
 
           assert length(agents_with_capability) == expected_count
@@ -146,13 +146,13 @@ defmodule Foundation.AgentMetadataPropertiesTest do
 
         # Wait for all updates
         update_results = Task.await_many(update_tasks, 5000)
-        
+
         # All updates should succeed
         assert Enum.all?(update_results, &(&1 == :ok))
 
         # Final state should be consistent
         {:ok, {^pid, final_metadata}} = ProcessRegistry.lookup_agent(namespace, agent_id)
-        
+
         # Should have one of the update values
         assert final_metadata.health in health_transitions
         assert final_metadata.resource_usage.memory >= 0.0
@@ -200,14 +200,14 @@ defmodule Foundation.AgentMetadataPropertiesTest do
             :ok ->
               allocated_memory = allocated_memory + memory_request
               allocated_cpu = allocated_cpu + cpu_request
-              
+
               # Verify we haven't exceeded limits
               assert allocated_memory <= memory_limit
               assert allocated_cpu <= cpu_limit
-              
+
             {:error, _} ->
               # Allocation failed, which is expected when limits would be exceeded
-              assert allocated_memory + memory_request > memory_limit or 
+              assert allocated_memory + memory_request > memory_limit or
                      allocated_cpu + cpu_request > cpu_limit
           end
         end
@@ -260,7 +260,7 @@ defmodule Foundation.AgentMetadataPropertiesTest do
             :ok ->
               current_memory = max(0, current_memory - memory_release)
               current_cpu = max(0.0, current_cpu - cpu_release)
-              
+
             {:error, _} ->
               # Release failed because we're trying to release more than allocated
               assert memory_release > current_memory or cpu_release > current_cpu
@@ -287,7 +287,7 @@ defmodule Foundation.AgentMetadataPropertiesTest do
       ) do
         # Configure rate limiter with test limits
         rate_limit = max(1, div(requests_per_agent, 2))  # Set limit to half of requests
-        
+
         AgentRateLimiter.update_operation_limits(:property_test_op, %{
           requests: rate_limit,
           window: time_window_ms
@@ -323,13 +323,13 @@ defmodule Foundation.AgentMetadataPropertiesTest do
         for {agent_id, results} <- all_results do
           successful_requests = Enum.count(results, &(&1 == :ok))
           failed_requests = Enum.count(results, &match?({:error, :rate_limited}, &1))
-          
+
           # Should have some successful requests
           assert successful_requests > 0
-          
+
           # Should not exceed rate limit significantly
           assert successful_requests <= rate_limit + 2  # Allow small variance
-          
+
           # Total requests should match
           assert successful_requests + failed_requests == requests_per_agent
         end
@@ -376,19 +376,19 @@ defmodule Foundation.AgentMetadataPropertiesTest do
 
         # Verify correlation integrity
         assert length(retrieved_events) == event_count
-        
+
         # All events should have the same correlation_id
         assert Enum.all?(retrieved_events, &(&1.correlation_id == correlation_id))
-        
+
         # Events should be ordered by timestamp
         timestamps = Enum.map(retrieved_events, & &1.timestamp)
         assert timestamps == Enum.sort(timestamps, DateTime)
-        
+
         # All original event data should be preserved
         retrieved_sequences = retrieved_events
                              |> Enum.map(&(&1.data.sequence))
                              |> Enum.sort()
-        
+
         original_sequences = 1..event_count |> Enum.to_list()
         assert retrieved_sequences == original_sequences
       end
@@ -402,18 +402,18 @@ defmodule Foundation.AgentMetadataPropertiesTest do
         agent_ids <- list_of(atom(), min_length: 1, max_length: 5)
       ) do
         metric_name = [:property, :test, :metric]
-        
+
         # Record metrics for random agents
         recorded_values = for value <- metric_values do
           agent_id = Enum.random(agent_ids)
-          
+
           TelemetryService.record_metric(
             metric_name,
             value,
             :gauge,
             %{agent_id: agent_id, property_test: true}
           )
-          
+
           {agent_id, value}
         end
 
@@ -463,10 +463,10 @@ defmodule Foundation.AgentMetadataPropertiesTest do
         )
       ) do
         namespace = {:test, make_ref()}
-        
+
         # Track system state
         registered_agents = MapSet.new()
-        
+
         # Execute random operations
         final_agents = Enum.reduce(operations, registered_agents, fn operation, agents ->
           case operation do
@@ -479,7 +479,7 @@ defmodule Foundation.AgentMetadataPropertiesTest do
                   capabilities: capabilities,
                   health: :healthy
                 }
-                
+
                 case ProcessRegistry.register_agent(namespace, agent_id, pid, metadata) do
                   :ok -> MapSet.put(agents, agent_id)
                   _ -> agents
@@ -487,7 +487,7 @@ defmodule Foundation.AgentMetadataPropertiesTest do
               else
                 agents
               end
-              
+
             {:update_health, agent_id, health} ->
               if agent_id in agents do
                 {:ok, {_pid, metadata}} = ProcessRegistry.lookup_agent(namespace, agent_id)
@@ -495,7 +495,7 @@ defmodule Foundation.AgentMetadataPropertiesTest do
                 ProcessRegistry.update_agent_metadata(namespace, agent_id, updated_metadata)
               end
               agents
-              
+
             {:allocate_resource, agent_id, memory} ->
               if agent_id in agents do
                 try do
@@ -509,7 +509,7 @@ defmodule Foundation.AgentMetadataPropertiesTest do
                 end
               end
               agents
-              
+
             {:record_metric, agent_id, value} ->
               if agent_id in agents do
                 TelemetryService.record_metric(
@@ -520,7 +520,7 @@ defmodule Foundation.AgentMetadataPropertiesTest do
                 )
               end
               agents
-              
+
             {:store_event, agent_id, event_type} ->
               if agent_id in agents do
                 event = %Foundation.Types.Event{
@@ -537,7 +537,7 @@ defmodule Foundation.AgentMetadataPropertiesTest do
         end)
 
         # Verify system consistency
-        
+
         # All registered agents should be discoverable
         for agent_id <- final_agents do
           assert {:ok, {_pid, _metadata}} = ProcessRegistry.lookup_agent(namespace, agent_id)

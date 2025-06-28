@@ -462,7 +462,7 @@ defmodule MABEAM.CoordinationHierarchicalTest do
       invalid_configs = [
         # Invalid cluster size
         %{cluster_size: 0},
-        # Invalid max levels  
+        # Invalid max levels
         %{cluster_size: 10, max_levels: 0},
         # Invalid tolerance
         %{cluster_size: 3, balance_tolerance: -0.1},

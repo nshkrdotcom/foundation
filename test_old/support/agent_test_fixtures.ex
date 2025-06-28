@@ -9,7 +9,7 @@ defmodule Foundation.TestHelpers.AgentFixtures do
   ## Agent Types
 
   - **Basic Workers**: Simple computation agents
-  - **ML Agents**: Machine learning specific agents  
+  - **ML Agents**: Machine learning specific agents
   - **Coordination Agents**: Agents that manage other agents
   - **Specialist Agents**: Domain-specific agents (e.g., NLP, computer vision)
 
@@ -101,9 +101,9 @@ defmodule Foundation.TestHelpers.AgentFixtures do
   ## Examples
 
       config = ml_agent_config()
-      config = ml_agent_config(:nlp_agent, 
-        model_type: :transformer, 
-        gpu: true, 
+      config = ml_agent_config(:nlp_agent,
+        model_type: :transformer,
+        gpu: true,
         frameworks: [:huggingface]
       )
   """
@@ -165,7 +165,7 @@ defmodule Foundation.TestHelpers.AgentFixtures do
   ## Examples
 
       config = coordination_agent_config()
-      config = coordination_agent_config(:ml_coordinator, 
+      config = coordination_agent_config(:ml_coordinator,
         max_managed_agents: 50,
         coordination_strategy: :priority_based
       )
@@ -220,8 +220,8 @@ defmodule Foundation.TestHelpers.AgentFixtures do
   ## Examples
 
       config = failing_agent_config()
-      config = failing_agent_config(:flaky_worker, 
-        failure_mode: :random, 
+      config = failing_agent_config(:flaky_worker,
+        failure_mode: :random,
         failure_rate: 0.3
       )
   """
@@ -288,8 +288,8 @@ defmodule Foundation.TestHelpers.AgentFixtures do
   ## Examples
 
       config = vision_agent_config(:image_classifier)
-      config = vision_agent_config(:object_detector, 
-        model: :yolo, 
+      config = vision_agent_config(:object_detector,
+        model: :yolo,
         input_formats: [:jpg, :png, :tiff]
       )
   """
@@ -317,8 +317,8 @@ defmodule Foundation.TestHelpers.AgentFixtures do
   ## Examples
 
       config = data_agent_config(:etl_processor)
-      config = data_agent_config(:stream_processor, 
-        throughput: :high, 
+      config = data_agent_config(:stream_processor,
+        throughput: :high,
         formats: [:json, :parquet, :csv]
       )
   """

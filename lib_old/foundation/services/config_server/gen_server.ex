@@ -3,7 +3,7 @@ defmodule Foundation.Services.ConfigServer.GenServer do
   Internal GenServer implementation for configuration management.
 
   This is the actual GenServer implementation that handles configuration
-  persistence, updates, and notifications. It delegates business logic 
+  persistence, updates, and notifications. It delegates business logic
   to ConfigLogic module.
 
   This module is now internal to the ConfigServer proxy and should not

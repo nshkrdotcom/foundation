@@ -54,7 +54,7 @@ defmodule Foundation.AtomicTransaction do
         |> register_agent("agent_1", self(), %{capability: :ml})
         |> update_metadata("agent_2", %{status: :active})
       end)
-      
+
       # Transaction with custom registry
       {:ok, result} = Foundation.AtomicTransaction.transact(registry_pid, fn tx ->
         tx

@@ -4,7 +4,7 @@ defmodule Foundation.ProcessRegistry.Optimizations do
 
   Provides enhanced functionality including:
   - Metadata indexing for faster searches
-  - Lookup caching for frequently accessed services  
+  - Lookup caching for frequently accessed services
   - Bulk operations for improved throughput
   - Memory-efficient storage strategies
   """

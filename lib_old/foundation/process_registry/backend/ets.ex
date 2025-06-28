@@ -38,7 +38,7 @@ defmodule Foundation.ProcessRegistry.Backend.ETS do
   ## Performance Characteristics
 
   - **Lookup**: O(1), < 1ms
-  - **Register**: O(1), < 1ms  
+  - **Register**: O(1), < 1ms
   - **Unregister**: O(1), < 1ms
   - **List All**: O(n), where n is number of registrations
   - **Memory**: ~100 bytes per registration + metadata size
@@ -317,7 +317,7 @@ defmodule Foundation.ProcessRegistry.Backend.ETS do
   @doc """
   Get detailed statistics about the ETS backend.
 
-  ## Parameters  
+  ## Parameters
   - `state` - Current backend state
 
   ## Returns

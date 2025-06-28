@@ -111,7 +111,7 @@ defmodule Foundation.Infrastructure.UnifiedConfigTest do
       config_path = [:infrastructure, :protection, @protection_key]
       assert :ok = Config.update(config_path, @test_config)
 
-      # Even if ConfigServer is temporarily unavailable, 
+      # Even if ConfigServer is temporarily unavailable,
       # graceful degradation should provide cached value
       assert {:ok, retrieved_config} = Infrastructure.get_protection_config(@protection_key)
       assert retrieved_config == @test_config

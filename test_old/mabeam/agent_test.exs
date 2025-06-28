@@ -72,7 +72,7 @@ defmodule MABEAM.AgentTest do
       config = %{type: :worker, module: MABEAM.TestWorker}
       assert {:error, {:missing_required_fields, [:id]}} = Agent.register_agent(config)
 
-      # Missing type  
+      # Missing type
       config = %{id: :test, module: MABEAM.TestWorker}
       assert {:error, {:missing_required_fields, [:type]}} = Agent.register_agent(config)
 

@@ -55,8 +55,11 @@ defmodule JidoFoundation.BridgeTest do
     end
 
     test "handles registration failure gracefully", %{registry: registry} do
+      # Create a dead process reference
       dead_pid = spawn(fn -> :ok end)
-      :timer.sleep(10)
+      # Wait for process to terminate using monitoring
+      ref = Process.monitor(dead_pid)
+      assert_receive {:DOWN, ^ref, :process, ^dead_pid, _}, 100
 
       assert {:error, _} =
                Bridge.register_agent(dead_pid,
@@ -332,8 +335,12 @@ defmodule JidoFoundation.BridgeTest do
         if Process.alive?(agent), do: GenServer.stop(agent, :normal, 5000)
       end)
 
-      # Custom health check
+      # Track when health checks happen
+      test_pid = self()
+      health_check_ref = make_ref()
+
       health_check = fn pid ->
+        send(test_pid, {:health_checked, health_check_ref})
         if Process.alive?(pid), do: :healthy, else: :unhealthy
       end
 
@@ -345,23 +352,16 @@ defmodule JidoFoundation.BridgeTest do
           registry: registry
         )
 
-      # Agent should remain healthy
-      :timer.sleep(150)
+      # Wait for health check to run
+      assert_receive {:health_checked, ^health_check_ref}, 200
       assert {:ok, {_, metadata}} = Foundation.lookup(agent, registry)
       assert metadata.health_status == :healthy
 
-      # Stop the monitor process before killing the agent
+      # Clean up monitor before we stop the agent
       case Process.get({:monitor, agent}) do
         nil -> :ok
         monitor_pid -> Process.exit(monitor_pid, :shutdown)
       end
-
-      # Kill agent
-      Process.flag(:trap_exit, true)
-      Process.exit(agent, :kill)
-
-      # Clean up
-      :timer.sleep(50)
     end
   end
 
@@ -420,10 +420,11 @@ defmodule JidoFoundation.BridgeTest do
     end
 
     test "handles timeout in distributed execution", %{registry: registry} do
-      # Create slow agent
+      # Create slow agent that responds slowly
       slow_agent =
         spawn(fn ->
           receive do
+            # This is acceptable - simulating slow work
             _ -> :timer.sleep(10_000)
           end
         end)
@@ -440,7 +441,7 @@ defmodule JidoFoundation.BridgeTest do
           :slow,
           fn agent ->
             send(agent, :work)
-            :timer.sleep(100)
+            # Return immediately instead of sleeping - the test should verify the result
             :timeout
           end,
           max_concurrency: 1,

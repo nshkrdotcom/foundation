@@ -8,7 +8,7 @@ defmodule Foundation.Infrastructure.ResourceManagerTest do
 
   setup do
     namespace = {:test, make_ref()}
-    
+
     # Start ResourceManager with test configuration
     {:ok, _pid} = ResourceManager.start_link([
       monitoring_interval: 100,  # Fast monitoring for testing
@@ -89,11 +89,11 @@ defmodule Foundation.Infrastructure.ResourceManagerTest do
 
     test "prevents duplicate agent registration" do
       limits = %{memory_limit: 1_000_000_000}
-      
+
       assert :ok = ResourceManager.register_agent(:duplicate_test, limits)
-      
+
       assert {:error, :agent_already_registered} = ResourceManager.register_agent(
-        :duplicate_test, 
+        :duplicate_test,
         limits
       )
     end
@@ -172,11 +172,11 @@ defmodule Foundation.Infrastructure.ResourceManagerTest do
 
       # Verify allocation is tracked
       {:ok, status} = ResourceManager.get_agent_resource_status(:allocation_test)
-      
+
       assert status.current_usage.memory == 800_000_000
       assert status.current_usage.cpu == 1.5
       assert status.current_usage.storage == 2_000_000_000
-      
+
       # Check utilization percentages
       assert status.utilization.memory == 0.4  # 800MB / 2GB
       assert status.utilization.cpu == 0.75    # 1.5 / 2.0
@@ -227,7 +227,7 @@ defmodule Foundation.Infrastructure.ResourceManagerTest do
 
       # Try to release 800MB (more than allocated)
       result = ResourceManager.release_resources(:over_release_test, %{memory: 800_000_000})
-      
+
       assert {:error, reason} = result
       assert reason =~ "insufficient_allocated"
     end
@@ -313,7 +313,7 @@ defmodule Foundation.Infrastructure.ResourceManagerTest do
       assert system_status.total_limits.memory == 3_500_000_000  # Sum of all limits
       assert system_status.total_usage.memory == 2_700_000_000   # Sum of all usage
       assert system_status.system_utilization.memory ≈ 0.77     # 2.7GB / 3.5GB
-      
+
       # Check individual agent summaries are included
       assert length(system_status.agent_summaries) == 3
     end
@@ -345,7 +345,7 @@ defmodule Foundation.Infrastructure.ResourceManagerTest do
 
       # Set up alert handler
       alerts = Agent.start_link(fn -> [] end)
-      
+
       ResourceManager.register_alert_handler(fn alert ->
         Agent.update(alerts, fn acc -> [alert | acc] end)
       end)
@@ -360,11 +360,11 @@ defmodule Foundation.Infrastructure.ResourceManagerTest do
       Process.sleep(150)
 
       captured_alerts = Agent.get(alerts, & &1)
-      
+
       # Should have alerts for both memory and CPU
       memory_alert = Enum.find(captured_alerts, &(&1.resource_type == :memory))
       cpu_alert = Enum.find(captured_alerts, &(&1.resource_type == :cpu))
-      
+
       assert memory_alert != nil
       assert memory_alert.agent_id == :threshold_test
       assert memory_alert.severity == :warning
@@ -390,7 +390,7 @@ defmodule Foundation.Infrastructure.ResourceManagerTest do
 
       captured_alerts = Agent.get(alerts, & &1)
       critical_alert = Enum.find(captured_alerts, &(&1.severity == :critical))
-      
+
       assert critical_alert != nil
       assert critical_alert.agent_id == :critical_test
       assert critical_alert.utilization >= 0.9
@@ -404,7 +404,7 @@ defmodule Foundation.Infrastructure.ResourceManagerTest do
         memory_limit: 2_000_000_000,
         cpu_limit: 2.0
       })
-      
+
       ResourceManager.register_agent(:overutilized, %{
         memory_limit: 500_000_000,
         cpu_limit: 0.5
@@ -415,7 +415,7 @@ defmodule Foundation.Infrastructure.ResourceManagerTest do
         memory: 200_000_000,  # 10% utilization
         cpu: 0.2
       })
-      
+
       ResourceManager.allocate_resources(:overutilized, %{
         memory: 480_000_000,  # 96% utilization
         cpu: 0.49
@@ -442,7 +442,7 @@ defmodule Foundation.Infrastructure.ResourceManagerTest do
     ) do
       agent_id = :property_test_agent
       total_limit = 2_000_000_000  # 2GB limit
-      
+
       ResourceManager.register_agent(agent_id, %{memory_limit: total_limit})
 
       # Perform concurrent allocations
@@ -461,10 +461,10 @@ defmodule Foundation.Infrastructure.ResourceManagerTest do
 
       # Verify resource accounting consistency
       successful_allocations = Enum.count(results, &(&1 == :ok))
-      
+
       # Should not exceed the agent's memory limit
       assert final_status.current_usage.memory <= total_limit
-      
+
       # Should have some successful allocations if amounts are reasonable
       if Enum.sum(allocation_amounts) <= total_limit do
         assert successful_allocations > 0
@@ -478,7 +478,7 @@ defmodule Foundation.Infrastructure.ResourceManagerTest do
   describe "error handling and edge cases" do
     test "handles agent process termination gracefully" do
       ResourceManager.register_agent(:termination_test, %{memory_limit: 1_000_000_000})
-      
+
       # Allocate some resources
       ResourceManager.allocate_resources(:termination_test, %{memory: 500_000_000})
 
@@ -565,7 +565,7 @@ defmodule Foundation.Infrastructure.ResourceManagerTest do
 
       # Update agent health to degraded
       degraded_metadata = %AgentInfo{
-        agent_metadata | 
+        agent_metadata |
         health: :degraded,
         resource_usage: %{memory: 0.9, cpu: 0.8}
       }
@@ -574,7 +574,7 @@ defmodule Foundation.Infrastructure.ResourceManagerTest do
       # ResourceManager should detect degraded health and be more conservative
       {:ok, status} = ResourceManager.get_agent_resource_status(:health_integrated_agent)
       assert status.health_adjusted_limits != nil
-      
+
       # Should recommend reducing allocation for degraded agent
       {:ok, recommendations} = ResourceManager.get_optimization_recommendations()
       health_rec = Enum.find(recommendations, &(&1.agent_id == :health_integrated_agent))
