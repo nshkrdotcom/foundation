@@ -422,10 +422,11 @@ defmodule MLFoundation.VariablePrimitives do
       end)
 
     case Enum.find(results, &match?({:error, _}, &1)) do
-      nil -> 
+      nil ->
         variables = Enum.map(results, fn {:ok, var} -> var end)
         {:ok, variables}
-      {:error, _reason} = error -> 
+
+      {:error, _reason} = error ->
         error
     end
   end
@@ -470,8 +471,8 @@ defmodule MLFoundation.VariablePrimitives do
   end
 
   defp update_atomically(variable_name, new_value, opts) do
-    space_id = Keyword.get(opts, :space)
-    
+    _space_id = Keyword.get(opts, :space)
+
     # For now, just use direct update since we don't have proper transaction support
     # TODO: Implement proper atomic transaction support
     update_directly(variable_name, new_value, opts)
@@ -550,7 +551,7 @@ defmodule MLFoundation.VariablePrimitives do
         [] ->
           # No values to average
           nil
-          
+
         [v | _] when is_number(v) ->
           Enum.sum(values) / length(values)
 
