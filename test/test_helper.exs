@@ -12,16 +12,22 @@ Code.ensure_loaded(:meck)
 # Ensure protocol implementations are loaded
 # The protocol implementation is in test/support which is compiled in test env
 # We need to ensure the protocol itself is loaded
-Code.ensure_loaded(Foundation.Registry)
+Code.ensure_loaded!(Foundation.Registry)
 
 # In CI, protocols might be consolidated before test support files are available
 # Explicitly compile the implementation module to ensure it's available
 if Mix.env() == :test do
-  # Check if the implementation module is already loaded
-  impl_module = Module.concat([Foundation.Registry, PID])
-
-  unless Code.ensure_loaded?(impl_module) do
-    Code.require_file("test/support/agent_registry_pid_impl.ex", __DIR__ <> "/..")
+  # Check if the PID implementation is already available
+  impl_module = Foundation.Registry.impl_for(self())
+  
+  # Only compile if not already loaded
+  if impl_module == Foundation.Registry.Any do
+    support_path = Path.join([__DIR__, "support"])
+    impl_file = Path.join(support_path, "agent_registry_pid_impl.ex")
+    
+    if File.exists?(impl_file) do
+      Code.compile_file(impl_file)
+    end
   end
 end
 
