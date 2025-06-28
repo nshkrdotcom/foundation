@@ -303,22 +303,24 @@ defmodule FoundationTest do
 
   describe "error handling for missing configuration" do
     test "raises helpful error when registry implementation not configured" do
-      # This would only happen in environments where config is not set
-      # We can't easily test this without manipulating Application env
-      # so we'll test that the error messages are well-formed
-
-      assert_raise RuntimeError, ~r/Foundation.Registry implementation not configured/, fn ->
-        # Simulate missing config by passing nil and triggering config lookup
-        Process.put(:__foundation_test_no_config__, true)
-
-        # This is a bit of a hack for testing, but it demonstrates the error path
-        try do
-          Foundation.register("key", self(), %{})
-        rescue
-          _exception ->
-            # Re-raise with our test message to verify the pattern
-            reraise "Foundation.Registry implementation not configured.\n\nAdd to your config:\nconfig :foundation, registry_impl: YourRegistryImpl",
-                    __STACKTRACE__
+      # Store current config
+      current_config = Application.get_env(:foundation, :registry_impl)
+      
+      try do
+        # Clear the config temporarily
+        Application.delete_env(:foundation, :registry_impl)
+        
+        # Since Foundation.register uses ErrorHandler, it will return an error instead of raising
+        result = Foundation.register("key", self(), %{})
+        
+        # Check that we get an error with the expected message
+        assert {:error, %Foundation.ErrorHandler.Error{reason: exception}} = result
+        assert is_exception(exception)
+        assert exception.message =~ "Foundation.Registry implementation not configured"
+      after
+        # Restore the config
+        if current_config do
+          Application.put_env(:foundation, :registry_impl, current_config)
         end
       end
     end

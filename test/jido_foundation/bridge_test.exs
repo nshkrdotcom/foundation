@@ -1,0 +1,326 @@
+defmodule JidoFoundation.BridgeTest do
+  use ExUnit.Case, async: true
+  
+  alias JidoFoundation.Bridge
+  
+  # Mock Jido agent for testing
+  defmodule MockJidoAgent do
+    use GenServer
+    
+    def start_link(config) do
+      GenServer.start_link(__MODULE__, config)
+    end
+    
+    def init(config) do
+      {:ok, %{config: config, state: :ready}}
+    end
+    
+    def handle_call(:get_state, _from, state) do
+      {:reply, state, state}
+    end
+    
+    def handle_call({:execute, action}, _from, state) do
+      result = case action do
+        :success -> {:ok, :completed}
+        :failure -> {:error, :failed}
+        :crash -> raise "Simulated crash"
+      end
+      {:reply, result, state}
+    end
+  end
+  
+  setup context do
+    # Start Foundation services with unique ID including test name
+    test_name = context.test |> to_string() |> String.replace(" ", "_")
+    unique_id = :"test_bridge_#{test_name}_#{System.unique_integer([:positive])}"
+    
+    # Check if one is already running and stop it
+    case Process.whereis(unique_id) do
+      nil -> :ok
+      pid -> GenServer.stop(pid)
+    end
+    
+    {:ok, registry} = MABEAM.AgentRegistry.start_link(id: unique_id)
+    Application.put_env(:foundation, :registry_impl, registry)
+    
+    on_exit(fn ->
+      Application.delete_env(:foundation, :registry_impl)
+      if Process.alive?(registry), do: GenServer.stop(registry)
+    end)
+    
+    {:ok, registry: registry}
+  end
+  
+  describe "register_agent/2" do
+    test "registers Jido agent with Foundation", %{registry: registry} do
+      {:ok, agent} = MockJidoAgent.start_link(%{})
+      
+      assert :ok = Bridge.register_agent(agent, 
+        capabilities: [:test, :mock],
+        metadata: %{version: "1.0"}
+      )
+      
+      # Verify registration
+      assert {:ok, {^agent, metadata}} = Foundation.Registry.lookup(registry, agent)
+      assert metadata.framework == :jido
+      assert metadata.capability == [:test, :mock]
+      assert metadata.health_status == :healthy
+    end
+    
+    test "handles registration failure gracefully" do
+      dead_pid = spawn(fn -> :ok end)
+      :timer.sleep(10)
+      
+      assert {:error, _} = Bridge.register_agent(dead_pid, capabilities: [:test])
+    end
+  end
+  
+  describe "unregister_agent/2" do
+    test "unregisters agent from Foundation", %{registry: registry} do
+      {:ok, agent} = MockJidoAgent.start_link(%{})
+      :ok = Bridge.register_agent(agent, capabilities: [:test])
+      
+      assert :ok = Bridge.unregister_agent(agent)
+      assert :error = Foundation.Registry.lookup(registry, agent)
+    end
+  end
+  
+  describe "update_agent_metadata/3" do
+    test "updates registered agent metadata", %{registry: registry} do
+      {:ok, agent} = MockJidoAgent.start_link(%{})
+      :ok = Bridge.register_agent(agent, capabilities: [:test])
+      
+      assert :ok = Bridge.update_agent_metadata(agent, %{
+        status: :busy,
+        load: 0.75
+      })
+      
+      assert {:ok, {^agent, metadata}} = Foundation.Registry.lookup(registry, agent)
+      assert metadata.status == :busy
+      assert metadata.load == 0.75
+    end
+    
+    test "returns error for unregistered agent" do
+      {:ok, agent} = MockJidoAgent.start_link(%{})
+      
+      assert {:error, :agent_not_registered} = Bridge.update_agent_metadata(agent, %{})
+    end
+  end
+  
+  describe "emit_agent_event/4" do
+    test "emits telemetry events" do
+      {:ok, agent} = MockJidoAgent.start_link(%{})
+      
+      :telemetry.attach(
+        "test-jido-events",
+        [:jido, :agent, :test_event],
+        fn event, measurements, metadata, _config ->
+          send(self(), {:telemetry, event, measurements, metadata})
+        end,
+        nil
+      )
+      
+      Bridge.emit_agent_event(agent, :test_event, %{value: 42}, %{extra: :data})
+      
+      assert_receive {:telemetry, [:jido, :agent, :test_event], measurements, metadata}
+      assert measurements.value == 42
+      assert metadata.agent_id == agent
+      assert metadata.framework == :jido
+      assert metadata.extra == :data
+      
+      :telemetry.detach("test-jido-events")
+    end
+  end
+  
+  describe "execute_protected/3" do
+    test "executes action with circuit breaker protection" do
+      {:ok, agent} = MockJidoAgent.start_link(%{})
+      
+      result = Bridge.execute_protected(agent, fn ->
+        GenServer.call(agent, {:execute, :success})
+      end)
+      
+      assert result == {:ok, :completed}
+    end
+    
+    test "uses fallback when circuit breaker opens" do
+      {:ok, agent} = MockJidoAgent.start_link(%{})
+      service_id = {:test_service, System.unique_integer()}
+      
+      # Cause multiple failures to open circuit
+      for _ <- 1..6 do
+        Bridge.execute_protected(agent, fn ->
+          {:error, :service_error}
+        end, service_id: service_id)
+      end
+      
+      # Circuit should be open, fallback should be used
+      result = Bridge.execute_protected(agent, fn ->
+        {:ok, :should_not_execute}
+      end, 
+      service_id: service_id,
+      fallback: {:ok, :fallback_used})
+      
+      assert result == {:ok, :fallback_used}
+    end
+  end
+  
+  describe "resource management" do
+    test "acquires and releases resources" do
+      token = Bridge.acquire_resource(:test_resource, %{test: true})
+      assert {:ok, _} = token
+      
+      assert :ok = Bridge.release_resource(elem(token, 1))
+    end
+  end
+  
+  describe "agent discovery" do
+    setup %{registry: _} do
+      # Register some test agents
+      agents = for i <- 1..5 do
+        {:ok, agent} = MockJidoAgent.start_link(%{id: i})
+        capabilities = if rem(i, 2) == 0, do: [:even, :number], else: [:odd, :number]
+        :ok = Bridge.register_agent(agent, capabilities: capabilities, skip_monitoring: true)
+        {i, agent}
+      end
+      
+      {:ok, agents: agents}
+    end
+    
+    test "finds agents by capability" do
+      {:ok, agents} = Bridge.find_agents_by_capability(:even)
+      
+      assert length(agents) == 2
+      assert Enum.all?(agents, fn {_key, _pid, metadata} ->
+        :even in metadata.capability
+      end)
+    end
+    
+    test "finds agents with multiple criteria" do
+      {:ok, agents} = Bridge.find_agents([
+        {[:capability], :number, :eq},
+        {[:health_status], :healthy, :eq}
+      ])
+      
+      assert length(agents) == 5
+    end
+  end
+  
+  describe "batch operations" do
+    test "batch registers multiple agents" do
+      agents = for i <- 1..3 do
+        {:ok, agent} = MockJidoAgent.start_link(%{id: i})
+        {agent, [capabilities: [:batch, :"agent_#{i}"]]}
+      end
+      
+      assert {:ok, registered} = Bridge.batch_register_agents(agents)
+      assert length(registered) == 3
+    end
+  end
+  
+  describe "monitoring" do
+    test "monitors agent health" do
+      {:ok, agent} = MockJidoAgent.start_link(%{})
+      
+      # Custom health check
+      health_check = fn pid ->
+        if Process.alive?(pid), do: :healthy, else: :unhealthy
+      end
+      
+      :ok = Bridge.register_agent(agent, 
+        capabilities: [:monitored],
+        health_check: health_check,
+        health_check_interval: 100
+      )
+      
+      # Agent should remain healthy
+      :timer.sleep(150)
+      assert {:ok, {_, metadata}} = Foundation.lookup(agent)
+      assert metadata.health_status == :healthy
+      
+      # Stop the monitor process before killing the agent
+      case Process.get({:monitor, agent}) do
+        nil -> :ok
+        monitor_pid -> Process.exit(monitor_pid, :shutdown)
+      end
+      
+      # Kill agent
+      Process.flag(:trap_exit, true)
+      Process.exit(agent, :kill)
+      
+      # Clean up
+      :timer.sleep(50)
+    end
+  end
+  
+  describe "convenience functions" do
+    test "start_and_register_agent/3" do
+      result = Bridge.start_and_register_agent(
+        MockJidoAgent,
+        %{auto: true},
+        capabilities: [:auto_registered]
+      )
+      
+      assert {:ok, agent} = result
+      assert Process.alive?(agent)
+      
+      # Verify registration
+      assert {:ok, {_, metadata}} = Foundation.lookup(agent)
+      assert :auto_registered in metadata.capability
+    end
+    
+    test "distributed_execute/3" do
+      # Register agents with specific capability
+      for i <- 1..3 do
+        {:ok, agent} = MockJidoAgent.start_link(%{id: i})
+        :ok = Bridge.register_agent(agent, capabilities: [:distributed_test], skip_monitoring: true)
+      end
+      
+      # Execute distributed operation
+      {:ok, results} = Bridge.distributed_execute(:distributed_test, fn agent ->
+        GenServer.call(agent, :get_state, 1000)
+      end)
+      
+      assert length(results) == 3
+      assert Enum.all?(results, fn
+        {:ok, %{state: :ready}} -> true
+        _ -> false
+      end)
+    end
+  end
+  
+  describe "error handling" do
+    test "handles agent crashes gracefully" do
+      # Trap exits to handle the crash gracefully
+      Process.flag(:trap_exit, true)
+      
+      {:ok, agent} = MockJidoAgent.start_link(%{})
+      :ok = Bridge.register_agent(agent, capabilities: [:crasher], skip_monitoring: true)
+      
+      result = Bridge.execute_protected(agent, fn ->
+        GenServer.call(agent, {:execute, :crash})
+      end, fallback: {:ok, :recovered})
+      
+      assert result == {:ok, :recovered}
+    end
+    
+    test "handles timeout in distributed execution" do
+      # Create slow agent
+      slow_agent = spawn(fn ->
+        receive do
+          _ -> :timer.sleep(10_000)
+        end
+      end)
+      
+      :ok = Bridge.register_agent(slow_agent, capabilities: [:slow], skip_monitoring: true)
+      
+      {:ok, results} = Bridge.distributed_execute(:slow, fn agent ->
+        send(agent, :work)
+        :timer.sleep(100)
+        :timeout
+      end, max_concurrency: 1)
+      
+      assert [{:ok, :timeout}] = results
+    end
+  end
+end

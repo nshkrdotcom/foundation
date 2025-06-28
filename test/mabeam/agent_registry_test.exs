@@ -50,7 +50,8 @@ defmodule MABEAM.AgentRegistryTest do
       :ok = Foundation.register("agent1", agent1, metadata, registry)
 
       # Single-phase registration means duplicate attempts fail immediately
-      assert {:error, :already_exists} = Foundation.register("agent1", agent1, metadata, registry)
+      result = Foundation.register("agent1", agent1, metadata, registry)
+      assert {:error, %Foundation.ErrorHandler.Error{reason: :already_exists}} = result
 
       # Verify only one registration exists
       assert {:ok, {^agent1, _}} = Foundation.lookup("agent1", registry)
@@ -60,9 +61,9 @@ defmodule MABEAM.AgentRegistryTest do
       # Missing required fields
       invalid_metadata = %{capability: [:inference]}
 
-      assert {:error, {:missing_required_fields, missing}} =
-               Foundation.register("agent1", agent1, invalid_metadata, registry)
-
+      result = Foundation.register("agent1", agent1, invalid_metadata, registry)
+      assert {:error, %Foundation.ErrorHandler.Error{reason: {:missing_required_fields, missing}}} = result
+      
       assert :health_status in missing
       assert :node in missing
       assert :resources in missing
@@ -71,8 +72,9 @@ defmodule MABEAM.AgentRegistryTest do
     test "validates health status values", %{registry: registry, agent1: agent1} do
       invalid_metadata = valid_metadata(health_status: :invalid_status)
 
-      assert {:error, {:invalid_health_status, :invalid_status, [:healthy, :degraded, :unhealthy]}} =
-               Foundation.register("agent1", agent1, invalid_metadata, registry)
+      result = Foundation.register("agent1", agent1, invalid_metadata, registry)
+      assert {:error, %Foundation.ErrorHandler.Error{reason: reason}} = result
+      assert reason == {:invalid_health_status, :invalid_status, [:healthy, :degraded, :unhealthy]}
     end
   end
 
