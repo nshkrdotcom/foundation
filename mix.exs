@@ -8,6 +8,7 @@ defmodule Foundation.MixProject do
       elixir: "~> 1.15",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
+      consolidate_protocols: Mix.env() != :test,
       description: description(),
       package: package(),
       deps: deps(),
@@ -182,6 +183,7 @@ defmodule Foundation.MixProject do
 
       # Development and testing
       {:mox, "~> 1.2", only: [:dev, :test]},
+      {:meck, "~> 0.9", only: [:dev, :test]},
       {:stream_data, "~> 1.1", only: [:dev, :test]},
       {:ex_doc, "~> 0.30", only: :dev, runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
