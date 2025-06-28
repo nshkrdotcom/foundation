@@ -134,12 +134,14 @@ defmodule Foundation do
   @spec register(key :: term(), pid(), metadata :: map(), impl :: term() | nil) ::
           :ok | {:error, term()}
   def register(key, pid, metadata, impl \\ nil) do
-    case Foundation.ErrorHandler.with_recovery(fn ->
-      actual_impl = impl || registry_impl()
-      Foundation.Registry.register(actual_impl, key, pid, metadata)
-    end, 
-    category: :transient,
-    telemetry_metadata: %{operation: :register, key: key}) do
+    case Foundation.ErrorHandler.with_recovery(
+           fn ->
+             actual_impl = impl || registry_impl()
+             Foundation.Registry.register(actual_impl, key, pid, metadata)
+           end,
+           category: :transient,
+           telemetry_metadata: %{operation: :register, key: key}
+         ) do
       {:ok, :ok} -> :ok
       {:ok, result} -> result
       error -> error
@@ -449,14 +451,16 @@ defmodule Foundation do
         ) ::
           {:ok, result :: any()} | {:error, term()}
   def execute_protected(service_id, function, context \\ %{}, impl \\ nil) do
-    Foundation.ErrorHandler.with_recovery(fn ->
-      actual_impl = impl || infrastructure_impl()
-      Foundation.Infrastructure.execute_protected(actual_impl, service_id, function, context)
-    end,
-    category: :transient,
-    strategy: :circuit_break,
-    circuit_breaker: service_id,
-    telemetry_metadata: Map.merge(context, %{service_id: service_id}))
+    Foundation.ErrorHandler.with_recovery(
+      fn ->
+        actual_impl = impl || infrastructure_impl()
+        Foundation.Infrastructure.execute_protected(actual_impl, service_id, function, context)
+      end,
+      category: :transient,
+      strategy: :circuit_break,
+      circuit_breaker: service_id,
+      telemetry_metadata: Map.merge(context, %{service_id: service_id})
+    )
   end
 
   @doc """

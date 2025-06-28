@@ -92,7 +92,7 @@ defmodule MABEAM.AgentRegistry do
       monitors: %{},
       registry_id: registry_id
     }
-    
+
     # Register tables with ResourceManager if available
     if Process.whereis(Foundation.ResourceManager) do
       Foundation.ResourceManager.monitor_table(state.main_table)
@@ -125,67 +125,71 @@ defmodule MABEAM.AgentRegistry do
 
   def handle_call({:register, agent_id, pid, metadata}, _from, state) do
     # Check resource availability first if ResourceManager is available
-    resource_check = if Process.whereis(Foundation.ResourceManager) do
-      Foundation.ResourceManager.acquire_resource(:register_agent, %{
-        agent_id: agent_id,
-        registry_id: state.registry_id
-      })
-    else
-      {:ok, nil}
-    end
-    
+    resource_check =
+      if Process.whereis(Foundation.ResourceManager) do
+        Foundation.ResourceManager.acquire_resource(:register_agent, %{
+          agent_id: agent_id,
+          registry_id: state.registry_id
+        })
+      else
+        {:ok, nil}
+      end
+
     case resource_check do
       {:ok, resource_token} ->
         # Proceed with registration
-        result = with :ok <- validate_agent_metadata(metadata),
-                      true <- Process.alive?(pid),
-                      false <- :ets.member(state.main_table, agent_id) do
-          # Atomic registration - all operations in single GenServer call
-          # This provides atomicity through GenServer serialization
-          monitor_ref = Process.monitor(pid)
-          entry = {agent_id, pid, metadata, :os.timestamp()}
+        result =
+          with :ok <- validate_agent_metadata(metadata),
+               true <- Process.alive?(pid),
+               false <- :ets.member(state.main_table, agent_id) do
+            # Atomic registration - all operations in single GenServer call
+            # This provides atomicity through GenServer serialization
+            monitor_ref = Process.monitor(pid)
+            entry = {agent_id, pid, metadata, :os.timestamp()}
 
-          # Use insert_new for additional safety - fails if key already exists
-          case :ets.insert_new(state.main_table, entry) do
-            true ->
-              # Update all indexes atomically within same call
-              update_all_indexes(state, agent_id, metadata)
+            # Use insert_new for additional safety - fails if key already exists
+            case :ets.insert_new(state.main_table, entry) do
+              true ->
+                # Update all indexes atomically within same call
+                update_all_indexes(state, agent_id, metadata)
 
-              # Track monitor reference
-              new_monitors = Map.put(state.monitors, monitor_ref, agent_id)
+                # Track monitor reference
+                new_monitors = Map.put(state.monitors, monitor_ref, agent_id)
 
-              Logger.debug(
-                "Registered agent #{inspect(agent_id)} with capabilities #{inspect(metadata.capability)}"
-              )
+                Logger.debug(
+                  "Registered agent #{inspect(agent_id)} with capabilities #{inspect(metadata.capability)}"
+                )
 
-              {:reply, :ok, %{state | monitors: new_monitors}}
+                {:reply, :ok, %{state | monitors: new_monitors}}
 
+              false ->
+                # Cleanup monitor and return error
+                Process.demonitor(monitor_ref, [:flush])
+                {:reply, {:error, :already_exists}, state}
+            end
+          else
             false ->
-              # Cleanup monitor and return error
-              Process.demonitor(monitor_ref, [:flush])
+              # Process is dead
+              {:reply, {:error, :process_not_alive}, state}
+
+            true ->
+              # Agent already exists
               {:reply, {:error, :already_exists}, state}
+
+            error ->
+              {:reply, error, state}
           end
-        else
-          false ->
-            # Process is dead
-            {:reply, {:error, :process_not_alive}, state}
 
-          true ->
-            # Agent already exists
-            {:reply, {:error, :already_exists}, state}
-
-          error ->
-            {:reply, error, state}
-        end
-        
         # Release resource token if registration failed
         case result do
-          {:reply, :ok, _} -> result
+          {:reply, :ok, _} ->
+            result
+
           error_result ->
             if resource_token, do: Foundation.ResourceManager.release_resource(resource_token)
             error_result
         end
-        
+
       {:error, reason} ->
         Logger.warning("Resource manager denied registration: #{inspect(reason)}")
         {:reply, {:error, {:resource_exhausted, reason}}, state}
@@ -357,15 +361,15 @@ defmodule MABEAM.AgentRegistry do
   # Atomic Transaction Support
   def handle_call({:atomic_transaction, operations, tx_id}, _from, state) do
     Logger.debug("Executing atomic transaction #{tx_id} with #{length(operations)} operations")
-    
+
     # Execute all operations within this single GenServer call
     # This ensures atomicity through GenServer serialization
     result = execute_transaction_operations(operations, state, [], tx_id)
-    
+
     case result do
       {:ok, rollback_data, new_state} ->
         {:reply, {:ok, rollback_data}, new_state}
-        
+
       {:error, reason, rollback_data, _partial_state} ->
         # Transaction failed - state unchanged due to functional approach
         {:reply, {:error, reason, rollback_data}, state}
@@ -375,32 +379,33 @@ defmodule MABEAM.AgentRegistry do
   # Batch Operations Support
   def handle_call({:batch_register, agents}, _from, state) when is_list(agents) do
     Logger.debug("Executing batch registration for #{length(agents)} agents")
-    
+
     # Check resource availability for batch if ResourceManager available
-    resource_check = if Process.whereis(Foundation.ResourceManager) do
-      Foundation.ResourceManager.acquire_resource(:batch_register, %{
-        count: length(agents),
-        registry_id: state.registry_id
-      })
-    else
-      {:ok, nil}
-    end
-    
+    resource_check =
+      if Process.whereis(Foundation.ResourceManager) do
+        Foundation.ResourceManager.acquire_resource(:batch_register, %{
+          count: length(agents),
+          registry_id: state.registry_id
+        })
+      else
+        {:ok, nil}
+      end
+
     case resource_check do
       {:ok, resource_token} ->
         # Execute batch registration atomically
         result = execute_batch_register(agents, state, [], resource_token)
-        
+
         case result do
           {:ok, registered_ids, new_state} ->
             {:reply, {:ok, registered_ids}, new_state}
-            
+
           {:error, reason, partial_ids, _state} ->
             # Release resource on failure
             if resource_token, do: Foundation.ResourceManager.release_resource(resource_token)
             {:reply, {:error, reason, partial_ids}, state}
         end
-        
+
       {:error, reason} ->
         {:reply, {:error, {:resource_exhausted, reason}}, state}
     end
@@ -422,7 +427,7 @@ defmodule MABEAM.AgentRegistry do
 
         # Remove from monitors
         new_monitors = Map.delete(state.monitors, monitor_ref)
-        
+
         # Notify ResourceManager about cleanup if available
         if Process.whereis(Foundation.ResourceManager) do
           spawn(fn ->
@@ -433,7 +438,7 @@ defmodule MABEAM.AgentRegistry do
             })
           end)
         end
-        
+
         {:noreply, %{state | monitors: new_monitors}}
     end
   end
@@ -600,28 +605,33 @@ defmodule MABEAM.AgentRegistry do
 
   defp execute_transaction_operations([{:register, args} | rest], state, rollback_data, tx_id) do
     [agent_id, pid, metadata] = args
-    
+
     case validate_and_register(agent_id, pid, metadata, state) do
       {:ok, new_state, _monitor_ref} ->
         # Operation succeeded, continue with rest
         rollback_info = {:unregister, agent_id}
         execute_transaction_operations(rest, new_state, [rollback_info | rollback_data], tx_id)
-        
+
       {:error, reason} ->
         # Operation failed, abort transaction
         {:error, {:register_failed, agent_id, reason}, rollback_data, state}
     end
   end
 
-  defp execute_transaction_operations([{:update_metadata, args} | rest], state, rollback_data, tx_id) do
+  defp execute_transaction_operations(
+         [{:update_metadata, args} | rest],
+         state,
+         rollback_data,
+         tx_id
+       ) do
     [agent_id, new_metadata] = args
-    
+
     case lookup_and_update_metadata(agent_id, new_metadata, state) do
       {:ok, new_state, old_metadata} ->
         # Operation succeeded, continue with rest
         rollback_info = {:update_metadata, agent_id, old_metadata}
         execute_transaction_operations(rest, new_state, [rollback_info | rollback_data], tx_id)
-        
+
       {:error, reason} ->
         # Operation failed, abort transaction
         {:error, {:update_metadata_failed, agent_id, reason}, rollback_data, state}
@@ -630,13 +640,13 @@ defmodule MABEAM.AgentRegistry do
 
   defp execute_transaction_operations([{:unregister, args} | rest], state, rollback_data, tx_id) do
     [agent_id] = args
-    
+
     case lookup_and_unregister(agent_id, state) do
       {:ok, new_state, {pid, metadata}} ->
         # Operation succeeded, continue with rest
         rollback_info = {:register, agent_id, pid, metadata}
         execute_transaction_operations(rest, new_state, [rollback_info | rollback_data], tx_id)
-        
+
       {:error, reason} ->
         # Operation failed, abort transaction
         {:error, {:unregister_failed, agent_id, reason}, rollback_data, state}
@@ -647,19 +657,18 @@ defmodule MABEAM.AgentRegistry do
     with :ok <- validate_agent_metadata(metadata),
          true <- Process.alive?(pid),
          false <- :ets.member(state.main_table, agent_id) do
-      
       # Create all the updates
       monitor_ref = Process.monitor(pid)
       entry = {agent_id, pid, metadata, :os.timestamp()}
-      
+
       # Apply updates to ETS tables
       :ets.insert(state.main_table, entry)
       update_all_indexes(state, agent_id, metadata)
-      
+
       # Update state
       new_monitors = Map.put(state.monitors, monitor_ref, agent_id)
       new_state = %{state | monitors: new_monitors}
-      
+
       {:ok, new_state, monitor_ref}
     else
       false -> {:error, :process_not_alive}
@@ -671,14 +680,13 @@ defmodule MABEAM.AgentRegistry do
   defp lookup_and_update_metadata(agent_id, new_metadata, state) do
     with :ok <- validate_agent_metadata(new_metadata),
          [{^agent_id, pid, old_metadata, _timestamp}] <- :ets.lookup(state.main_table, agent_id) do
-      
       # Update main table
       :ets.insert(state.main_table, {agent_id, pid, new_metadata, :os.timestamp()})
-      
+
       # Update indexes
       clear_agent_from_indexes(state, agent_id)
       update_all_indexes(state, agent_id, new_metadata)
-      
+
       {:ok, state, old_metadata}
     else
       [] -> {:error, :not_found}
@@ -697,11 +705,11 @@ defmodule MABEAM.AgentRegistry do
             {ref, _} -> ref
             nil -> nil
           end
-        
+
         # Remove from all tables
         :ets.delete(state.main_table, agent_id)
         clear_agent_from_indexes(state, agent_id)
-        
+
         # Update state
         new_monitors =
           if monitor_ref do
@@ -710,10 +718,10 @@ defmodule MABEAM.AgentRegistry do
           else
             state.monitors
           end
-        
+
         new_state = %{state | monitors: new_monitors}
         {:ok, new_state, {pid, metadata}}
-        
+
       [] ->
         {:error, :not_found}
     end
@@ -726,12 +734,17 @@ defmodule MABEAM.AgentRegistry do
     {:ok, Enum.reverse(registered_ids), state}
   end
 
-  defp execute_batch_register([{agent_id, pid, metadata} | rest], state, registered_ids, resource_token) do
+  defp execute_batch_register(
+         [{agent_id, pid, metadata} | rest],
+         state,
+         registered_ids,
+         resource_token
+       ) do
     case validate_and_register(agent_id, pid, metadata, state) do
       {:ok, new_state, _monitor_ref} ->
         # Continue with rest
         execute_batch_register(rest, new_state, [agent_id | registered_ids], resource_token)
-        
+
       {:error, reason} ->
         # Batch failed - return partial results
         {:error, {:batch_register_failed, agent_id, reason}, Enum.reverse(registered_ids), state}

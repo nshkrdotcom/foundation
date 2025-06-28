@@ -62,8 +62,10 @@ defmodule MABEAM.AgentRegistryTest do
       invalid_metadata = %{capability: [:inference]}
 
       result = Foundation.register("agent1", agent1, invalid_metadata, registry)
-      assert {:error, %Foundation.ErrorHandler.Error{reason: {:missing_required_fields, missing}}} = result
-      
+
+      assert {:error, %Foundation.ErrorHandler.Error{reason: {:missing_required_fields, missing}}} =
+               result
+
       assert :health_status in missing
       assert :node in missing
       assert :resources in missing

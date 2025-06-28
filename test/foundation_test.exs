@@ -305,14 +305,14 @@ defmodule FoundationTest do
     test "raises helpful error when registry implementation not configured" do
       # Store current config
       current_config = Application.get_env(:foundation, :registry_impl)
-      
+
       try do
         # Clear the config temporarily
         Application.delete_env(:foundation, :registry_impl)
-        
+
         # Since Foundation.register uses ErrorHandler, it will return an error instead of raising
         result = Foundation.register("key", self(), %{})
-        
+
         # Check that we get an error with the expected message
         assert {:error, %Foundation.ErrorHandler.Error{reason: exception}} = result
         assert is_exception(exception)
