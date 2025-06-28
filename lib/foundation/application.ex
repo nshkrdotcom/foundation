@@ -108,7 +108,7 @@ defmodule Foundation.Application do
       
       {:error, reason} ->
         Logger.error("Foundation infrastructure initialization failed: #{inspect(reason)}")
-        return {:error, {:infrastructure_init_failed, reason}}
+        {:error, {:infrastructure_init_failed, reason}}
     end
     
     # Build clean supervision tree

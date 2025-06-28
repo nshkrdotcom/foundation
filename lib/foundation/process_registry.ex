@@ -55,6 +55,14 @@ defmodule Foundation.ProcessRegistry do
   use GenServer
   require Logger
   
+  # Timeout constants from formal specification
+  @registration_timeout_ms 10_000
+  @lookup_timeout_ms 5_000
+  @query_timeout_ms 10_000
+  @health_update_timeout_ms 5_000
+  @cleanup_window_ms 100
+  @max_memory_bytes 100_000_000  # 100MB limit
+  
   @type namespace :: atom()
   @type local_id :: term()
   @type process_id :: {namespace(), node(), local_id()}
@@ -98,7 +106,7 @@ defmodule Foundation.ProcessRegistry do
   """
   @spec register(process_id(), pid(), agent_metadata()) :: :ok | {:error, term()}
   def register(process_id, pid, metadata \\ %{}) do
-    GenServer.call(__MODULE__, {:register, process_id, pid, metadata})
+    GenServer.call(__MODULE__, {:register, process_id, pid, metadata}, @registration_timeout_ms)
   end
   
   @doc """
@@ -129,7 +137,7 @@ defmodule Foundation.ProcessRegistry do
   """
   @spec lookup(process_id()) :: lookup_result()
   def lookup(process_id) do
-    GenServer.call(__MODULE__, {:lookup, process_id})
+    GenServer.call(__MODULE__, {:lookup, process_id}, @lookup_timeout_ms)
   end
   
   @doc """
@@ -161,7 +169,7 @@ defmodule Foundation.ProcessRegistry do
   """
   @spec find_by_capability(capability()) :: {:ok, [registry_entry()]} | {:error, term()}
   def find_by_capability(capability) do
-    GenServer.call(__MODULE__, {:find_by_capability, capability})
+    GenServer.call(__MODULE__, {:find_by_capability, capability}, @query_timeout_ms)
   end
   
   @doc """
@@ -174,7 +182,7 @@ defmodule Foundation.ProcessRegistry do
   """
   @spec find_by_type(agent_type()) :: {:ok, [registry_entry()]} | {:error, term()}
   def find_by_type(type) do
-    GenServer.call(__MODULE__, {:find_by_type, type})
+    GenServer.call(__MODULE__, {:find_by_type, type}, @query_timeout_ms)
   end
   
   @doc """
@@ -184,7 +192,7 @@ defmodule Foundation.ProcessRegistry do
   
       {:ok, unhealthy_agents} = Foundation.ProcessRegistry.find_by_health(:unhealthy)
       Enum.each(unhealthy_agents, fn {pid, metadata} ->
-        Logger.warning("Unhealthy agent: #{inspect(metadata)}")
+        Logger.warning("Unhealthy agent: \#{inspect(metadata)}")
       end)
   """
   @spec find_by_health(health_status()) :: {:ok, [registry_entry()]} | {:error, term()}
@@ -239,7 +247,7 @@ defmodule Foundation.ProcessRegistry do
   """
   @spec update_agent_health(local_id(), health_status()) :: :ok | {:error, term()}
   def update_agent_health(agent_id, health_status) do
-    GenServer.call(__MODULE__, {:update_agent_health, agent_id, health_status})
+    GenServer.call(__MODULE__, {:update_agent_health, agent_id, health_status}, @health_update_timeout_ms)
   end
   
   @doc """
@@ -373,11 +381,10 @@ defmodule Foundation.ProcessRegistry do
   
   @impl true
   def handle_call({:register, process_id, pid, metadata}, _from, state) do
-    case :ets.lookup(state.table, process_id) do
-      [] ->
-        # Register the process
-        :ets.insert(state.table, {process_id, pid, metadata})
-        
+    with :ok <- validate_registration_inputs(process_id, pid, metadata),
+         true <- :ets.insert_new(state.table, {process_id, pid, metadata}) do
+      # Atomic registration succeeded, now update indexes and monitor
+      try do
         # Update indexes
         update_indexes(process_id, pid, metadata, state)
         
@@ -385,12 +392,31 @@ defmodule Foundation.ProcessRegistry do
         monitor_ref = Process.monitor(pid)
         monitors = Map.put(state.monitors, monitor_ref, process_id)
         
+        # Emit telemetry
+        :telemetry.execute(
+          [:foundation, :process_registry, :registered],
+          %{count: 1},
+          %{process_id: process_id, metadata: metadata}
+        )
+        
         Logger.debug("Registered process #{inspect(process_id)} with metadata: #{inspect(metadata)}")
         
         {:reply, :ok, %{state | monitors: monitors}}
-      
-      _ ->
+      rescue
+        error ->
+          # Rollback: remove from main table if index update failed
+          :ets.delete(state.table, process_id)
+          Logger.error("Registration rollback for #{inspect(process_id)}: #{inspect(error)}")
+          {:reply, {:error, :registration_failed}, state}
+      end
+    else
+      false ->
+        # :ets.insert_new returned false - already exists
         {:reply, {:error, :already_registered}, state}
+      
+      {:error, reason} ->
+        # Validation failed
+        {:reply, {:error, reason}, state}
     end
   end
   
@@ -418,8 +444,12 @@ defmodule Foundation.ProcessRegistry do
     results = 
       Enum.flat_map(entries, fn {_, process_id} ->
         case :ets.lookup(state.table, process_id) do
-          [{^process_id, pid, metadata}] when Process.alive?(pid) ->
-            [{pid, metadata}]
+          [{^process_id, pid, metadata}] ->
+            if Process.alive?(pid) do
+              [{pid, metadata}]
+            else
+              []
+            end
           _ ->
             []
         end
@@ -435,8 +465,12 @@ defmodule Foundation.ProcessRegistry do
     results = 
       Enum.flat_map(entries, fn {_, process_id} ->
         case :ets.lookup(state.table, process_id) do
-          [{^process_id, pid, metadata}] when Process.alive?(pid) ->
-            [{pid, metadata}]
+          [{^process_id, pid, metadata}] ->
+            if Process.alive?(pid) do
+              [{pid, metadata}]
+            else
+              []
+            end
           _ ->
             []
         end
@@ -452,8 +486,12 @@ defmodule Foundation.ProcessRegistry do
     results = 
       Enum.flat_map(entries, fn {_, process_id} ->
         case :ets.lookup(state.table, process_id) do
-          [{^process_id, pid, metadata}] when Process.alive?(pid) ->
-            [{pid, metadata}]
+          [{^process_id, pid, metadata}] ->
+            if Process.alive?(pid) do
+              [{pid, metadata}]
+            else
+              []
+            end
           _ ->
             []
         end
@@ -529,6 +567,59 @@ defmodule Foundation.ProcessRegistry do
     end
   end
   
+  ## Validation Functions
+  
+  defp validate_registration_inputs(process_id, pid, metadata) do
+    with :ok <- validate_process_id(process_id),
+         :ok <- validate_pid(pid),
+         :ok <- validate_metadata(metadata) do
+      :ok
+    end
+  end
+  
+  defp validate_process_id({namespace, node, local_id}) 
+    when is_atom(namespace) and is_atom(node) and local_id != nil do
+    :ok
+  end
+  defp validate_process_id(_), do: {:error, :invalid_process_id}
+  
+  defp validate_pid(pid) when is_pid(pid) do
+    if Process.alive?(pid) do
+      :ok
+    else
+      {:error, :dead_process}
+    end
+  end
+  defp validate_pid(_), do: {:error, :invalid_pid}
+  
+  defp validate_metadata(metadata) when is_map(metadata) do
+    # Validate against agent_metadata() typespec
+    with :ok <- validate_metadata_type(metadata),
+         :ok <- validate_metadata_capabilities(metadata),
+         :ok <- validate_metadata_health(metadata) do
+      :ok
+    end
+  end
+  defp validate_metadata(_), do: {:error, :invalid_metadata}
+  
+  defp validate_metadata_type(%{type: type}) when type in [:agent, :service, :coordinator, :resource_manager], do: :ok
+  defp validate_metadata_type(%{}), do: :ok  # type is optional
+  defp validate_metadata_type(_), do: {:error, :invalid_type}
+  
+  defp validate_metadata_capabilities(%{capabilities: capabilities}) when is_list(capabilities) do
+    if Enum.all?(capabilities, &is_atom/1) do
+      :ok
+    else
+      {:error, :invalid_capabilities}
+    end
+  end
+  defp validate_metadata_capabilities(%{}), do: :ok  # capabilities is optional
+  defp validate_metadata_capabilities(_), do: {:error, :invalid_capabilities}
+  
+  defp validate_metadata_health(%{health_status: health}) when health in [:healthy, :degraded, :unhealthy], do: :ok
+  defp validate_metadata_health(%{}), do: :ok  # health_status is optional
+  defp validate_metadata_health(_), do: {:error, :invalid_health_status}
+  
   ## Private Functions
   
   defp update_indexes(process_id, _pid, metadata, state) do
@@ -551,28 +642,62 @@ defmodule Foundation.ProcessRegistry do
   defp cleanup_process(process_id, state) do
     case :ets.lookup(state.table, process_id) do
       [{^process_id, _pid, metadata}] ->
-        # Remove from main table
-        :ets.delete(state.table, process_id)
+        # Atomic cleanup: collect all operations first
+        cleanup_operations = build_cleanup_operations(process_id, metadata, state)
         
-        # Remove from capability index
-        capabilities = Map.get(metadata, :capabilities, [])
-        Enum.each(capabilities, fn capability ->
-          :ets.delete_object(state.capability_index, {capability, process_id})
-        end)
-        
-        # Remove from type index
-        if type = Map.get(metadata, :type) do
-          :ets.delete_object(state.type_index, {type, process_id})
+        try do
+          # Execute all cleanup operations atomically
+          Enum.each(cleanup_operations, fn {table, operation, args} ->
+            apply(:ets, operation, [table | args])
+          end)
+          
+          # Emit telemetry
+          :telemetry.execute(
+            [:foundation, :process_registry, :cleanup],
+            %{count: 1},
+            %{process_id: process_id, metadata: metadata}
+          )
+          
+          Logger.debug("Cleaned up process #{inspect(process_id)}")
+          :ok
+        rescue
+          error ->
+            Logger.error("Cleanup failed for #{inspect(process_id)}: #{inspect(error)}")
+            # Attempt partial recovery - at least remove from main table
+            :ets.delete(state.table, process_id)
+            {:error, :cleanup_failed}
         end
-        
-        # Remove from health index
-        health_status = Map.get(metadata, :health_status, :healthy)
-        :ets.delete_object(state.health_index, {health_status, process_id})
-        
-        Logger.debug("Cleaned up process #{inspect(process_id)}")
       
       [] ->
         :ok
     end
+  end
+  
+  defp build_cleanup_operations(process_id, metadata, state) do
+    operations = [
+      # Remove from main table first
+      {state.table, :delete, [process_id]}
+    ]
+    
+    # Add capability index cleanup
+    capability_ops = 
+      metadata
+      |> Map.get(:capabilities, [])
+      |> Enum.map(fn capability ->
+        {state.capability_index, :delete_object, [{capability, process_id}]}
+      end)
+    
+    # Add type index cleanup
+    type_ops = 
+      case Map.get(metadata, :type) do
+        nil -> []
+        type -> [{state.type_index, :delete_object, [{type, process_id}]}]
+      end
+    
+    # Add health index cleanup
+    health_status = Map.get(metadata, :health_status, :healthy)
+    health_ops = [{state.health_index, :delete_object, [{health_status, process_id}]}]
+    
+    operations ++ capability_ops ++ type_ops ++ health_ops
   end
 end

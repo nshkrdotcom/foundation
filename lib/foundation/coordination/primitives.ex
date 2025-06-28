@@ -83,6 +83,7 @@ defmodule Foundation.Coordination.Primitives do
   use GenServer
   require Logger
   
+  @type coordination_id :: term()
   @type participant_id :: atom()
   @type consensus_ref :: reference()
   @type consensus_vote :: :accept | :reject | :abstain

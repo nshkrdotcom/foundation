@@ -525,8 +525,12 @@ defmodule Foundation.Types.AgentInfo do
     }
     
     case Map.get(valid_transitions, current_state, []) do
-      allowed_states when new_state in allowed_states -> :ok
-      _ -> {:error, {:invalid_state_transition, current_state, new_state}}
+      allowed_states ->
+        if new_state in allowed_states do
+          :ok
+        else
+          {:error, {:invalid_state_transition, current_state, new_state}}
+        end
     end
   end
   
