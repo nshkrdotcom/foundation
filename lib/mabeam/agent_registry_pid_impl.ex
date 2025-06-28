@@ -1,15 +1,10 @@
-defimpl Foundation.Registry, for: MABEAM.AgentRegistry do
+defimpl Foundation.Registry, for: PID do
   @moduledoc """
-  Foundation.Registry protocol implementation for MABEAM.AgentRegistry.
+  Foundation.Registry protocol implementation for PIDs.
 
-  This implementation provides the bridge between the generic Foundation protocols
-  and the agent-optimized MABEAM registry. All operations go through the GenServer
-  to ensure consistency and proper isolation between registry instances.
+  This allows using a registry GenServer PID directly with Foundation functions,
+  delegating all operations through GenServer.call.
   """
-
-  require Logger
-
-  # --- Write Operations ---
 
   def register(registry_pid, agent_id, pid, metadata) do
     GenServer.call(registry_pid, {:register, agent_id, pid, metadata})
@@ -22,8 +17,6 @@ defimpl Foundation.Registry, for: MABEAM.AgentRegistry do
   def unregister(registry_pid, agent_id) do
     GenServer.call(registry_pid, {:unregister, agent_id})
   end
-
-  # --- Read Operations (Also go through GenServer for isolation) ---
 
   def lookup(registry_pid, agent_id) do
     GenServer.call(registry_pid, {:lookup, agent_id})

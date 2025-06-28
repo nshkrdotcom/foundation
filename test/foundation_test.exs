@@ -302,7 +302,8 @@ defmodule FoundationTest do
         rescue
           _exception ->
             # Re-raise with our test message to verify the pattern
-            reraise "Foundation.Registry implementation not configured.\n\nAdd to your config:\nconfig :foundation, registry_impl: YourRegistryImpl", __STACKTRACE__
+            reraise "Foundation.Registry implementation not configured.\n\nAdd to your config:\nconfig :foundation, registry_impl: YourRegistryImpl",
+                    __STACKTRACE__
         end
       end
     end
