@@ -8,7 +8,7 @@ defmodule Foundation.MixProject do
       elixir: "~> 1.15",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
-      consolidate_protocols: Mix.env() != :test,
+      consolidate_protocols: true, # Mix.env() != :test,
       description: description(),
       package: package(),
       deps: deps(),
