@@ -81,24 +81,24 @@ defmodule Foundation.ServiceIntegration.ContractEvolution do
   def validate_discovery_functions(discovery_module) do
     legacy_functions = [
       {:find_capable_and_healthy, 1},
-      {:find_agents_with_resources, 2}, 
+      {:find_agents_with_resources, 2},
       {:find_least_loaded_agents, 1}
     ]
-    
+
     evolved_functions = [
       {:find_capable_and_healthy, 2},
       {:find_agents_with_resources, 3},
       {:find_least_loaded_agents, 3}
     ]
-    
+
     # Module must support either ALL legacy functions OR ALL evolved functions
     legacy_supported = validate_function_set(discovery_module, legacy_functions)
     evolved_supported = validate_function_set(discovery_module, evolved_functions)
-    
+
     result = legacy_supported or evolved_supported
-    
+
     log_discovery_validation_result(discovery_module, {legacy_supported, evolved_supported}, result)
-    
+
     result
   end
 
@@ -122,10 +122,10 @@ defmodule Foundation.ServiceIntegration.ContractEvolution do
   def check_function_evolution(module, function_name, opts) do
     legacy_arity = Keyword.get(opts, :legacy_arity)
     evolved_arity = Keyword.get(opts, :evolved_arity)
-    
+
     legacy_exists = legacy_arity && function_exported?(module, function_name, legacy_arity)
     evolved_exists = evolved_arity && function_exported?(module, function_name, evolved_arity)
-    
+
     case {legacy_exists, evolved_exists} do
       {true, true} -> :both_supported
       {true, false} -> :legacy_only
@@ -158,13 +158,14 @@ defmodule Foundation.ServiceIntegration.ContractEvolution do
   """
   @spec analyze_module_evolution(module(), [{atom(), keyword()}]) :: map()
   def analyze_module_evolution(module, function_specs) do
-    function_status = Enum.into(function_specs, %{}, fn {function_name, opts} ->
-      status = check_function_evolution(module, function_name, opts)
-      {function_name, status}
-    end)
-    
+    function_status =
+      Enum.into(function_specs, %{}, fn {function_name, opts} ->
+        status = check_function_evolution(module, function_name, opts)
+        {function_name, status}
+      end)
+
     overall_status = determine_overall_evolution_status(Map.values(function_status))
-    
+
     Map.put(function_status, :overall_status, overall_status)
   end
 
@@ -183,21 +184,21 @@ defmodule Foundation.ServiceIntegration.ContractEvolution do
           "Implement default parameter values to support both arities",
           "Add @spec declarations for both legacy and evolved signatures"
         ]
-        
+
       :evolved_only ->
         [
           "Update contract tests to use evolved function signatures",
           "Consider providing legacy wrapper functions for backwards compatibility",
           "Update documentation to reflect the evolved API"
         ]
-        
+
       :both_supported ->
         [
           "Excellent! Both legacy and evolved signatures are supported",
           "Consider deprecating legacy signatures in future versions",
           "Ensure test coverage for both signature formats"
         ]
-        
+
       :neither_supported ->
         [
           "Function does not exist or has unexpected arity",
@@ -230,36 +231,42 @@ defmodule Foundation.ServiceIntegration.ContractEvolution do
     legacy_params = Keyword.get(opts, :legacy_params, [])
     evolved_params = Keyword.get(opts, :evolved_params, [])
     default_values = Keyword.get(opts, :default_values, [])
-    
+
     legacy_param_str = Enum.join(legacy_params, ", ")
-    
-    evolved_args = Enum.map(evolved_params, fn param ->
-      case Keyword.get(default_values, param) do
-        nil -> to_string(param)
-        default_val -> "#{param} \\\\ #{inspect(default_val)}"
-      end
-    end)
+
+    evolved_args =
+      Enum.map(evolved_params, fn param ->
+        case Keyword.get(default_values, param) do
+          nil -> to_string(param)
+          default_val -> "#{param} \\\\ #{inspect(default_val)}"
+        end
+      end)
+
     evolved_param_str = Enum.join(evolved_args, ", ")
-    
-    call_args = Enum.map(evolved_params, fn param ->
-      case Keyword.get(default_values, param) do
-        nil -> to_string(param)
-        default_val -> 
-          if param in legacy_params do
+
+    call_args =
+      Enum.map(evolved_params, fn param ->
+        case Keyword.get(default_values, param) do
+          nil ->
             to_string(param)
-          else
-            inspect(default_val)
-          end
-      end
-    end)
+
+          default_val ->
+            if param in legacy_params do
+              to_string(param)
+            else
+              inspect(default_val)
+            end
+        end
+      end)
+
     call_args_str = Enum.join(call_args, ", ")
-    
+
     """
     # Legacy compatibility wrapper for #{function_name}
     def #{function_name}(#{legacy_param_str}) do
       #{function_name}_evolved(#{call_args_str})
     end
-    
+
     # Evolved function (rename existing implementation)
     def #{function_name}_evolved(#{evolved_param_str}) do
       # ... existing implementation ...
@@ -276,36 +283,49 @@ defmodule Foundation.ServiceIntegration.ContractEvolution do
         Enum.all?(functions, fn {func, arity} ->
           function_exported?(module, func, arity)
         end)
-      
+
       {:error, _reason} ->
         false
     end
   end
 
-  defp log_discovery_validation_result(discovery_module, {legacy_supported, evolved_supported}, overall_result) do
+  defp log_discovery_validation_result(
+         discovery_module,
+         {legacy_supported, evolved_supported},
+         overall_result
+       ) do
     case {legacy_supported, evolved_supported} do
       {true, true} ->
         Logger.info("Discovery module supports both legacy and evolved contracts",
-          module: discovery_module, status: :both_supported)
-          
+          module: discovery_module,
+          status: :both_supported
+        )
+
       {true, false} ->
         Logger.info("Discovery module supports legacy contracts only",
-          module: discovery_module, status: :legacy_only)
-          
+          module: discovery_module,
+          status: :legacy_only
+        )
+
       {false, true} ->
         Logger.info("Discovery module supports evolved contracts only",
-          module: discovery_module, status: :evolved_only)
-          
+          module: discovery_module,
+          status: :evolved_only
+        )
+
       {false, false} ->
         Logger.warning("Discovery module supports neither legacy nor evolved contracts",
-          module: discovery_module, status: :neither_supported)
+          module: discovery_module,
+          status: :neither_supported
+        )
     end
-    
+
     if not overall_result do
       Logger.error("Discovery contract validation failed - no supported signature set",
         module: discovery_module,
         legacy_supported: legacy_supported,
-        evolved_supported: evolved_supported)
+        evolved_supported: evolved_supported
+      )
     end
   end
 
@@ -313,16 +333,16 @@ defmodule Foundation.ServiceIntegration.ContractEvolution do
     cond do
       Enum.all?(function_statuses, &(&1 == :evolved_only)) ->
         :fully_evolved
-        
+
       Enum.all?(function_statuses, &(&1 == :legacy_only)) ->
         :fully_legacy
-        
+
       Enum.all?(function_statuses, &(&1 == :both_supported)) ->
         :fully_compatible
-        
+
       Enum.any?(function_statuses, &(&1 == :neither_supported)) ->
         :partially_broken
-        
+
       true ->
         :mixed_evolution
     end

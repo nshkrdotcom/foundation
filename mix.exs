@@ -142,7 +142,8 @@ defmodule Foundation.MixProject do
       "cpg/",
       "debugger/",
       "graph/",
-      "lib/foundation/integration/",  # More specific - only exclude lib/foundation/integration/, not service_integration/
+      # More specific - only exclude lib/foundation/integration/, not service_integration/
+      "lib/foundation/integration/",
       "intelligence/",
       "query/"
     ]

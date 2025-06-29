@@ -1,7 +1,7 @@
 defmodule Foundation.ServiceIntegration.ContractValidator do
   @moduledoc """
   Rebuilds the lost ContractValidator with Foundation integration.
-  
+
   Addresses Category 3 (contract evolution) and Dialyzer contract violations
   by providing runtime contract validation and migration assistance.
 
@@ -37,17 +37,17 @@ defmodule Foundation.ServiceIntegration.ContractValidator do
 
   use GenServer
   require Logger
-  
+
   # Removed unused alias to fix compilation issues
 
   @type contract_validator :: (module() -> :ok | {:error, term()})
   @type contract_result :: %{
-    foundation: term(),
-    jido: term(),
-    mabeam: term(),
-    custom: term(),
-    status: :all_valid | :some_violations | :evolution_detected
-  }
+          foundation: term(),
+          jido: term(),
+          mabeam: term(),
+          custom: term(),
+          status: :all_valid | :some_violations | :evolution_detected
+        }
 
   ## Client API
 
@@ -133,7 +133,8 @@ defmodule Foundation.ServiceIntegration.ContractValidator do
 
   @impl GenServer
   def init(opts) do
-    validation_interval = Keyword.get(opts, :validation_interval, 300_000)  # 5 minutes
+    # 5 minutes
+    validation_interval = Keyword.get(opts, :validation_interval, 300_000)
     enable_auto_validation = Keyword.get(opts, :enable_auto_validation, true)
 
     state = %__MODULE__{
@@ -146,15 +147,17 @@ defmodule Foundation.ServiceIntegration.ContractValidator do
     }
 
     # Start automatic validation if enabled
-    new_state = if enable_auto_validation do
-      schedule_validation(state)
-    else
-      state
-    end
+    new_state =
+      if enable_auto_validation do
+        schedule_validation(state)
+      else
+        state
+      end
 
     Logger.info("Foundation.ServiceIntegration.ContractValidator started",
       validation_interval: validation_interval,
-      auto_validation: enable_auto_validation)
+      auto_validation: enable_auto_validation
+    )
 
     {:ok, new_state}
   end
@@ -169,11 +172,12 @@ defmodule Foundation.ServiceIntegration.ContractValidator do
   def handle_call({:register_contract, service_module, validator_fun, options}, _from, state) do
     new_contracts = Map.put(state.custom_contracts, service_module, {validator_fun, options})
     new_state = %{state | custom_contracts: new_contracts}
-    
-    Logger.debug("Registered custom contract validator", 
-      service: service_module, 
-      options: options)
-    
+
+    Logger.debug("Registered custom contract validator",
+      service: service_module,
+      options: options
+    )
+
     {:reply, :ok, new_state}
   end
 
@@ -194,28 +198,30 @@ defmodule Foundation.ServiceIntegration.ContractValidator do
   @impl GenServer
   def handle_info(:validate_contracts, state) do
     {_result, new_state} = perform_validation(state)
-    
+
     # Schedule next validation
-    updated_state = if state.enable_auto_validation do
-      schedule_validation(new_state)
-    else
-      new_state
-    end
-    
+    updated_state =
+      if state.enable_auto_validation do
+        schedule_validation(new_state)
+      else
+        new_state
+      end
+
     {:noreply, updated_state}
   end
 
   @impl GenServer
   def handle_info({:timeout, timer_ref, :validate_contracts}, %{timer_ref: timer_ref} = state) do
     {_result, new_state} = perform_validation(state)
-    
+
     # Schedule next validation
-    updated_state = if state.enable_auto_validation do
-      schedule_validation(new_state)
-    else
-      %{new_state | timer_ref: nil}
-    end
-    
+    updated_state =
+      if state.enable_auto_validation do
+        schedule_validation(new_state)
+      else
+        %{new_state | timer_ref: nil}
+      end
+
     {:noreply, updated_state}
   end
 
@@ -230,6 +236,7 @@ defmodule Foundation.ServiceIntegration.ContractValidator do
     if state.timer_ref do
       Process.cancel_timer(state.timer_ref)
     end
+
     :ok
   end
 
@@ -240,7 +247,7 @@ defmodule Foundation.ServiceIntegration.ContractValidator do
     if state.timer_ref do
       Process.cancel_timer(state.timer_ref)
     end
-    
+
     # Schedule new validation
     timer_ref = Process.send_after(self(), :validate_contracts, state.validation_interval)
     %{state | timer_ref: timer_ref}
@@ -248,72 +255,79 @@ defmodule Foundation.ServiceIntegration.ContractValidator do
 
   defp perform_validation(state) do
     start_time = System.monotonic_time()
-    
-    result = try do
-      # Get all validation results, handling errors gracefully
-      foundation_contracts = case validate_foundation_contracts() do
-        {:ok, result} -> result
-        {:error, reason} -> {:error, reason}
+
+    result =
+      try do
+        # Get all validation results, handling errors gracefully
+        foundation_contracts =
+          case validate_foundation_contracts() do
+            {:ok, result} -> result
+            {:error, reason} -> {:error, reason}
+          end
+
+        jido_contracts =
+          case validate_jido_contracts() do
+            {:ok, result} -> result
+          end
+
+        mabeam_contracts =
+          case validate_mabeam_contracts_with_evolution() do
+            {:ok, result} -> result
+            {:error, reason} -> {:error, reason}
+          end
+
+        custom_contracts =
+          case validate_custom_contracts(state.custom_contracts) do
+            {:ok, result} -> result
+            {:error, reason} -> {:error, reason}
+          end
+
+        # Determine overall status from all results
+        status =
+          determine_overall_status([
+            foundation_contracts,
+            jido_contracts,
+            mabeam_contracts,
+            custom_contracts
+          ])
+
+        validation_result = %{
+          foundation: foundation_contracts,
+          jido: jido_contracts,
+          mabeam: mabeam_contracts,
+          custom: custom_contracts,
+          status: status,
+          timestamp: DateTime.utc_now(),
+          validation_time_ms:
+            System.convert_time_unit(
+              System.monotonic_time() - start_time,
+              :native,
+              :millisecond
+            )
+        }
+
+        {:ok, validation_result}
+      rescue
+        exception ->
+          Logger.error("Exception during contract validation",
+            exception: inspect(exception),
+            stacktrace: Exception.format_stacktrace(__STACKTRACE__)
+          )
+
+          {:error, {:validation_exception, exception}}
       end
-      
-      jido_contracts = case validate_jido_contracts() do
-        {:ok, result} -> result
-      end
-      
-      mabeam_contracts = case validate_mabeam_contracts_with_evolution() do
-        {:ok, result} -> result
-        {:error, reason} -> {:error, reason}
-      end
-      
-      custom_contracts = case validate_custom_contracts(state.custom_contracts) do
-        {:ok, result} -> result
-        {:error, reason} -> {:error, reason}
-      end
-      
-      # Determine overall status from all results
-      status = determine_overall_status([
-        foundation_contracts, 
-        jido_contracts, 
-        mabeam_contracts, 
-        custom_contracts
-      ])
-      
-      validation_result = %{
-        foundation: foundation_contracts,
-        jido: jido_contracts,
-        mabeam: mabeam_contracts,
-        custom: custom_contracts,
-        status: status,
-        timestamp: DateTime.utc_now(),
-        validation_time_ms: System.convert_time_unit(
-          System.monotonic_time() - start_time, 
-          :native, 
-          :millisecond
-        )
-      }
-      
-      {:ok, validation_result}
-    rescue
-      exception ->
-        Logger.error("Exception during contract validation", 
-          exception: inspect(exception),
-          stacktrace: Exception.format_stacktrace(__STACKTRACE__))
-        {:error, {:validation_exception, exception}}
-    end
-    
+
     # Emit telemetry (using :telemetry directly for now)
     duration = System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
+
     :telemetry.execute(
       [:foundation, :service_integration, :contract_validation],
       %{duration: duration, contract_count: count_contracts(state)},
       %{result: elem(result, 0)}
     )
-    
-    new_state = %{state | 
-      last_validation_result: result,
-      last_validation_time: DateTime.utc_now()
-    }
-    
+
+    new_state = %{state | last_validation_result: result, last_validation_time: DateTime.utc_now()}
+
     {result, new_state}
   end
 
@@ -325,11 +339,12 @@ defmodule Foundation.ServiceIntegration.ContractValidator do
       Foundation.Services.RateLimiter,
       Foundation.Services.SignalBus
     ]
-    
-    violations = Enum.flat_map(foundation_services, fn service ->
-      validate_foundation_service_contract(service)
-    end)
-    
+
+    violations =
+      Enum.flat_map(foundation_services, fn service ->
+        validate_foundation_service_contract(service)
+      end)
+
     case violations do
       [] -> {:ok, :all_foundation_contracts_valid}
       violations -> {:error, {:foundation_contract_violations, violations}}
@@ -344,25 +359,28 @@ defmodule Foundation.ServiceIntegration.ContractValidator do
 
   defp validate_mabeam_contracts_with_evolution do
     # Address Category 3 Discovery contract arity mismatches
-    case Foundation.ServiceIntegration.ContractEvolution.validate_discovery_functions(MABEAM.Discovery) do
+    case Foundation.ServiceIntegration.ContractEvolution.validate_discovery_functions(
+           MABEAM.Discovery
+         ) do
       true -> {:ok, :discovery_contract_valid}
       false -> {:error, :discovery_contract_evolution_required}
     end
   end
 
   defp validate_custom_contracts(custom_contracts) do
-    violations = Enum.flat_map(custom_contracts, fn {service_module, {validator_fun, _options}} ->
-      try do
-        case validator_fun.(service_module) do
-          :ok -> []
-          {:error, reason} -> [{service_module, reason}]
-          other -> [{service_module, {:unexpected_validator_result, other}}]
+    violations =
+      Enum.flat_map(custom_contracts, fn {service_module, {validator_fun, _options}} ->
+        try do
+          case validator_fun.(service_module) do
+            :ok -> []
+            {:error, reason} -> [{service_module, reason}]
+            other -> [{service_module, {:unexpected_validator_result, other}}]
+          end
+        rescue
+          exception -> [{service_module, {:validator_exception, exception}}]
         end
-      rescue
-        exception -> [{service_module, {:validator_exception, exception}}]
-      end
-    end)
-    
+      end)
+
     case violations do
       [] -> {:ok, :all_custom_contracts_valid}
       violations -> {:error, {:custom_contract_violations, violations}}
@@ -372,8 +390,9 @@ defmodule Foundation.ServiceIntegration.ContractValidator do
   defp validate_foundation_service_contract(service_module) do
     # Basic validation that Foundation services are available and responding
     case Process.whereis(service_module) do
-      nil -> 
+      nil ->
         [{:service_unavailable, service_module}]
+
       _pid ->
         # Check if service responds to basic health check
         try do
@@ -382,32 +401,36 @@ defmodule Foundation.ServiceIntegration.ContractValidator do
             :healthy -> []
             :unhealthy -> [{:service_unhealthy, service_module}]
             {:error, reason} -> [{:service_error, service_module, reason}]
-            _other -> []  # Accept other responses as valid
+            # Accept other responses as valid
+            _other -> []
           end
         catch
           :exit, {:timeout, _} -> [{:service_timeout, service_module}]
           :exit, {:noproc, _} -> [{:service_unavailable, service_module}]
-          _kind, _reason -> []  # Accept as valid if service doesn't support health_check
+          # Accept as valid if service doesn't support health_check
+          _kind, _reason -> []
         end
     end
   end
 
   defp determine_overall_status(contract_results) do
-    has_evolution = Enum.any?(contract_results, fn result ->
-      case result do
-        :evolution_detected -> true
-        {:error, :discovery_contract_evolution_required} -> true
-        _ -> false
-      end
-    end)
-    
-    has_violations = Enum.any?(contract_results, fn result ->
-      case result do
-        {:error, _} -> true
-        _ -> false
-      end
-    end)
-    
+    has_evolution =
+      Enum.any?(contract_results, fn result ->
+        case result do
+          :evolution_detected -> true
+          {:error, :discovery_contract_evolution_required} -> true
+          _ -> false
+        end
+      end)
+
+    has_violations =
+      Enum.any?(contract_results, fn result ->
+        case result do
+          {:error, _} -> true
+          _ -> false
+        end
+      end)
+
     cond do
       has_evolution -> :evolution_detected
       has_violations -> :some_violations

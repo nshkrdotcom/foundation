@@ -241,7 +241,8 @@ defmodule JidoFoundation.SignalRouter do
     :telemetry.attach_many(
       handler_id,
       [
-        [:jido, :signal, :emitted]  # Only listen to emitted signals, not routed to prevent recursion
+        # Only listen to emitted signals, not routed to prevent recursion
+        [:jido, :signal, :emitted]
       ],
       fn event, measurements, metadata, _config ->
         # Use synchronous call for deterministic routing behavior in tests
@@ -249,9 +250,12 @@ defmodule JidoFoundation.SignalRouter do
         try do
           GenServer.call(router_pid, {:route_signal, event, measurements, metadata}, 5000)
         catch
-          :exit, {:noproc, _} -> :ok  # Router not running
-          :exit, {:timeout, _} -> :ok  # Timeout, continue
-          :exit, {:calling_self, _} -> :ok  # Prevent recursive calls
+          # Router not running
+          :exit, {:noproc, _} -> :ok
+          # Timeout, continue
+          :exit, {:timeout, _} -> :ok
+          # Prevent recursive calls
+          :exit, {:calling_self, _} -> :ok
         end
       end,
       %{}

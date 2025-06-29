@@ -40,16 +40,16 @@ defmodule Foundation.ServiceIntegration.SignalCoordinator do
 
   @type signal_id :: String.t() | atom()
   @type coordination_result :: %{
-    signal_id: signal_id(),
-    handlers_notified: non_neg_integer(),
-    routing_time_ms: non_neg_integer()
-  }
+          signal_id: signal_id(),
+          handlers_notified: non_neg_integer(),
+          routing_time_ms: non_neg_integer()
+        }
   @type coordination_session :: %{
-    session_id: reference(),
-    active_signals: MapSet.t(),
-    results: [coordination_result()],
-    started_at: integer()
-  }
+          session_id: reference(),
+          active_signals: MapSet.t(),
+          results: [coordination_result()],
+          started_at: integer()
+        }
 
   @doc """
   Emits a signal synchronously and waits for routing completion.
@@ -73,80 +73,89 @@ defmodule Foundation.ServiceIntegration.SignalCoordinator do
   - `{:ok, coordination_result()}` - Signal successfully routed
   - `{:error, reason}` - Signal routing failed or timed out
   """
-  @spec emit_signal_sync(pid(), map(), keyword()) :: 
-    {:ok, coordination_result()} | {:error, term()}
+  @spec emit_signal_sync(pid(), map(), keyword()) ::
+          {:ok, coordination_result()} | {:error, term()}
   def emit_signal_sync(agent, signal, opts \\ []) do
     timeout = Keyword.get(opts, :timeout, 5000)
     signal_bus = Keyword.get(opts, :bus, :foundation_signal_bus)
-    
+
     # Create coordination mechanism for this specific signal
     coordination_ref = make_ref()
     test_pid = self()
     signal_id = Map.get(signal, :id, generate_signal_id())
-    
+
     # Attach temporary telemetry handler for this specific signal
     handler_id = "sync_coordination_#{inspect(coordination_ref)}"
-    
+
     start_time = System.monotonic_time()
-    
-    result = try do
-      # Set up coordination telemetry handler
-      :telemetry.attach(
-        handler_id,
-        [:jido, :signal, :routed],
-        fn _event, measurements, metadata, _config ->
-          if metadata[:signal_id] == signal_id do
-            routing_time = System.convert_time_unit(
-              System.monotonic_time() - start_time, 
-              :native, 
-              :millisecond
-            )
-            
-            send(test_pid, {coordination_ref, :routing_complete, %{
-              signal_id: signal_id,
-              handlers_notified: measurements[:handlers_count] || 0,
-              routing_time_ms: routing_time
-            }})
-          end
-        end,
-        nil
-      )
-      
-      # Emit signal asynchronously
-      case emit_signal_safely(agent, Map.put(signal, :id, signal_id), signal_bus) do
-        :ok ->
-          # Wait synchronously for routing completion
-          receive do
-            {^coordination_ref, :routing_complete, result} ->
-              {:ok, result}
-          after
-            timeout ->
-              Logger.warning("Signal routing timeout", 
-                signal_id: signal_id, 
-                timeout: timeout)
-              {:error, {:routing_timeout, timeout}}
-          end
-          
-        {:error, reason} ->
-          {:error, {:signal_emission_failed, reason}}
-      end
-    after
-      # Always clean up telemetry handler
+
+    result =
       try do
-        :telemetry.detach(handler_id)
-      catch
-        _, _ -> :ok
+        # Set up coordination telemetry handler
+        :telemetry.attach(
+          handler_id,
+          [:jido, :signal, :routed],
+          fn _event, measurements, metadata, _config ->
+            if metadata[:signal_id] == signal_id do
+              routing_time =
+                System.convert_time_unit(
+                  System.monotonic_time() - start_time,
+                  :native,
+                  :millisecond
+                )
+
+              send(
+                test_pid,
+                {coordination_ref, :routing_complete,
+                 %{
+                   signal_id: signal_id,
+                   handlers_notified: measurements[:handlers_count] || 0,
+                   routing_time_ms: routing_time
+                 }}
+              )
+            end
+          end,
+          nil
+        )
+
+        # Emit signal asynchronously
+        case emit_signal_safely(agent, Map.put(signal, :id, signal_id), signal_bus) do
+          :ok ->
+            # Wait synchronously for routing completion
+            receive do
+              {^coordination_ref, :routing_complete, result} ->
+                {:ok, result}
+            after
+              timeout ->
+                Logger.warning("Signal routing timeout",
+                  signal_id: signal_id,
+                  timeout: timeout
+                )
+
+                {:error, {:routing_timeout, timeout}}
+            end
+
+          {:error, reason} ->
+            {:error, {:signal_emission_failed, reason}}
+        end
+      after
+        # Always clean up telemetry handler
+        try do
+          :telemetry.detach(handler_id)
+        catch
+          _, _ -> :ok
+        end
       end
-    end
-    
+
     # Emit coordination telemetry
     duration = System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
+
     :telemetry.execute(
       [:foundation, :service_integration, :signal_coordination],
       %{duration: duration},
       %{result: elem(result, 0), signal_id: signal_id}
     )
-    
+
     result
   end
 
@@ -166,48 +175,51 @@ defmodule Foundation.ServiceIntegration.SignalCoordinator do
   - `{:ok, :all_signals_processed}` - All signals processed successfully
   - `{:error, {:signals_not_processed, remaining}}` - Some signals not processed
   """
-  @spec wait_for_signal_processing([signal_id()], non_neg_integer()) :: 
-    {:ok, :all_signals_processed} | {:error, term()}
+  @spec wait_for_signal_processing([signal_id()], non_neg_integer()) ::
+          {:ok, :all_signals_processed} | {:error, term()}
   def wait_for_signal_processing(signal_ids, timeout \\ 5000) when is_list(signal_ids) do
     # Batch coordination for multiple signals
     coordination_ref = make_ref()
     test_pid = self()
     remaining_signals = MapSet.new(signal_ids)
-    
+
     handler_id = "batch_coordination_#{inspect(coordination_ref)}"
-    
+
     start_time = System.monotonic_time()
-    
-    result = try do
-      :telemetry.attach(
-        handler_id,
-        [:jido, :signal, :routed],
-        fn _event, _measurements, metadata, _config ->
-          signal_id = metadata[:signal_id]
-          if signal_id in remaining_signals do
-            send(test_pid, {coordination_ref, :signal_routed, signal_id})
-          end
-        end,
-        nil
-      )
-      
-      wait_for_all_signals(coordination_ref, remaining_signals, timeout)
-    after
+
+    result =
       try do
-        :telemetry.detach(handler_id)
-      catch
-        _, _ -> :ok
+        :telemetry.attach(
+          handler_id,
+          [:jido, :signal, :routed],
+          fn _event, _measurements, metadata, _config ->
+            signal_id = metadata[:signal_id]
+
+            if signal_id in remaining_signals do
+              send(test_pid, {coordination_ref, :signal_routed, signal_id})
+            end
+          end,
+          nil
+        )
+
+        wait_for_all_signals(coordination_ref, remaining_signals, timeout)
+      after
+        try do
+          :telemetry.detach(handler_id)
+        catch
+          _, _ -> :ok
+        end
       end
-    end
-    
+
     # Emit batch coordination telemetry
     duration = System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
+
     :telemetry.execute(
       [:foundation, :service_integration, :batch_signal_coordination],
       %{duration: duration, signal_count: length(signal_ids)},
       %{result: elem(result, 0)}
     )
-    
+
     result
   end
 
@@ -229,7 +241,7 @@ defmodule Foundation.ServiceIntegration.SignalCoordinator do
       results: [],
       started_at: System.monotonic_time()
     }
-    
+
     {:ok, session}
   end
 
@@ -263,19 +275,21 @@ defmodule Foundation.ServiceIntegration.SignalCoordinator do
   - `{:ok, updated_session}` - All signals completed
   - `{:error, reason}` - Timeout or other error
   """
-  @spec wait_for_session_completion(coordination_session(), non_neg_integer()) :: 
-    {:ok, coordination_session()} | {:error, term()}
+  @spec wait_for_session_completion(coordination_session(), non_neg_integer()) ::
+          {:ok, coordination_session()} | {:error, term()}
   def wait_for_session_completion(session, timeout \\ 10000) do
     signal_ids = MapSet.to_list(session.active_signals)
-    
+
     case wait_for_signal_processing(signal_ids, timeout) do
       {:ok, :all_signals_processed} ->
-        completed_session = %{session | 
-          active_signals: MapSet.new(),
-          results: session.results ++ collect_session_results(signal_ids)
+        completed_session = %{
+          session
+          | active_signals: MapSet.new(),
+            results: session.results ++ collect_session_results(signal_ids)
         }
+
         {:ok, completed_session}
-        
+
       {:error, reason} ->
         {:error, reason}
     end
@@ -299,25 +313,27 @@ defmodule Foundation.ServiceIntegration.SignalCoordinator do
   - `{:ok, coordination_result()}` - Signal emitted and routed successfully
   - `{:error, reason}` - Emission or routing failed
   """
-  @spec emit_signal_with_expectations(pid(), map(), map(), keyword()) :: 
-    {:ok, coordination_result()} | {:error, term()}
+  @spec emit_signal_with_expectations(pid(), map(), map(), keyword()) ::
+          {:ok, coordination_result()} | {:error, term()}
   def emit_signal_with_expectations(agent, signal, expectations, opts \\ []) do
     _timeout = Keyword.get(opts, :timeout, 5000)
     expected_handlers = Map.get(expectations, :handler_count, 0)
-    
+
     case emit_signal_sync(agent, signal, opts) do
       {:ok, result} ->
         # Validate expectations
         if result.handlers_notified >= expected_handlers do
           {:ok, result}
         else
-          {:error, {:expectation_failed, %{
-            expected_handlers: expected_handlers,
-            actual_handlers: result.handlers_notified,
-            result: result
-          }}}
+          {:error,
+           {:expectation_failed,
+            %{
+              expected_handlers: expected_handlers,
+              actual_handlers: result.handlers_notified,
+              result: result
+            }}}
         end
-        
+
       {:error, reason} ->
         {:error, reason}
     end
@@ -331,18 +347,18 @@ defmodule Foundation.ServiceIntegration.SignalCoordinator do
   @spec coordination_health_check() :: map()
   def coordination_health_check do
     start_time = System.monotonic_time()
-    
+
     # Test basic telemetry system
     telemetry_health = test_telemetry_system()
-    
+
     # Test signal bus availability
     signal_bus_health = test_signal_bus_availability()
-    
+
     # Check for common coordination issues
     coordination_issues = detect_coordination_issues()
-    
+
     duration = System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
-    
+
     %{
       telemetry_system: telemetry_health,
       signal_bus: signal_bus_health,
@@ -380,24 +396,28 @@ defmodule Foundation.ServiceIntegration.SignalCoordinator do
       end
     rescue
       exception ->
-        Logger.error("Exception during signal emission", 
+        Logger.error("Exception during signal emission",
           exception: inspect(exception),
-          signal_id: Map.get(signal, :id))
+          signal_id: Map.get(signal, :id)
+        )
+
         {:error, {:emission_exception, exception}}
     catch
       kind, reason ->
         Logger.error("Caught #{kind} during signal emission",
           reason: inspect(reason),
-          signal_id: Map.get(signal, :id))
+          signal_id: Map.get(signal, :id)
+        )
+
         {:error, {:emission_caught, {kind, reason}}}
     end
   end
 
   defp emit_signal_direct(signal, signal_bus) do
     case Process.whereis(signal_bus) do
-      nil -> 
+      nil ->
         {:error, {:signal_bus_not_available, signal_bus}}
-      
+
       pid ->
         try do
           GenServer.cast(pid, {:emit_signal, signal})
@@ -418,7 +438,8 @@ defmodule Foundation.ServiceIntegration.SignalCoordinator do
     Enum.map(signal_ids, fn signal_id ->
       %{
         signal_id: signal_id,
-        handlers_notified: 0,  # Would be filled in by actual coordination
+        # Would be filled in by actual coordination
+        handlers_notified: 0,
         routing_time_ms: 0
       }
     end)
@@ -430,7 +451,7 @@ defmodule Foundation.ServiceIntegration.SignalCoordinator do
       test_event = [:foundation, :service_integration, :test]
       test_measurements = %{test: 1}
       test_metadata = %{test: true}
-      
+
       :telemetry.execute(test_event, test_measurements, test_metadata)
       :healthy
     rescue
@@ -444,9 +465,9 @@ defmodule Foundation.ServiceIntegration.SignalCoordinator do
 
   defp test_signal_bus_availability do
     case Process.whereis(Foundation.Services.SignalBus) do
-      nil -> 
+      nil ->
         {:unavailable, :signal_bus_not_running}
-      
+
       pid ->
         try do
           # Simple ping to check if signal bus is responsive
@@ -462,32 +483,37 @@ defmodule Foundation.ServiceIntegration.SignalCoordinator do
 
   defp detect_coordination_issues do
     issues = []
-    
+
     # Check for common telemetry issues
-    issues = if has_telemetry_handlers_leak?() do
-      [{:telemetry_handlers_leak, "Too many active telemetry handlers detected"} | issues]
-    else
-      issues
-    end
-    
+    issues =
+      if has_telemetry_handlers_leak?() do
+        [{:telemetry_handlers_leak, "Too many active telemetry handlers detected"} | issues]
+      else
+        issues
+      end
+
     # Check for signal bus overload
-    issues = if is_signal_bus_overloaded?() do
-      [{:signal_bus_overload, "Signal bus message queue is large"} | issues]
-    else
-      issues
-    end
-    
+    issues =
+      if is_signal_bus_overloaded?() do
+        [{:signal_bus_overload, "Signal bus message queue is large"} | issues]
+      else
+        issues
+      end
+
     issues
   end
 
   defp has_telemetry_handlers_leak? do
     try do
       handlers = :telemetry.list_handlers([])
-      coordination_handlers = Enum.filter(handlers, fn handler ->
-        String.contains?(handler.id, "coordination")
-      end)
-      
-      length(coordination_handlers) > 10  # Threshold for "too many"
+
+      coordination_handlers =
+        Enum.filter(handlers, fn handler ->
+          String.contains?(handler.id, "coordination")
+        end)
+
+      # Threshold for "too many"
+      length(coordination_handlers) > 10
     catch
       _, _ -> false
     end
@@ -495,11 +521,14 @@ defmodule Foundation.ServiceIntegration.SignalCoordinator do
 
   defp is_signal_bus_overloaded? do
     case Process.whereis(Foundation.Services.SignalBus) do
-      nil -> false
+      nil ->
+        false
+
       pid ->
         try do
           {:message_queue_len, queue_len} = Process.info(pid, :message_queue_len)
-          queue_len > 100  # Threshold for "overloaded"
+          # Threshold for "overloaded"
+          queue_len > 100
         catch
           _, _ -> false
         end

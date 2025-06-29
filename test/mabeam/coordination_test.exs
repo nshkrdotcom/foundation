@@ -62,40 +62,46 @@ defmodule MABEAM.CoordinationTest do
     ]
 
     def find_capable_and_healthy(capability, _impl) do
-      agents = Enum.filter(@mock_agents, fn {_id, _pid, metadata} ->
-        agent_capabilities = List.wrap(metadata.capability)
-        capability in agent_capabilities and metadata.health_status == :healthy
-      end)
+      agents =
+        Enum.filter(@mock_agents, fn {_id, _pid, metadata} ->
+          agent_capabilities = List.wrap(metadata.capability)
+          capability in agent_capabilities and metadata.health_status == :healthy
+        end)
+
       {:ok, agents}
     end
 
     def find_agents_with_resources(min_memory, min_cpu, _impl) do
-      agents = Enum.filter(@mock_agents, fn {_id, _pid, metadata} ->
-        resources = metadata.resources
-        memory_ok = Map.get(resources, :memory_available, 0.0) >= min_memory
-        cpu_ok = Map.get(resources, :cpu_available, 0.0) >= min_cpu
-        health_ok = metadata.health_status == :healthy
-        memory_ok and cpu_ok and health_ok
-      end)
+      agents =
+        Enum.filter(@mock_agents, fn {_id, _pid, metadata} ->
+          resources = metadata.resources
+          memory_ok = Map.get(resources, :memory_available, 0.0) >= min_memory
+          cpu_ok = Map.get(resources, :cpu_available, 0.0) >= min_cpu
+          health_ok = metadata.health_status == :healthy
+          memory_ok and cpu_ok and health_ok
+        end)
+
       {:ok, agents}
     end
 
     def find_least_loaded_agents(capability, count, _impl) do
       {:ok, agents} = find_capable_and_healthy(capability, nil)
-      result = agents
-      |> Enum.sort_by(fn {_id, _pid, metadata} ->
-        resources = metadata.resources
-        memory_usage = Map.get(resources, :memory_usage, 1.0)
-        cpu_usage = Map.get(resources, :cpu_usage, 1.0)
-        memory_usage + cpu_usage
-      end)
-      |> Enum.take(count)
+
+      result =
+        agents
+        |> Enum.sort_by(fn {_id, _pid, metadata} ->
+          resources = metadata.resources
+          memory_usage = Map.get(resources, :memory_usage, 1.0)
+          cpu_usage = Map.get(resources, :cpu_usage, 1.0)
+          memory_usage + cpu_usage
+        end)
+        |> Enum.take(count)
+
       {:ok, result}
     end
   end
 
   describe "capability-based coordination" do
-
     test "coordinate_capable_agents starts consensus with capability filtering" do
       # Mock MABEAM.Discovery.find_capable_and_healthy
       :meck.new(MABEAM.Discovery, [:passthrough])
@@ -187,7 +193,6 @@ defmodule MABEAM.CoordinationTest do
   end
 
   describe "resource-based coordination" do
-
     test "coordinate_resource_allocation finds agents with sufficient resources" do
       :meck.new(MABEAM.Discovery, [:passthrough])
 
@@ -236,26 +241,26 @@ defmodule MABEAM.CoordinationTest do
   end
 
   describe "load balancing coordination" do
-
     test "coordinate_load_balancing analyzes load and starts rebalancing" do
       :meck.new(MABEAM.Discovery, [:passthrough])
 
       :meck.expect(MABEAM.Discovery, :find_capable_and_healthy, fn :inference, _impl ->
         # Return agents with different load levels
-        {:ok, [
-          {"low_load", :pid1,
-           %{
-             capability: :inference,
-             health_status: :healthy,
-             resources: %{memory_usage: 0.1, cpu_usage: 0.1}
-           }},
-          {"high_load", :pid2,
-           %{
-             capability: :inference,
-             health_status: :healthy,
-             resources: %{memory_usage: 0.9, cpu_usage: 0.8}
-           }}
-        ]}
+        {:ok,
+         [
+           {"low_load", :pid1,
+            %{
+              capability: :inference,
+              health_status: :healthy,
+              resources: %{memory_usage: 0.1, cpu_usage: 0.1}
+            }},
+           {"high_load", :pid2,
+            %{
+              capability: :inference,
+              health_status: :healthy,
+              resources: %{memory_usage: 0.9, cpu_usage: 0.8}
+            }}
+         ]}
       end)
 
       :meck.new(Foundation, [:passthrough])
@@ -286,20 +291,21 @@ defmodule MABEAM.CoordinationTest do
 
       :meck.expect(MABEAM.Discovery, :find_capable_and_healthy, fn :inference, _impl ->
         # Return agents with similar balanced loads
-        {:ok, [
-          {"balanced1", :pid1,
-           %{
-             capability: :inference,
-             health_status: :healthy,
-             resources: %{memory_usage: 0.5, cpu_usage: 0.5}
-           }},
-          {"balanced2", :pid2,
-           %{
-             capability: :inference,
-             health_status: :healthy,
-             resources: %{memory_usage: 0.4, cpu_usage: 0.5}
-           }}
-        ]}
+        {:ok,
+         [
+           {"balanced1", :pid1,
+            %{
+              capability: :inference,
+              health_status: :healthy,
+              resources: %{memory_usage: 0.5, cpu_usage: 0.5}
+            }},
+           {"balanced2", :pid2,
+            %{
+              capability: :inference,
+              health_status: :healthy,
+              resources: %{memory_usage: 0.4, cpu_usage: 0.5}
+            }}
+         ]}
       end)
 
       {:error, :no_rebalancing_needed} =
@@ -313,14 +319,15 @@ defmodule MABEAM.CoordinationTest do
 
       :meck.expect(MABEAM.Discovery, :find_capable_and_healthy, fn :inference, _impl ->
         # Return only one agent (insufficient for load balancing)
-        {:ok, [
-          {"single_agent", :pid1,
-           %{
-             capability: :inference,
-             health_status: :healthy,
-             resources: %{memory_usage: 0.9, cpu_usage: 0.8}
-           }}
-        ]}
+        {:ok,
+         [
+           {"single_agent", :pid1,
+            %{
+              capability: :inference,
+              health_status: :healthy,
+              resources: %{memory_usage: 0.9, cpu_usage: 0.8}
+            }}
+         ]}
       end)
 
       {:error, :insufficient_agents} =
@@ -331,7 +338,6 @@ defmodule MABEAM.CoordinationTest do
   end
 
   describe "capability transition coordination" do
-
     test "coordinate_capability_transition selects least loaded agents" do
       :meck.new(MABEAM.Discovery, [:passthrough])
 
@@ -387,7 +393,6 @@ defmodule MABEAM.CoordinationTest do
   end
 
   describe "capability-based barrier creation" do
-
     test "create_capability_barrier creates barrier for capable agents" do
       :meck.new(MABEAM.Discovery, [:passthrough])
 
@@ -419,10 +424,11 @@ defmodule MABEAM.CoordinationTest do
       :meck.new(MABEAM.Discovery, [:passthrough])
       # Mock the Discovery.find_capable_and_healthy function to return test agents
       :meck.expect(MABEAM.Discovery, :find_capable_and_healthy, fn :inference, _impl ->
-        {:ok, [
-          {"agent1", self(), %{capability: :inference, health_status: :healthy, node: :node1}},
-          {"agent2", self(), %{capability: :inference, health_status: :healthy, node: :node2}}
-        ]}
+        {:ok,
+         [
+           {"agent1", self(), %{capability: :inference, health_status: :healthy, node: :node1}},
+           {"agent2", self(), %{capability: :inference, health_status: :healthy, node: :node2}}
+         ]}
       end)
 
       :meck.new(Foundation, [:passthrough])
@@ -460,17 +466,17 @@ defmodule MABEAM.CoordinationTest do
   end
 
   describe "allocation strategy implementation" do
-
     test "greedy strategy selects agents with most available resources" do
       # Test the internal allocation strategy logic through resource coordination
       :meck.new(MABEAM.Discovery, [:passthrough])
 
       :meck.expect(MABEAM.Discovery, :find_agents_with_resources, fn _min_mem, _min_cpu, _impl ->
-        {:ok, [
-          {"high_resource", :pid1, %{resources: %{memory_available: 0.9, cpu_available: 0.8}}},
-          {"med_resource", :pid2, %{resources: %{memory_available: 0.6, cpu_available: 0.5}}},
-          {"low_resource", :pid3, %{resources: %{memory_available: 0.3, cpu_available: 0.2}}}
-        ]}
+        {:ok,
+         [
+           {"high_resource", :pid1, %{resources: %{memory_available: 0.9, cpu_available: 0.8}}},
+           {"med_resource", :pid2, %{resources: %{memory_available: 0.6, cpu_available: 0.5}}},
+           {"low_resource", :pid3, %{resources: %{memory_available: 0.3, cpu_available: 0.2}}}
+         ]}
       end)
 
       :meck.new(Foundation, [:passthrough])
@@ -496,7 +502,6 @@ defmodule MABEAM.CoordinationTest do
   end
 
   describe "error handling and edge cases" do
-
     test "handles Foundation consensus failures gracefully" do
       :meck.new(MABEAM.Discovery, [:passthrough])
 
@@ -569,7 +574,6 @@ defmodule MABEAM.CoordinationTest do
   end
 
   describe "logging and observability" do
-
     test "logs coordination activities appropriately" do
       # Capture log messages during coordination
       :meck.new(MABEAM.Discovery, [:passthrough])

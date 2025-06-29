@@ -15,7 +15,8 @@ defmodule Foundation.Services.SupervisorTest do
       assert is_list(children)
 
       # Should have 4 services: RetryService, ConnectionManager, RateLimiter, SignalBus
-      assert length(children) == 6  # 4 Foundation services + 2 SIA services
+      # 4 Foundation services + 2 SIA services
+      assert length(children) == 6
 
       # Clean up
       Supervisor.stop(pid)
@@ -27,7 +28,8 @@ defmodule Foundation.Services.SupervisorTest do
 
       # Check that supervisor is properly configured
       children = Supervisor.which_children(pid)
-      assert length(children) == 6  # 4 Foundation services + 2 SIA services
+      # 4 Foundation services + 2 SIA services
+      assert length(children) == 6
 
       # The supervisor should be ready to accept child specifications
       assert Process.alive?(pid)
@@ -42,7 +44,8 @@ defmodule Foundation.Services.SupervisorTest do
       # This test validates the supervision tree structure
       # Should have 4 child services (RetryService, ConnectionManager, RateLimiter, SignalBus)
       children = Supervisor.which_children(supervisor_pid)
-      assert length(children) == 6  # 4 Foundation services + 2 SIA services
+      # 4 Foundation services + 2 SIA services
+      assert length(children) == 6
 
       Supervisor.stop(supervisor_pid)
     end
@@ -82,7 +85,8 @@ defmodule Foundation.Services.SupervisorTest do
       assert Foundation.Services.ConnectionManager in services
       assert Foundation.Services.RateLimiter in services
       assert Foundation.Services.SignalBus in services
-      assert length(services) == 6  # 4 Foundation services + 2 SIA services
+      # 4 Foundation services + 2 SIA services
+      assert length(services) == 6
     end
 
     test "validates service_running? checks service status" do

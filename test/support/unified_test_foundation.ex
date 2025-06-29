@@ -1,21 +1,21 @@
 defmodule Foundation.UnifiedTestFoundation do
   @moduledoc """
   Unified test configuration system for Foundation tests with multiple isolation levels.
-  
+
   This module consolidates all test configuration patterns and provides a clean,
   consistent interface for test isolation and contamination prevention.
-  
+
   ## Isolation Modes
-  
+
   - `:basic` - Minimal isolation for simple tests
   - `:registry` - Registry isolation for MABEAM tests
   - `:signal_routing` - Full signal routing isolation
   - `:full_isolation` - Complete service isolation
   - `:contamination_detection` - Full isolation + contamination monitoring
   - `:service_integration` - Service Integration Architecture testing with SIA components
-  
+
   ## Usage Examples
-  
+
       # Basic registry isolation
       defmodule MyTest do
         use Foundation.UnifiedTestFoundation, :registry
@@ -52,9 +52,9 @@ defmodule Foundation.UnifiedTestFoundation do
         end
       end
   """
-  
+
   import ExUnit.Callbacks
-  
+
   @doc """
   Main entry point for test configuration.
   """
@@ -64,18 +64,18 @@ defmodule Foundation.UnifiedTestFoundation do
       import Foundation.UnifiedTestFoundation
       import ExUnit.Callbacks
       alias Foundation.TestIsolation
-      
+
       setup do
         unquote(setup_for_mode(mode))
       end
-      
+
       # Module-level configuration based on mode
       unquote(module_config_for_mode(mode))
     end
   end
-  
+
   # Mode-specific setup functions
-  
+
   @doc """
   Ensures Foundation application and services are available for tests.
   """
@@ -83,29 +83,36 @@ defmodule Foundation.UnifiedTestFoundation do
     # Start Foundation application if not already started
     case Application.ensure_all_started(:foundation) do
       {:ok, _apps} -> :ok
-      {:error, _reason} -> :ok  # May already be started
+      # May already be started
+      {:error, _reason} -> :ok
     end
-    
+
     # Verify critical services are available
     services_to_check = [
       Foundation.ResourceManager,
       Foundation.PerformanceMonitor
     ]
-    
+
     Enum.each(services_to_check, fn service ->
       case Process.whereis(service) do
-        nil -> 
+        nil ->
           # Try to start the service if it's not running
           case service.start_link() do
-            {:ok, _pid} -> :ok
-            {:error, {:already_started, _pid}} -> :ok
-            {:error, reason} -> 
+            {:ok, _pid} ->
+              :ok
+
+            {:error, {:already_started, _pid}} ->
+              :ok
+
+            {:error, reason} ->
               raise "Failed to start #{service}: #{inspect(reason)}"
           end
-        _pid -> :ok
+
+        _pid ->
+          :ok
       end
     end)
-    
+
     :ok
   end
 
@@ -115,19 +122,19 @@ defmodule Foundation.UnifiedTestFoundation do
   def basic_setup(_context) do
     ensure_foundation_services()
     test_id = :erlang.unique_integer([:positive])
-    
+
     %{
       test_id: test_id,
       mode: :basic
     }
   end
-  
+
   @doc """
   Registry isolation setup.
   """
   def registry_setup(context) do
     ensure_foundation_services()
-    
+
     # Generate unique registry name using the proven pattern from Foundation.TestConfig
     test_name =
       Map.get(context, :test, "unknown")
@@ -175,7 +182,7 @@ defmodule Foundation.UnifiedTestFoundation do
       registry_name: unique_id
     }
   end
-  
+
   @doc """
   Signal routing isolation setup.
   """
@@ -183,16 +190,16 @@ defmodule Foundation.UnifiedTestFoundation do
     # Start with registry setup
     registry_result = registry_setup(context)
     test_id = registry_result.test_id
-    
+
     # Create test-scoped signal router
     test_router_name = :"test_signal_router_#{test_id}"
     {:ok, router_pid} = start_test_signal_router(test_router_name)
-    
+
     # Enhanced cleanup for signal routing
     on_exit(fn ->
       cleanup_signal_routing(router_pid, test_id)
     end)
-    
+
     Map.merge(registry_result, %{
       mode: :signal_routing,
       signal_router: router_pid,
@@ -204,14 +211,14 @@ defmodule Foundation.UnifiedTestFoundation do
       }
     })
   end
-  
+
   @doc """
   Full isolation setup with all services isolated.
   """
   def full_isolation_setup(_context) do
     ensure_foundation_services()
     test_id = :erlang.unique_integer([:positive])
-    
+
     # Create comprehensive test context
     test_context = %{
       test_id: test_id,
@@ -221,26 +228,26 @@ defmodule Foundation.UnifiedTestFoundation do
       telemetry_prefix: "test_#{test_id}",
       supervisor_name: :"test_supervisor_#{test_id}"
     }
-    
+
     # Start isolated services
     case Foundation.TestIsolation.start_isolated_test(test_context: test_context) do
       {:ok, supervisor, enhanced_context} ->
         on_exit(fn ->
           Foundation.TestIsolation.stop_isolated_test(supervisor)
         end)
-        
+
         %{
           test_id: test_id,
           mode: :full_isolation,
           test_context: enhanced_context,
           supervisor: supervisor
         }
-        
+
       {:error, reason} ->
         raise "Failed to start isolated test environment: #{inspect(reason)}"
     end
   end
-  
+
   @doc """
   Contamination detection setup with full monitoring.
   """
@@ -248,28 +255,31 @@ defmodule Foundation.UnifiedTestFoundation do
     # Start with full isolation
     base_setup = full_isolation_setup(context)
     test_id = base_setup.test_id
-    
+
     # Capture initial system state
     initial_state = capture_system_state(test_id)
-    
+
     # Setup contamination monitoring
     on_exit(fn ->
       final_state = capture_system_state(test_id)
       detect_contamination(initial_state, final_state, test_id)
     end)
-    
+
     # Merge the contamination detection data with the base setup
     Map.merge(base_setup, %{
       mode: :contamination_detection,
       initial_state: initial_state,
       contamination_detection: true
     })
-    |> Map.put(:test_context, Map.merge(base_setup.test_context, %{
-      mode: :contamination_detection,
-      contamination_detection: true
-    }))
+    |> Map.put(
+      :test_context,
+      Map.merge(base_setup.test_context, %{
+        mode: :contamination_detection,
+        contamination_detection: true
+      })
+    )
   end
-  
+
   @doc """
   Service Integration Architecture setup for testing SIA components.
   """
@@ -277,31 +287,31 @@ defmodule Foundation.UnifiedTestFoundation do
     # Start with full isolation as base
     base_setup = full_isolation_setup(context)
     test_id = base_setup.test_id
-    
+
     # Initialize SIA components for testing
     sia_context = %{
       test_id: test_id,
       service_integration_enabled: true,
-      
+
       # SIA component names (test-isolated)
       contract_validator_name: :"test_contract_validator_#{test_id}",
       dependency_manager_name: :"test_dependency_manager_#{test_id}",
       health_checker_name: :"test_health_checker_#{test_id}",
       signal_coordinator_name: :"test_signal_coordinator_#{test_id}",
-      
+
       # Component configuration
       test_mode: true,
       mock_foundation_services: true
     }
-    
+
     # Start test-isolated SIA components if available
     sia_services = start_sia_components_safely(sia_context)
-    
+
     # Enhanced cleanup for SIA components
     on_exit(fn ->
       cleanup_sia_components(sia_services, test_id)
     end)
-    
+
     # Merge with base setup
     Map.merge(base_setup, %{
       mode: :service_integration,
@@ -314,15 +324,18 @@ defmodule Foundation.UnifiedTestFoundation do
         signal_coordination: Map.get(sia_services, :signal_coordinator)
       }
     })
-    |> Map.put(:test_context, Map.merge(base_setup.test_context, %{
-      mode: :service_integration,
-      sia_enabled: true,
-      sia_context: sia_context
-    }))
+    |> Map.put(
+      :test_context,
+      Map.merge(base_setup.test_context, %{
+        mode: :service_integration,
+        sia_enabled: true,
+        sia_context: sia_context
+      })
+    )
   end
-  
+
   # Helper functions
-  
+
   @doc """
   Starts a test-scoped signal router.
   """
@@ -330,7 +343,7 @@ defmodule Foundation.UnifiedTestFoundation do
     # Use the actual SignalRouter (not test-only module)
     JidoFoundation.SignalRouter.start_link(name: router_name)
   end
-  
+
   @doc """
   Captures system state for contamination detection.
   """
@@ -344,50 +357,58 @@ defmodule Foundation.UnifiedTestFoundation do
       memory: :erlang.memory()
     }
   end
-  
+
   @doc """
   Detects contamination between initial and final system states.
   """
   def detect_contamination(initial_state, final_state, test_id) do
     contamination_issues = []
-    
+
     # Check for leftover processes
     leftover_processes = final_state.processes -- initial_state.processes
-    contamination_issues = if leftover_processes != [] do
-      ["Leftover test processes: #{inspect(leftover_processes)}" | contamination_issues]
-    else
-      contamination_issues
-    end
-    
+
+    contamination_issues =
+      if leftover_processes != [] do
+        ["Leftover test processes: #{inspect(leftover_processes)}" | contamination_issues]
+      else
+        contamination_issues
+      end
+
     # Check for leftover telemetry handlers
     leftover_handlers = final_state.telemetry -- initial_state.telemetry
-    contamination_issues = if leftover_handlers != [] do
-      handler_ids = Enum.map(leftover_handlers, & &1.id)
-      ["Leftover telemetry handlers: #{inspect(handler_ids)}" | contamination_issues]
-    else
-      contamination_issues
-    end
-    
+
+    contamination_issues =
+      if leftover_handlers != [] do
+        handler_ids = Enum.map(leftover_handlers, & &1.id)
+        ["Leftover telemetry handlers: #{inspect(handler_ids)}" | contamination_issues]
+      else
+        contamination_issues
+      end
+
     # Check for significant ETS table growth
     ets_growth = final_state.ets - initial_state.ets
-    contamination_issues = if ets_growth > 5 do
-      ["Significant ETS table growth: +#{ets_growth} tables" | contamination_issues]
-    else
-      contamination_issues
-    end
-    
+
+    contamination_issues =
+      if ets_growth > 5 do
+        ["Significant ETS table growth: +#{ets_growth} tables" | contamination_issues]
+      else
+        contamination_issues
+      end
+
     # Report contamination if found
     unless contamination_issues == [] do
       IO.puts("\n⚠️  CONTAMINATION DETECTED in test_#{test_id}:")
+
       Enum.each(contamination_issues, fn issue ->
         IO.puts("   - #{issue}")
       end)
+
       IO.puts("")
     end
-    
+
     :ok
   end
-  
+
   @doc """
   Cleanup function for signal routing resources.
   """
@@ -402,11 +423,11 @@ defmodule Foundation.UnifiedTestFoundation do
     catch
       _, _ -> :ok
     end
-    
+
     # Clean up any remaining test-specific telemetry handlers
     cleanup_test_telemetry_handlers(test_id)
   end
-  
+
   @doc """
   Cleans up telemetry handlers for a specific test.
   """
@@ -421,137 +442,148 @@ defmodule Foundation.UnifiedTestFoundation do
       _, _ -> :ok
     end
   end
-  
+
   # Private helper functions
-  
+
   defp can_run_async?(:basic), do: true
-  defp can_run_async?(:registry), do: false  # Registry tests often need serial execution
-  defp can_run_async?(:signal_routing), do: false  # Signal routing needs careful isolation
-  defp can_run_async?(:full_isolation), do: true  # Fully isolated can run async
-  defp can_run_async?(:contamination_detection), do: false  # Monitoring needs serial execution
-  defp can_run_async?(:service_integration), do: false  # SIA needs careful coordination
-  
+  # Registry tests often need serial execution
+  defp can_run_async?(:registry), do: false
+  # Signal routing needs careful isolation
+  defp can_run_async?(:signal_routing), do: false
+  # Fully isolated can run async
+  defp can_run_async?(:full_isolation), do: true
+  # Monitoring needs serial execution
+  defp can_run_async?(:contamination_detection), do: false
+  # SIA needs careful coordination
+  defp can_run_async?(:service_integration), do: false
+
   defp setup_for_mode(:basic) do
     quote do
       Foundation.UnifiedTestFoundation.basic_setup(%{})
     end
   end
-  
+
   defp setup_for_mode(:registry) do
     quote do
       Foundation.UnifiedTestFoundation.registry_setup(%{})
     end
   end
-  
+
   defp setup_for_mode(:signal_routing) do
     quote do
       Foundation.UnifiedTestFoundation.signal_routing_setup(%{})
     end
   end
-  
+
   defp setup_for_mode(:full_isolation) do
     quote do
       Foundation.UnifiedTestFoundation.full_isolation_setup(%{})
     end
   end
-  
+
   defp setup_for_mode(:contamination_detection) do
     quote do
       Foundation.UnifiedTestFoundation.contamination_detection_setup(%{})
     end
   end
-  
+
   defp setup_for_mode(:service_integration) do
     quote do
       Foundation.UnifiedTestFoundation.service_integration_setup(%{})
     end
   end
-  
+
   defp module_config_for_mode(:contamination_detection) do
     quote do
       @moduletag :contamination_detection
       @moduletag :serial
     end
   end
-  
+
   defp module_config_for_mode(:signal_routing) do
     quote do
       @moduletag :signal_routing
       @moduletag :serial
     end
   end
-  
+
   defp module_config_for_mode(:service_integration) do
     quote do
       @moduletag :service_integration
       @moduletag :serial
     end
   end
-  
+
   defp module_config_for_mode(_), do: quote(do: nil)
-  
+
   defp is_test_process?(process_name, test_id) when is_atom(process_name) do
     process_name
     |> to_string()
     |> String.contains?("test_#{test_id}")
   end
-  
+
   defp is_test_process?(_, _), do: false
-  
+
   defp is_test_handler?(handler, test_id) do
     handler.id
     |> to_string()
     |> String.contains?("test_#{test_id}")
   end
-  
+
   # SIA component management helpers
-  
+
   @doc """
   Safely starts SIA components for testing, handling cases where modules may not be loaded.
   """
   def start_sia_components_safely(sia_context) do
     components = %{}
-    
+
     # Try to start each SIA component, gracefully handling module loading issues
-    components = try_start_component(
-      components, 
-      :contract_validator,
-      Foundation.ServiceIntegration.ContractValidator,
-      [name: sia_context.contract_validator_name]
-    )
-    
-    components = try_start_component(
-      components,
-      :dependency_manager, 
-      Foundation.ServiceIntegration.DependencyManager,
-      [name: sia_context.dependency_manager_name]
-    )
-    
-    components = try_start_component(
-      components,
-      :health_checker,
-      Foundation.ServiceIntegration.HealthChecker, 
-      [name: sia_context.health_checker_name]
-    )
-    
+    components =
+      try_start_component(
+        components,
+        :contract_validator,
+        Foundation.ServiceIntegration.ContractValidator,
+        name: sia_context.contract_validator_name
+      )
+
+    components =
+      try_start_component(
+        components,
+        :dependency_manager,
+        Foundation.ServiceIntegration.DependencyManager,
+        name: sia_context.dependency_manager_name
+      )
+
+    components =
+      try_start_component(
+        components,
+        :health_checker,
+        Foundation.ServiceIntegration.HealthChecker,
+        name: sia_context.health_checker_name
+      )
+
     # SignalCoordinator is stateless, just note availability
-    components = if Code.ensure_loaded?(Foundation.ServiceIntegration.SignalCoordinator) do
-      Map.put(components, :signal_coordinator, Foundation.ServiceIntegration.SignalCoordinator)
-    else
-      Map.put(components, :signal_coordinator, :not_available)
-    end
-    
+    components =
+      if Code.ensure_loaded?(Foundation.ServiceIntegration.SignalCoordinator) do
+        Map.put(components, :signal_coordinator, Foundation.ServiceIntegration.SignalCoordinator)
+      else
+        Map.put(components, :signal_coordinator, :not_available)
+      end
+
     components
   end
-  
+
   defp try_start_component(components, key, module, opts) do
     if Code.ensure_loaded?(module) do
       try do
         case module.start_link(opts) do
           {:ok, pid} ->
             Map.put(components, key, pid)
+
           {:error, {:already_started, pid}} ->
             Map.put(components, key, pid)
+
           {:error, _reason} ->
             Map.put(components, key, :failed_to_start)
         end
@@ -563,7 +595,7 @@ defmodule Foundation.UnifiedTestFoundation do
       Map.put(components, key, :not_available)
     end
   end
-  
+
   @doc """
   Cleans up SIA components after test completion.
   """
@@ -579,16 +611,16 @@ defmodule Foundation.UnifiedTestFoundation do
           catch
             _, _ -> :ok
           end
-          
+
         _other ->
           :ok
       end
     end)
-    
+
     # Clean up any SIA-specific telemetry handlers
     cleanup_sia_telemetry_handlers(test_id)
   end
-  
+
   @doc """
   Cleans up SIA-specific telemetry handlers.
   """
@@ -603,14 +635,15 @@ defmodule Foundation.UnifiedTestFoundation do
       _, _ -> :ok
     end
   end
-  
+
   defp is_sia_test_handler?(handler, test_id) do
     handler_id = to_string(handler.id)
+
     String.contains?(handler_id, "test_#{test_id}") and
-    (String.contains?(handler_id, "service_integration") or
-     String.contains?(handler_id, "contract_validator") or  
-     String.contains?(handler_id, "dependency_manager") or
-     String.contains?(handler_id, "health_checker") or
-     String.contains?(handler_id, "signal_coordinator"))
+      (String.contains?(handler_id, "service_integration") or
+         String.contains?(handler_id, "contract_validator") or
+         String.contains?(handler_id, "dependency_manager") or
+         String.contains?(handler_id, "health_checker") or
+         String.contains?(handler_id, "signal_coordinator"))
   end
 end

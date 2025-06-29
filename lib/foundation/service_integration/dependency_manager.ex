@@ -1,7 +1,7 @@
 defmodule Foundation.ServiceIntegration.DependencyManager do
   @moduledoc """
   Rebuilds the lost DependencyManager addressing Dialyzer agent type system issues.
-  
+
   This module provides service dependency management to prevent startup/integration
   failures. It uses Foundation.ResourceManager patterns for ETS management and
   follows Foundation supervision patterns.
@@ -87,8 +87,8 @@ defmodule Foundation.ServiceIntegration.DependencyManager do
   - `:ok` - Service registered successfully
   - `{:error, reason}` - Registration failed
   """
-  @spec register_service(service_module(), dependency_list()) :: 
-    :ok | {:error, term()}
+  @spec register_service(service_module(), dependency_list()) ::
+          :ok | {:error, term()}
   def register_service(service_module, dependencies) when is_atom(service_module) do
     GenServer.call(__MODULE__, {:register_service, service_module, dependencies})
   end
@@ -124,8 +124,8 @@ defmodule Foundation.ServiceIntegration.DependencyManager do
   - `{:ok, startup_order}` - Services ordered by dependencies
   - `{:error, reason}` - Could not determine order (circular deps, etc.)
   """
-  @spec get_startup_order([service_module()]) :: 
-    {:ok, startup_order()} | {:error, term()}
+  @spec get_startup_order([service_module()]) ::
+          {:ok, startup_order()} | {:error, term()}
   def get_startup_order(services) when is_list(services) do
     GenServer.call(__MODULE__, {:get_startup_order, services})
   end
@@ -145,8 +145,8 @@ defmodule Foundation.ServiceIntegration.DependencyManager do
   - `:ok` - All services started successfully
   - `{:error, reason}` - Some services failed to start
   """
-  @spec start_services_in_dependency_order([service_module()]) :: 
-    :ok | {:error, term()}
+  @spec start_services_in_dependency_order([service_module()]) ::
+          :ok | {:error, term()}
   def start_services_in_dependency_order(services) when is_list(services) do
     GenServer.call(__MODULE__, {:start_services_in_dependency_order, services}, 30_000)
   end
@@ -180,21 +180,27 @@ defmodule Foundation.ServiceIntegration.DependencyManager do
     process_name = Keyword.get(opts, :name, __MODULE__)
     default_table_name = :"#{@table_name}_#{:erlang.phash2(process_name)}"
     table_name = Keyword.get(opts, :table_name, default_table_name)
-    
+
     # Create ETS table following Foundation.ResourceManager patterns
     try do
       table = :ets.new(table_name, @table_opts)
+
       Logger.info("Foundation.ServiceIntegration.DependencyManager started",
-        table_name: table_name)
-      
-      {:ok, %__MODULE__{
-        table_name: table,
-        dependency_graph: %{}
-      }}
+        table_name: table_name
+      )
+
+      {:ok,
+       %__MODULE__{
+         table_name: table,
+         dependency_graph: %{}
+       }}
     rescue
       reason ->
         Logger.error("Failed to create DependencyManager ETS table",
-          table_name: table_name, reason: reason)
+          table_name: table_name,
+          reason: reason
+        )
+
         {:stop, {:ets_creation_failed, reason}}
     end
   end
@@ -204,20 +210,21 @@ defmodule Foundation.ServiceIntegration.DependencyManager do
     try do
       # Address Dialyzer agent type system confusion with defensive patterns
       validated_deps = validate_service_dependencies(service_module, dependencies)
-      
+
       # Store in ETS table
       case store_service_dependencies(state.table_name, service_module, validated_deps) do
         :ok ->
           # Update in-memory graph
           new_graph = Map.put(state.dependency_graph, service_module, validated_deps)
           new_state = %{state | dependency_graph: new_graph}
-          
+
           Logger.debug("Registered service dependencies",
-            service: service_module, 
-            dependencies: validated_deps)
-          
+            service: service_module,
+            dependencies: validated_deps
+          )
+
           {:reply, :ok, new_state}
-          
+
         {:error, reason} ->
           {:reply, {:error, {:dependency_storage_failed, reason}}, state}
       end
@@ -225,75 +232,80 @@ defmodule Foundation.ServiceIntegration.DependencyManager do
       exception ->
         Logger.error("Exception registering service dependencies",
           service: service_module,
-          exception: inspect(exception))
+          exception: inspect(exception)
+        )
+
         {:reply, {:error, {:registration_exception, exception}}, state}
     end
   end
 
   @impl GenServer
   def handle_call(:validate_dependencies, _from, state) do
-    result = try do
-      # Check for circular dependencies
-      case detect_circular_dependencies(state.dependency_graph) do
-        [] ->
-          # Check for missing services
-          case find_missing_services(state.dependency_graph) do
-            [] -> :ok
-            missing -> {:error, {:missing_services, missing}}
-          end
-          
-        cycles ->
-          {:error, {:circular_dependencies, cycles}}
+    result =
+      try do
+        # Check for circular dependencies
+        case detect_circular_dependencies(state.dependency_graph) do
+          [] ->
+            # Check for missing services
+            case find_missing_services(state.dependency_graph) do
+              [] -> :ok
+              missing -> {:error, {:missing_services, missing}}
+            end
+
+          cycles ->
+            {:error, {:circular_dependencies, cycles}}
+        end
+      rescue
+        exception ->
+          {:error, {:validation_exception, exception}}
       end
-    rescue
-      exception ->
-        {:error, {:validation_exception, exception}}
-    end
-    
+
     {:reply, result, state}
   end
 
   @impl GenServer
   def handle_call({:get_startup_order, services}, _from, state) do
-    result = try do
-      # Build subgraph for requested services
-      subgraph = build_subgraph(state.dependency_graph, services)
-      
-      # Perform topological sort
-      case topological_sort(subgraph) do
-        {:ok, sorted} ->
-          # Filter to only requested services
-          filtered = Enum.filter(sorted, &(&1 in services))
-          {:ok, filtered}
-          
-        {:error, reason} ->
-          {:error, reason}
+    result =
+      try do
+        # Build subgraph for requested services
+        subgraph = build_subgraph(state.dependency_graph, services)
+
+        # Perform topological sort
+        case topological_sort(subgraph) do
+          {:ok, sorted} ->
+            # Filter to only requested services
+            filtered = Enum.filter(sorted, &(&1 in services))
+            {:ok, filtered}
+
+          {:error, reason} ->
+            {:error, reason}
+        end
+      rescue
+        exception ->
+          {:error, {:sort_exception, exception}}
       end
-    rescue
-      exception ->
-        {:error, {:sort_exception, exception}}
-    end
-    
+
     {:reply, result, state}
   end
 
   @impl GenServer
   def handle_call({:start_services_in_dependency_order, services}, _from, state) do
-    result = try do
-      # Get startup order
-      case get_startup_order_internal(state.dependency_graph, services) do
-        {:ok, order} ->
-          # Start services in order
-          start_services_in_order(order)
-          
-        {:error, reason} ->
-          {:error, reason}
+    result =
+      try do
+        # Get startup order
+        case get_startup_order_internal(state.dependency_graph, services) do
+          {:ok, order} ->
+            # Start services in order
+            start_services_in_order(order)
+
+          {:error, reason} ->
+            {:error, reason}
+        end
+      rescue
+        exception ->
+          {:error, {:startup_exception, exception}}
       end
-    rescue
-      exception ->
-        {:error, {:startup_exception, exception}}
-    end
-    
+
     {:reply, result, state}
   end
 
@@ -307,13 +319,13 @@ defmodule Foundation.ServiceIntegration.DependencyManager do
   def handle_call({:unregister_service, service_module}, _from, state) do
     # Remove from ETS
     :ets.delete(state.table_name, service_module)
-    
+
     # Remove from graph
     new_graph = Map.delete(state.dependency_graph, service_module)
     new_state = %{state | dependency_graph: new_graph}
-    
+
     Logger.debug("Unregistered service", service: service_module)
-    
+
     {:reply, :ok, new_state}
   end
 
@@ -323,6 +335,7 @@ defmodule Foundation.ServiceIntegration.DependencyManager do
     if state.table_name && :ets.whereis(state.table_name) != :undefined do
       :ets.delete(state.table_name)
     end
+
     :ok
   end
 
@@ -338,7 +351,7 @@ defmodule Foundation.ServiceIntegration.DependencyManager do
     # Defensive validation addressing Dialyzer callback_type_mismatch issues
     try do
       Code.ensure_loaded?(agent_module) and
-      function_exported?(agent_module, :__struct__, 0)
+        function_exported?(agent_module, :__struct__, 0)
     rescue
       _ -> false
     end
@@ -357,7 +370,7 @@ defmodule Foundation.ServiceIntegration.DependencyManager do
   defp detect_circular_dependencies(dependency_graph) do
     # Use DFS to detect cycles
     all_services = Map.keys(dependency_graph)
-    
+
     Enum.reduce(all_services, [], fn service, acc ->
       case dfs_detect_cycle(dependency_graph, service, [], MapSet.new()) do
         nil -> acc
@@ -372,17 +385,17 @@ defmodule Foundation.ServiceIntegration.DependencyManager do
         # Found cycle
         cycle_start = Enum.find_index(path, &(&1 == current))
         Enum.drop(path, cycle_start) ++ [current]
-        
+
       MapSet.member?(visited, current) ->
         # Already visited, no cycle from this path
         nil
-        
+
       true ->
         # Continue DFS
         new_path = [current | path]
         new_visited = MapSet.put(visited, current)
         dependencies = Map.get(graph, current, [])
-        
+
         Enum.find_value(dependencies, fn dep ->
           dfs_detect_cycle(graph, dep, new_path, new_visited)
         end)
@@ -391,31 +404,35 @@ defmodule Foundation.ServiceIntegration.DependencyManager do
 
   defp find_missing_services(dependency_graph) do
     all_registered = MapSet.new(Map.keys(dependency_graph))
-    all_referenced = dependency_graph
-                    |> Map.values()
-                    |> List.flatten()
-                    |> MapSet.new()
-    
+
+    all_referenced =
+      dependency_graph
+      |> Map.values()
+      |> List.flatten()
+      |> MapSet.new()
+
     # Find dependencies that are neither registered nor exist as modules
     missing_from_registry = MapSet.difference(all_referenced, all_registered)
-    
+
     # Check if missing dependencies are actual modules that exist
     missing_from_registry
     |> Enum.filter(fn dep ->
       not dependency_exists?(dep)
     end)
   end
-  
+
   defp dependency_exists?(dep) do
     cond do
       # Foundation services - always valid
-      String.starts_with?(to_string(dep), "Elixir.Foundation") -> 
+      String.starts_with?(to_string(dep), "Elixir.Foundation") ->
         Code.ensure_loaded?(dep)
+
       # Jido agents - use defensive validation due to type system issues
-      String.contains?(to_string(dep), "Agent") -> 
+      String.contains?(to_string(dep), "Agent") ->
         validate_jido_agent_safely(dep)
+
       # Other services - standard validation
-      true -> 
+      true ->
         Code.ensure_loaded?(dep)
     end
   end
@@ -423,17 +440,18 @@ defmodule Foundation.ServiceIntegration.DependencyManager do
   defp build_subgraph(dependency_graph, services) do
     # Include all transitive dependencies
     all_deps = collect_all_dependencies(dependency_graph, services, MapSet.new())
-    
+
     dependency_graph
     |> Map.take(MapSet.to_list(all_deps))
   end
 
   defp collect_all_dependencies(graph, services, collected) do
-    new_deps = services
-               |> Enum.flat_map(&Map.get(graph, &1, []))
-               |> MapSet.new()
-               |> MapSet.difference(collected)
-    
+    new_deps =
+      services
+      |> Enum.flat_map(&Map.get(graph, &1, []))
+      |> MapSet.new()
+      |> MapSet.difference(collected)
+
     if MapSet.size(new_deps) == 0 do
       MapSet.union(collected, MapSet.new(services))
     else
@@ -447,7 +465,7 @@ defmodule Foundation.ServiceIntegration.DependencyManager do
       # Kahn's algorithm for topological sorting
       in_degrees = calculate_in_degrees(graph)
       queue = Enum.filter(Map.keys(graph), &(Map.get(in_degrees, &1, 0) == 0))
-      
+
       topological_sort_kahn(graph, in_degrees, queue, [])
     rescue
       exception ->
@@ -458,7 +476,7 @@ defmodule Foundation.ServiceIntegration.DependencyManager do
   defp calculate_in_degrees(graph) do
     all_nodes = Map.keys(graph)
     initial_degrees = Map.new(all_nodes, &{&1, 0})
-    
+
     Enum.reduce(graph, initial_degrees, fn {_node, deps}, acc ->
       Enum.reduce(deps, acc, fn dep, acc2 ->
         Map.update(acc2, dep, 1, &(&1 + 1))
@@ -468,7 +486,8 @@ defmodule Foundation.ServiceIntegration.DependencyManager do
 
   defp topological_sort_kahn(graph, _in_degrees, [], result) do
     if length(result) == map_size(graph) do
-      {:ok, result}  # Don't reverse - Kahn's algorithm builds in correct dependency order
+      # Don't reverse - Kahn's algorithm builds in correct dependency order
+      {:ok, result}
     else
       {:error, :circular_dependency_detected}
     end
@@ -477,63 +496,71 @@ defmodule Foundation.ServiceIntegration.DependencyManager do
   defp topological_sort_kahn(graph, in_degrees, [current | rest_queue], result) do
     # Add current to result
     new_result = [current | result]
-    
+
     # Reduce in-degree for all dependents
     dependencies = Map.get(graph, current, [])
-    {new_in_degrees, new_queue} = 
+
+    {new_in_degrees, new_queue} =
       Enum.reduce(dependencies, {in_degrees, rest_queue}, fn dep, {degrees, queue} ->
         new_degree = Map.get(degrees, dep, 0) - 1
         updated_degrees = Map.put(degrees, dep, new_degree)
-        
+
         if new_degree == 0 do
           {updated_degrees, [dep | queue]}
         else
           {updated_degrees, queue}
         end
       end)
-    
+
     topological_sort_kahn(graph, new_in_degrees, new_queue, new_result)
   end
 
   defp get_startup_order_internal(dependency_graph, services) do
     # Build subgraph for requested services
     subgraph = build_subgraph(dependency_graph, services)
-    
+
     # Perform topological sort
     case topological_sort(subgraph) do
       {:ok, sorted} ->
         # Filter to only requested services
         filtered = Enum.filter(sorted, &(&1 in services))
         {:ok, filtered}
-        
+
       {:error, reason} ->
         {:error, reason}
     end
   end
 
   defp start_services_in_order(services) do
-    results = Enum.map(services, fn service ->
-      try do
-        case service.start_link() do
-          {:ok, _pid} -> 
-            Logger.debug("Started service", service: service)
-            {:ok, service}
-          {:error, {:already_started, _pid}} -> 
-            Logger.debug("Service already started", service: service)
-            {:ok, service}
-          {:error, reason} -> 
-            Logger.warning("Failed to start service", service: service, reason: reason)
-            {:error, {service, reason}}
+    results =
+      Enum.map(services, fn service ->
+        try do
+          case service.start_link() do
+            {:ok, _pid} ->
+              Logger.debug("Started service", service: service)
+              {:ok, service}
+
+            {:error, {:already_started, _pid}} ->
+              Logger.debug("Service already started", service: service)
+              {:ok, service}
+
+            {:error, reason} ->
+              Logger.warning("Failed to start service", service: service, reason: reason)
+              {:error, {service, reason}}
+          end
+        rescue
+          exception ->
+            Logger.error("Exception starting service",
+              service: service,
+              exception: inspect(exception)
+            )
+
+            {:error, {service, {:start_exception, exception}}}
         end
-      rescue
-        exception -> 
-          Logger.error("Exception starting service", service: service, exception: inspect(exception))
-          {:error, {service, {:start_exception, exception}}}
-      end
-    end)
-    
+      end)
+
     failed = Enum.filter(results, &match?({:error, _}, &1))
-    
+
     case failed do
       [] -> :ok
       failures -> {:error, {:service_startup_failures, failures}}

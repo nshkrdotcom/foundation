@@ -260,7 +260,10 @@ defmodule MABEAM.Coordination do
               Foundation.start_consensus(participant_ids, proposal, 60_000, impl)
 
             {:error, reason} ->
-              Logger.warning("Failed to find least loaded agents for capability transition: #{inspect(reason)}")
+              Logger.warning(
+                "Failed to find least loaded agents for capability transition: #{inspect(reason)}"
+              )
+
               {:error, reason}
           end
         end
@@ -464,11 +467,13 @@ defmodule MABEAM.Coordination do
   defp apply_additional_filters(capability, filters, impl) do
     case MABEAM.Discovery.find_capable_and_healthy(capability, impl) do
       {:ok, base_agents} ->
-        filtered_agents = Enum.filter(base_agents, fn {_id, _pid, metadata} ->
-          Enum.all?(filters, fn {key, expected_value} ->
-            Map.get(metadata, key) == expected_value
+        filtered_agents =
+          Enum.filter(base_agents, fn {_id, _pid, metadata} ->
+            Enum.all?(filters, fn {key, expected_value} ->
+              Map.get(metadata, key) == expected_value
+            end)
           end)
-        end)
+
         {:ok, filtered_agents}
 
       {:error, reason} ->

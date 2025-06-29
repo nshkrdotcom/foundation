@@ -19,10 +19,10 @@ defmodule JidoFoundation.SignalRoutingTest do
       # Create unique telemetry handler ID for this router instance
       unique_id = :erlang.unique_integer([:positive])
       handler_id = "jido-signal-router-#{unique_id}"
-      
+
       # Get the router name from the process
       router_name = Keyword.get(opts, :name, __MODULE__)
-      
+
       # Subscribe to all Jido signal telemetry events with unique handler ID
       :telemetry.attach_many(
         handler_id,
@@ -95,6 +95,7 @@ defmodule JidoFoundation.SignalRoutingTest do
           # Emit routing telemetry
           measurements = %{handlers_count: length(all_handlers)}
           metadata = %{signal_type: signal_type, handlers: all_handlers}
+
           :telemetry.execute(
             [:jido, :signal, :routed],
             measurements,
@@ -163,7 +164,11 @@ defmodule JidoFoundation.SignalRoutingTest do
   end
 
   describe "Jido.Signal routing through Foundation.Telemetry" do
-    test "routes signals to subscribed handlers by type", %{registry: registry, signal_router: router, test_context: _ctx} do
+    test "routes signals to subscribed handlers by type", %{
+      registry: registry,
+      signal_router: router,
+      test_context: _ctx
+    } do
       # Create signal handlers
       {:ok, handler1} = SignalHandler.start_link("handler1")
       {:ok, handler2} = SignalHandler.start_link("handler2")
@@ -185,13 +190,13 @@ defmodule JidoFoundation.SignalRoutingTest do
         catch
           _, _ -> :ok
         end
-        
+
         try do
           if Process.alive?(handler2), do: GenServer.stop(handler2)
         catch
           _, _ -> :ok
         end
-        
+
         try do
           if Process.alive?(handler3), do: GenServer.stop(handler3)
         catch
@@ -214,16 +219,19 @@ defmodule JidoFoundation.SignalRoutingTest do
       # Attach telemetry handler BEFORE emitting signals
       test_pid = self()
       routing_ref = make_ref()
-      
+
       :telemetry.attach(
         "test-routing-completion-#{inspect(routing_ref)}",
         [:jido, :signal, :routed],
         fn _event, measurements, metadata, _config ->
-          send(test_pid, {routing_ref, :routing_complete, metadata[:signal_type], measurements[:handlers_count]})
+          send(
+            test_pid,
+            {routing_ref, :routing_complete, metadata[:signal_type], measurements[:handlers_count]}
+          )
         end,
         nil
       )
-      
+
       on_exit(fn ->
         try do
           :telemetry.detach("test-routing-completion-#{inspect(routing_ref)}")
@@ -253,7 +261,7 @@ defmodule JidoFoundation.SignalRoutingTest do
         source: "agent://#{inspect(agent)}",
         data: %{status: "processing"}
       })
-      
+
       # We expect 3 signals to be routed: error.validation (2 handlers), task.completed (1 handler), info.status (0 handlers)
       assert_receive {^routing_ref, :routing_complete, "error.validation", 2}, 1000
       assert_receive {^routing_ref, :routing_complete, "task.completed", 1}, 1000
@@ -277,7 +285,11 @@ defmodule JidoFoundation.SignalRoutingTest do
       assert hd(handler3_signals).type == "error.validation"
     end
 
-    test "supports dynamic subscription management", %{registry: registry, signal_router: router, test_context: _ctx} do
+    test "supports dynamic subscription management", %{
+      registry: registry,
+      signal_router: router,
+      test_context: _ctx
+    } do
       {:ok, handler} = SignalHandler.start_link("dynamic_handler")
       {:ok, agent} = Task.start_link(fn -> :timer.sleep(:infinity) end)
 
@@ -299,16 +311,19 @@ defmodule JidoFoundation.SignalRoutingTest do
       # Attach telemetry handler BEFORE emitting signals
       test_pid = self()
       routing_ref = make_ref()
-      
+
       :telemetry.attach(
         "test-dynamic-routing-#{inspect(routing_ref)}",
         [:jido, :signal, :routed],
         fn _event, measurements, metadata, _config ->
-          send(test_pid, {routing_ref, :routing_complete, metadata[:signal_type], measurements[:handlers_count]})
+          send(
+            test_pid,
+            {routing_ref, :routing_complete, metadata[:signal_type], measurements[:handlers_count]}
+          )
         end,
         nil
       )
-      
+
       on_exit(fn ->
         try do
           :telemetry.detach("test-dynamic-routing-#{inspect(routing_ref)}")
@@ -324,10 +339,10 @@ defmodule JidoFoundation.SignalRoutingTest do
         source: "agent://#{inspect(agent)}",
         data: %{task_id: "task_001"}
       })
-      
+
       # Wait for the task.started signal to be routed to 1 handler
       assert_receive {^routing_ref, :routing_complete, "task.started", 1}, 1000
-      
+
       signals = SignalHandler.get_received_signals(handler)
       assert length(signals) == 1
 
@@ -346,13 +361,17 @@ defmodule JidoFoundation.SignalRoutingTest do
 
       # Wait for signal routing completion - should route to 0 handlers since we unsubscribed
       assert_receive {^routing_ref, :routing_complete, "task.started", 0}, 1000
-      
+
       signals = SignalHandler.get_received_signals(handler)
       # Still only the first signal
       assert length(signals) == 1
     end
 
-    test "emits routing telemetry events", %{registry: registry, signal_router: router, test_context: _ctx} do
+    test "emits routing telemetry events", %{
+      registry: registry,
+      signal_router: router,
+      test_context: _ctx
+    } do
       test_pid = self()
 
       # Attach telemetry handler for routing events
@@ -395,7 +414,11 @@ defmodule JidoFoundation.SignalRoutingTest do
       assert metadata.handlers == [handler]
     end
 
-    test "handles signal routing errors gracefully", %{registry: registry, signal_router: router, test_context: _ctx} do
+    test "handles signal routing errors gracefully", %{
+      registry: registry,
+      signal_router: router,
+      test_context: _ctx
+    } do
       # Create a dead handler process
       dead_handler = spawn(fn -> :ok end)
       ref = Process.monitor(dead_handler)
@@ -424,7 +447,11 @@ defmodule JidoFoundation.SignalRoutingTest do
       assert Process.alive?(router)
     end
 
-    test "supports wildcard signal subscriptions", %{registry: registry, signal_router: router, test_context: _ctx} do
+    test "supports wildcard signal subscriptions", %{
+      registry: registry,
+      signal_router: router,
+      test_context: _ctx
+    } do
       {:ok, wildcard_handler} = SignalHandler.start_link("wildcard_handler")
       {:ok, specific_handler} = SignalHandler.start_link("specific_handler")
       {:ok, agent} = Task.start_link(fn -> :timer.sleep(:infinity) end)
@@ -444,16 +471,19 @@ defmodule JidoFoundation.SignalRoutingTest do
       # Attach telemetry handler BEFORE emitting signals
       test_pid = self()
       routing_ref = make_ref()
-      
+
       :telemetry.attach(
         "test-wildcard-routing-#{inspect(routing_ref)}",
         [:jido, :signal, :routed],
         fn _event, measurements, metadata, _config ->
-          send(test_pid, {routing_ref, :routing_complete, metadata[:signal_type], measurements[:handlers_count]})
+          send(
+            test_pid,
+            {routing_ref, :routing_complete, metadata[:signal_type], measurements[:handlers_count]}
+          )
         end,
         nil
       )
-      
+
       on_exit(fn ->
         try do
           :telemetry.detach("test-wildcard-routing-#{inspect(routing_ref)}")
@@ -483,7 +513,7 @@ defmodule JidoFoundation.SignalRoutingTest do
         source: "agent://#{inspect(agent)}",
         data: %{status: "ok"}
       })
-      
+
       # Wait for all 3 signals to be routed
       # error.validation should go to 2 handlers (wildcard + specific)
       assert_receive {^routing_ref, :routing_complete, "error.validation", 2}, 1000

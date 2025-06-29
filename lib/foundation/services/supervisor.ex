@@ -135,38 +135,42 @@ defmodule Foundation.Services.Supervisor do
   # Gracefully handles cases where SIA modules may not be loaded in test environments.
   defp get_sia_children(is_test_supervisor, supervisor_id) do
     sia_children = []
-    
+
     # Add DependencyManager if available
-    sia_children = 
+    sia_children =
       if Code.ensure_loaded?(Foundation.ServiceIntegration.DependencyManager) do
-        opts = if is_test_supervisor do
-          [name: :"#{supervisor_id}_dependency_manager", 
-           table_name: :"#{supervisor_id}_dependency_table"]
-        else
-          []
-        end
-        
+        opts =
+          if is_test_supervisor do
+            [
+              name: :"#{supervisor_id}_dependency_manager",
+              table_name: :"#{supervisor_id}_dependency_table"
+            ]
+          else
+            []
+          end
+
         [{Foundation.ServiceIntegration.DependencyManager, opts} | sia_children]
       else
         Logger.debug("Foundation.ServiceIntegration.DependencyManager not available, skipping")
         sia_children
       end
-    
+
     # Add HealthChecker if available  
     sia_children =
       if Code.ensure_loaded?(Foundation.ServiceIntegration.HealthChecker) do
-        opts = if is_test_supervisor do
-          [name: :"#{supervisor_id}_health_checker"]
-        else
-          []
-        end
-        
+        opts =
+          if is_test_supervisor do
+            [name: :"#{supervisor_id}_health_checker"]
+          else
+            []
+          end
+
         [{Foundation.ServiceIntegration.HealthChecker, opts} | sia_children]
       else
         Logger.debug("Foundation.ServiceIntegration.HealthChecker not available, skipping")
         sia_children
       end
-    
+
     # Reverse to maintain expected order (DependencyManager first, then HealthChecker)
     Enum.reverse(sia_children)
   end

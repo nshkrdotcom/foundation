@@ -1,6 +1,6 @@
 defmodule Foundation.ServiceIntegration.SimpleTest do
   use ExUnit.Case, async: false
-  
+
   test "can load the main ServiceIntegration module" do
     assert Code.ensure_loaded?(Foundation.ServiceIntegration)
   end
@@ -16,6 +16,7 @@ defmodule Foundation.ServiceIntegration.SimpleTest do
     case Code.ensure_compiled(Foundation.ServiceIntegration.ContractEvolution) do
       {:module, module} ->
         assert module == Foundation.ServiceIntegration.ContractEvolution
+
       {:error, reason} ->
         flunk("ContractEvolution failed to compile: #{inspect(reason)}")
     end
@@ -26,6 +27,7 @@ defmodule Foundation.ServiceIntegration.SimpleTest do
     case Code.ensure_compiled(Foundation.ServiceIntegration.ContractValidator) do
       {:module, module} ->
         assert module == Foundation.ServiceIntegration.ContractValidator
+
       {:error, reason} ->
         flunk("ContractValidator failed to compile: #{inspect(reason)}")
     end

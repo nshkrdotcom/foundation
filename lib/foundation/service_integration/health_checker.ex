@@ -1,7 +1,7 @@
 defmodule Foundation.ServiceIntegration.HealthChecker do
   @moduledoc """
   Rebuilds the lost HealthChecker addressing signal pipeline issues.
-  
+
   This module provides unified health checking across all service boundaries,
   integrating with Foundation service patterns and handling signal system flaws.
   It includes circuit breaker integration for resilient checking and aggregated
@@ -49,19 +49,19 @@ defmodule Foundation.ServiceIntegration.HealthChecker do
 
   @type health_status :: :healthy | :unhealthy | :degraded | :unknown
   @type health_result :: %{
-    service: module(),
-    status: health_status(),
-    response_time_ms: non_neg_integer(),
-    metadata: map(),
-    timestamp: DateTime.t()
-  }
+          service: module(),
+          status: health_status(),
+          response_time_ms: non_neg_integer(),
+          metadata: map(),
+          timestamp: DateTime.t()
+        }
   @type system_health :: %{
-    foundation_services: [health_result()],
-    signal_system: health_result(),
-    registered_services: [health_result()],
-    overall_status: health_status(),
-    summary: map()
-  }
+          foundation_services: [health_result()],
+          signal_system: health_result(),
+          registered_services: [health_result()],
+          overall_status: health_status(),
+          summary: map()
+        }
 
   ## Client API
 
@@ -189,16 +189,18 @@ defmodule Foundation.ServiceIntegration.HealthChecker do
     }
 
     # Start automatic health checking if enabled
-    new_state = if enable_auto_checks do
-      schedule_health_checks(state)
-    else
-      state
-    end
+    new_state =
+      if enable_auto_checks do
+        schedule_health_checks(state)
+      else
+        state
+      end
 
     Logger.info("Foundation.ServiceIntegration.HealthChecker started",
       check_interval: check_interval,
       auto_checks: enable_auto_checks,
-      circuit_breaker_threshold: circuit_breaker_threshold)
+      circuit_breaker_threshold: circuit_breaker_threshold
+    )
 
     {:ok, new_state}
   end
@@ -206,47 +208,49 @@ defmodule Foundation.ServiceIntegration.HealthChecker do
   @impl GenServer
   def handle_call(:system_health_summary, _from, state) do
     start_time = System.monotonic_time()
-    
-    result = try do
-      with {:ok, foundation_health} <- check_foundation_services(),
-           {:ok, signal_health} <- check_signal_system_with_fallback(),
-           {:ok, service_health} <- check_registered_services(state) do
-        
-        overall_status = calculate_overall_status(foundation_health, signal_health, service_health)
-        
-        system_health = %{
-          foundation_services: foundation_health,
-          signal_system: signal_health,
-          registered_services: service_health,
-          overall_status: overall_status,
-          summary: %{
-            total_services: length(foundation_health) + length(service_health) + 1,
-            healthy_services: count_healthy_services(foundation_health, signal_health, service_health),
-            check_timestamp: DateTime.utc_now()
+
+    result =
+      try do
+        with {:ok, foundation_health} <- check_foundation_services(),
+             {:ok, signal_health} <- check_signal_system_with_fallback(),
+             {:ok, service_health} <- check_registered_services(state) do
+          overall_status =
+            calculate_overall_status(foundation_health, signal_health, service_health)
+
+          system_health = %{
+            foundation_services: foundation_health,
+            signal_system: signal_health,
+            registered_services: service_health,
+            overall_status: overall_status,
+            summary: %{
+              total_services: length(foundation_health) + length(service_health) + 1,
+              healthy_services:
+                count_healthy_services(foundation_health, signal_health, service_health),
+              check_timestamp: DateTime.utc_now()
+            }
           }
-        }
-        
-        {:ok, system_health}
-        
-      else
-        error -> 
-          Logger.warning("System health check encountered error", error: inspect(error))
-          handle_health_check_error(error)
+
+          {:ok, system_health}
+        else
+          error ->
+            Logger.warning("System health check encountered error", error: inspect(error))
+            handle_health_check_error(error)
+        end
+      rescue
+        exception ->
+          Logger.error("Exception during system health check", exception: inspect(exception))
+          {:error, {:health_check_exception, exception}}
       end
-    rescue
-      exception ->
-        Logger.error("Exception during system health check", exception: inspect(exception))
-        {:error, {:health_check_exception, exception}}
-    end
-    
+
     # Emit telemetry
     duration = System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
+
     :telemetry.execute(
       [:foundation, :service_integration, :health_check],
       %{duration: duration, service_count: count_services(state)},
       %{result: elem(result, 0)}
     )
-    
+
     {:reply, result, state}
   end
 
@@ -259,12 +263,12 @@ defmodule Foundation.ServiceIntegration.HealthChecker do
       circuit_breaker: Keyword.get(options, :circuit_breaker, true),
       metadata: Keyword.get(options, :metadata, %{})
     }
-    
+
     new_health_checks = Map.put(state.registered_health_checks, service_module, health_check_config)
     new_state = %{state | registered_health_checks: new_health_checks}
-    
+
     Logger.debug("Registered health check", service: service_module, config: health_check_config)
-    
+
     {:reply, :ok, new_state}
   end
 
@@ -281,6 +285,7 @@ defmodule Foundation.ServiceIntegration.HealthChecker do
       last_results: state.last_health_results,
       circuit_breakers: state.circuit_breaker_states
     }
+
     {:reply, result, state}
   end
 
@@ -289,15 +294,16 @@ defmodule Foundation.ServiceIntegration.HealthChecker do
     new_health_checks = Map.delete(state.registered_health_checks, service_module)
     new_results = Map.delete(state.last_health_results, service_module)
     new_breakers = Map.delete(state.circuit_breaker_states, service_module)
-    
-    new_state = %{state | 
-      registered_health_checks: new_health_checks,
-      last_health_results: new_results,
-      circuit_breaker_states: new_breakers
+
+    new_state = %{
+      state
+      | registered_health_checks: new_health_checks,
+        last_health_results: new_results,
+        circuit_breaker_states: new_breakers
     }
-    
+
     Logger.debug("Unregistered health check", service: service_module)
-    
+
     {:reply, :ok, new_state}
   end
 
@@ -310,28 +316,30 @@ defmodule Foundation.ServiceIntegration.HealthChecker do
   @impl GenServer
   def handle_info(:perform_health_checks, state) do
     {_results, new_state} = perform_all_health_checks(state)
-    
+
     # Schedule next health check
-    updated_state = if state.enable_auto_checks do
-      schedule_health_checks(new_state)
-    else
-      new_state
-    end
-    
+    updated_state =
+      if state.enable_auto_checks do
+        schedule_health_checks(new_state)
+      else
+        new_state
+      end
+
     {:noreply, updated_state}
   end
 
   @impl GenServer
   def handle_info({:timeout, timer_ref, :perform_health_checks}, %{timer_ref: timer_ref} = state) do
     {_results, new_state} = perform_all_health_checks(state)
-    
+
     # Schedule next health check
-    updated_state = if state.enable_auto_checks do
-      schedule_health_checks(new_state)
-    else
-      %{new_state | timer_ref: nil}
-    end
-    
+    updated_state =
+      if state.enable_auto_checks do
+        schedule_health_checks(new_state)
+      else
+        %{new_state | timer_ref: nil}
+      end
+
     {:noreply, updated_state}
   end
 
@@ -346,6 +354,7 @@ defmodule Foundation.ServiceIntegration.HealthChecker do
     if state.timer_ref do
       Process.cancel_timer(state.timer_ref)
     end
+
     :ok
   end
 
@@ -359,7 +368,7 @@ defmodule Foundation.ServiceIntegration.HealthChecker do
       Foundation.Services.RateLimiter,
       Foundation.Services.SignalBus
     ]
-    
+
     service in health_check_supported
   end
 
@@ -368,7 +377,7 @@ defmodule Foundation.ServiceIntegration.HealthChecker do
     if state.timer_ref do
       Process.cancel_timer(state.timer_ref)
     end
-    
+
     # Schedule new health check
     timer_ref = Process.send_after(self(), :perform_health_checks, state.check_interval)
     %{state | timer_ref: timer_ref}
@@ -381,48 +390,52 @@ defmodule Foundation.ServiceIntegration.HealthChecker do
       Foundation.Services.ConnectionManager,
       Foundation.Services.RateLimiter,
       Foundation.Services.SignalBus,
-      Foundation.ResourceManager,  # Now properly available via Category 1 fix
+      # Now properly available via Category 1 fix
+      Foundation.ResourceManager,
       Foundation.PerformanceMonitor
     ]
-    
-    health_results = Enum.map(foundation_services, fn service ->
-      check_foundation_service_health(service)
-    end)
-    
+
+    health_results =
+      Enum.map(foundation_services, fn service ->
+        check_foundation_service_health(service)
+      end)
+
     {:ok, health_results}
   end
 
   defp check_foundation_service_health(service) do
     start_time = System.monotonic_time()
-    
-    {status, metadata} = case Process.whereis(service) do
-      nil -> 
-        {:unavailable, %{error: :process_not_found}}
-      
-      pid ->
-        # Check if service supports health checks before calling
-        if service_supports_health_check?(service) do
-          try do
-            case GenServer.call(service, :health_check, 1000) do
-              :healthy -> {:healthy, %{pid: pid}}
-              :unhealthy -> {:unhealthy, %{pid: pid, reason: :service_reported_unhealthy}}
-              :degraded -> {:degraded, %{pid: pid, reason: :service_reported_degraded}}
-              {:error, reason} -> {:unhealthy, %{pid: pid, error: reason}}
-              _other -> {:healthy, %{pid: pid, note: :non_standard_response}}
+
+    {status, metadata} =
+      case Process.whereis(service) do
+        nil ->
+          {:unavailable, %{error: :process_not_found}}
+
+        pid ->
+          # Check if service supports health checks before calling
+          if service_supports_health_check?(service) do
+            try do
+              case GenServer.call(service, :health_check, 1000) do
+                :healthy -> {:healthy, %{pid: pid}}
+                :unhealthy -> {:unhealthy, %{pid: pid, reason: :service_reported_unhealthy}}
+                :degraded -> {:degraded, %{pid: pid, reason: :service_reported_degraded}}
+                {:error, reason} -> {:unhealthy, %{pid: pid, error: reason}}
+                _other -> {:healthy, %{pid: pid, note: :non_standard_response}}
+              end
+            catch
+              :exit, {:timeout, _} -> {:degraded, %{pid: pid, error: :health_check_timeout}}
+              :exit, {:noproc, _} -> {:unavailable, %{error: :process_died_during_check}}
+              _kind, _reason -> {:healthy, %{pid: pid, note: :health_check_not_supported}}
             end
-          catch
-            :exit, {:timeout, _} -> {:degraded, %{pid: pid, error: :health_check_timeout}}
-            :exit, {:noproc, _} -> {:unavailable, %{error: :process_died_during_check}}
-            _kind, _reason -> {:healthy, %{pid: pid, note: :health_check_not_supported}}
+          else
+            # Service doesn't support health checks - assume healthy if running
+            {:healthy, %{pid: pid, note: :health_check_not_supported}}
           end
-        else
-          # Service doesn't support health checks - assume healthy if running
-          {:healthy, %{pid: pid, note: :health_check_not_supported}}
-        end
-    end
-    
-    response_time = System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
-    
+      end
+
+    response_time =
+      System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
+
     %{
       service: service,
       status: status,
@@ -435,32 +448,34 @@ defmodule Foundation.ServiceIntegration.HealthChecker do
   defp check_signal_system_with_fallback do
     # Address Category 2 signal pipeline race conditions with fallback
     start_time = System.monotonic_time()
-    
-    {status, metadata} = try do
-      # Test signal system synchronously to avoid race conditions
-      case Process.whereis(Foundation.Services.SignalBus) do
-        nil ->
-          {:unavailable, %{error: :signal_bus_not_running}}
-          
-        pid ->
-          # Use a simple health check rather than complex signal routing
-          case GenServer.call(Foundation.Services.SignalBus, :health_check, 2000) do
-            :healthy -> {:healthy, %{pid: pid}}
-            :unhealthy -> {:unhealthy, %{pid: pid}}
-            :degraded -> {:degraded, %{pid: pid}}
-            other -> {:healthy, %{pid: pid, response: other}}
-          end
+
+    {status, metadata} =
+      try do
+        # Test signal system synchronously to avoid race conditions
+        case Process.whereis(Foundation.Services.SignalBus) do
+          nil ->
+            {:unavailable, %{error: :signal_bus_not_running}}
+
+          pid ->
+            # Use a simple health check rather than complex signal routing
+            case GenServer.call(Foundation.Services.SignalBus, :health_check, 2000) do
+              :healthy -> {:healthy, %{pid: pid}}
+              :unhealthy -> {:unhealthy, %{pid: pid}}
+              :degraded -> {:degraded, %{pid: pid}}
+              other -> {:healthy, %{pid: pid, response: other}}
+            end
+        end
+      rescue
+        exception -> {:unhealthy, %{exception: inspect(exception)}}
+      catch
+        :exit, {:timeout, _} -> {:degraded, %{error: :health_check_timeout}}
+        :exit, {:noproc, _} -> {:unavailable, %{error: :signal_bus_unavailable}}
+        _kind, reason -> {:degraded, %{error: reason}}
       end
-    rescue
-      exception -> {:unhealthy, %{exception: inspect(exception)}}
-    catch
-      :exit, {:timeout, _} -> {:degraded, %{error: :health_check_timeout}}
-      :exit, {:noproc, _} -> {:unavailable, %{error: :signal_bus_unavailable}}
-      _kind, reason -> {:degraded, %{error: reason}}
-    end
-    
-    response_time = System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
-    
+
+    response_time =
+      System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
+
     signal_health = %{
       service: :signal_system,
       status: status,
@@ -468,17 +483,18 @@ defmodule Foundation.ServiceIntegration.HealthChecker do
       metadata: metadata,
       timestamp: DateTime.utc_now()
     }
-    
+
     {:ok, signal_health}
   end
 
   defp check_registered_services(state) do
-    results = Enum.map(state.registered_health_checks, fn {service, _config} ->
-      case perform_service_health_check(service, state) do
-        {:ok, result} -> result
-      end
-    end)
-    
+    results =
+      Enum.map(state.registered_health_checks, fn {service, _config} ->
+        case perform_service_health_check(service, state) do
+          {:ok, result} -> result
+        end
+      end)
+
     {:ok, results}
   end
 
@@ -488,34 +504,36 @@ defmodule Foundation.ServiceIntegration.HealthChecker do
         # Try default health check for Foundation services
         result = check_foundation_service_health(service_module)
         {:ok, result}
-        
+
       config ->
         # Use registered health check function
         start_time = System.monotonic_time()
-        
-        {status, metadata} = try do
-          # Check circuit breaker state
-          case should_skip_due_to_circuit_breaker(service_module, state) do
-            true ->
-              {:degraded, %{circuit_breaker: :open, reason: :too_many_failures}}
-              
-            false ->
-              # Execute health check with timeout
-              case execute_health_check_with_timeout(config.function, config.timeout) do
-                :healthy -> {:healthy, config.metadata}
-                :unhealthy -> {:unhealthy, config.metadata}
-                :degraded -> {:degraded, config.metadata}
-                {:error, reason} -> {:unhealthy, Map.put(config.metadata, :error, reason)}
-                other -> {:healthy, Map.put(config.metadata, :response, other)}
-              end
+
+        {status, metadata} =
+          try do
+            # Check circuit breaker state
+            case should_skip_due_to_circuit_breaker(service_module, state) do
+              true ->
+                {:degraded, %{circuit_breaker: :open, reason: :too_many_failures}}
+
+              false ->
+                # Execute health check with timeout
+                case execute_health_check_with_timeout(config.function, config.timeout) do
+                  :healthy -> {:healthy, config.metadata}
+                  :unhealthy -> {:unhealthy, config.metadata}
+                  :degraded -> {:degraded, config.metadata}
+                  {:error, reason} -> {:unhealthy, Map.put(config.metadata, :error, reason)}
+                  other -> {:healthy, Map.put(config.metadata, :response, other)}
+                end
+            end
+          rescue
+            exception ->
+              {:unhealthy, Map.put(config.metadata, :exception, inspect(exception))}
           end
-        rescue
-          exception ->
-            {:unhealthy, Map.put(config.metadata, :exception, inspect(exception))}
-        end
-        
-        response_time = System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
-        
+
+        response_time =
+          System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
+
         result = %{
           service: service_module,
           status: status,
@@ -523,14 +541,14 @@ defmodule Foundation.ServiceIntegration.HealthChecker do
           metadata: metadata,
           timestamp: DateTime.utc_now()
         }
-        
+
         {:ok, result}
     end
   end
 
   defp execute_health_check_with_timeout(health_check_fun, timeout) do
     task = Task.async(fn -> health_check_fun.() end)
-    
+
     try do
       Task.await(task, timeout)
     catch
@@ -548,21 +566,23 @@ defmodule Foundation.ServiceIntegration.HealthChecker do
 
   defp perform_all_health_checks(state) do
     # Perform health checks for all registered services
-    results = Enum.map(state.registered_health_checks, fn {service, _config} ->
-      case perform_service_health_check(service, state) do
-        {:ok, result} -> result
-      end
-    end)
-    
+    results =
+      Enum.map(state.registered_health_checks, fn {service, _config} ->
+        case perform_service_health_check(service, state) do
+          {:ok, result} -> result
+        end
+      end)
+
     # Update last results and circuit breaker states
     new_results = Enum.into(results, %{}, fn result -> {result.service, result} end)
     new_breaker_states = update_circuit_breaker_states(results, state.circuit_breaker_states)
-    
-    new_state = %{state |
-      last_health_results: Map.merge(state.last_health_results, new_results),
-      circuit_breaker_states: new_breaker_states
+
+    new_state = %{
+      state
+      | last_health_results: Map.merge(state.last_health_results, new_results),
+        circuit_breaker_states: new_breaker_states
     }
-    
+
     {results, new_state}
   end
 
@@ -570,21 +590,23 @@ defmodule Foundation.ServiceIntegration.HealthChecker do
     Enum.reduce(results, current_states, fn result, acc ->
       service = result.service
       current_state = Map.get(acc, service, %{failures: 0})
-      
-      new_state = case result.status do
-        :healthy -> %{failures: 0}
-        _ -> %{failures: current_state.failures + 1}
-      end
-      
+
+      new_state =
+        case result.status do
+          :healthy -> %{failures: 0}
+          _ -> %{failures: current_state.failures + 1}
+        end
+
       Map.put(acc, service, new_state)
     end)
   end
 
   defp calculate_overall_status(foundation_health, signal_health, service_health) do
-    all_statuses = [signal_health.status] ++ 
-                   Enum.map(foundation_health, & &1.status) ++ 
-                   Enum.map(service_health, & &1.status)
-    
+    all_statuses =
+      [signal_health.status] ++
+        Enum.map(foundation_health, & &1.status) ++
+        Enum.map(service_health, & &1.status)
+
     cond do
       Enum.any?(all_statuses, &(&1 == :unavailable)) -> :degraded
       Enum.any?(all_statuses, &(&1 == :unhealthy)) -> :unhealthy
@@ -596,7 +618,7 @@ defmodule Foundation.ServiceIntegration.HealthChecker do
 
   defp count_healthy_services(foundation_health, signal_health, service_health) do
     all_results = [signal_health] ++ foundation_health ++ service_health
-    Enum.count(all_results, & &1.status == :healthy)
+    Enum.count(all_results, &(&1.status == :healthy))
   end
 
   defp count_services(state) do
@@ -607,14 +629,15 @@ defmodule Foundation.ServiceIntegration.HealthChecker do
   defp handle_health_check_error(error) do
     case error do
       {:error, :signal_system_error} ->
-        {:ok, %{
-          foundation_services: [],
-          signal_system: %{status: :unhealthy, error: :signal_system_error},
-          registered_services: [],
-          overall_status: :degraded,
-          summary: %{error: :partial_health_check}
-        }}
-      
+        {:ok,
+         %{
+           foundation_services: [],
+           signal_system: %{status: :unhealthy, error: :signal_system_error},
+           registered_services: [],
+           overall_status: :degraded,
+           summary: %{error: :partial_health_check}
+         }}
+
       other ->
         {:error, other}
     end

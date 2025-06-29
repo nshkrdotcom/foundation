@@ -191,16 +191,17 @@ defmodule JidoFoundation.Bridge do
       {:ok, result} = execute_with_retry(MyAction, %{data: "test"})
       {:error, reason} = execute_with_retry(BadAction, %{})
   """
-  @spec execute_with_retry(module(), map(), map(), keyword()) :: 
-    {:ok, any()} | {:error, any()}
+  @spec execute_with_retry(module(), map(), map(), keyword()) ::
+          {:ok, any()} | {:error, any()}
   def execute_with_retry(action_module, params \\ %{}, context \\ %{}, opts \\ []) do
     try do
       # Enhance context with Foundation metadata
-      enhanced_context = Map.merge(context, %{
-        foundation_bridge: true,
-        agent_framework: :jido,
-        timestamp: System.system_time(:microsecond)
-      })
+      enhanced_context =
+        Map.merge(context, %{
+          foundation_bridge: true,
+          agent_framework: :jido,
+          timestamp: System.system_time(:microsecond)
+        })
 
       # Extract Jido.Exec options
       exec_opts = [
@@ -213,34 +214,48 @@ defmodule JidoFoundation.Bridge do
       # Use Jido.Exec for proper action execution with built-in retry
       case Jido.Exec.run(action_module, params, enhanced_context, exec_opts) do
         {:ok, result} = success ->
-          Logger.debug("Jido action executed successfully via Bridge", 
-            action: action_module, result: inspect(result))
+          Logger.debug("Jido action executed successfully via Bridge",
+            action: action_module,
+            result: inspect(result)
+          )
+
           success
 
         {:error, reason} = error ->
-          Logger.warning("Jido action failed after retries via Bridge", 
-            action: action_module, reason: inspect(reason))
+          Logger.warning("Jido action failed after retries via Bridge",
+            action: action_module,
+            reason: inspect(reason)
+          )
+
           error
 
         # Handle unexpected return formats
         other ->
           Logger.warning("Jido action returned unexpected format via Bridge",
-            action: action_module, result: inspect(other))
+            action: action_module,
+            result: inspect(other)
+          )
+
           {:error, {:unexpected_return_format, other}}
       end
     rescue
       error ->
         Logger.error("Exception during Jido action execution via Bridge",
-          action: action_module, error: inspect(error))
+          action: action_module,
+          error: inspect(error)
+        )
+
         {:error, {:execution_exception, error}}
     catch
       kind, value ->
         Logger.error("Caught #{kind} during Jido action execution via Bridge",
-          action: action_module, value: inspect(value))
+          action: action_module,
+          value: inspect(value)
+        )
+
         {:error, {:execution_caught, {kind, value}}}
     end
   end
-
 
   @doc """
   Sets up monitoring for a Jido agent.
@@ -453,12 +468,14 @@ defmodule JidoFoundation.Bridge do
   def start_signal_bus(opts \\ []) do
     name = Keyword.get(opts, :name, :foundation_signal_bus)
     middleware = Keyword.get(opts, :middleware, [{Jido.Signal.Bus.Middleware.Logger, []}])
-    
+
     # Start Jido Signal Bus with Foundation-specific configuration
-    Jido.Signal.Bus.start_link([
-      name: name,
-      middleware: middleware
-    ] ++ Keyword.drop(opts, [:name, :middleware]))
+    Jido.Signal.Bus.start_link(
+      [
+        name: name,
+        middleware: middleware
+      ] ++ Keyword.drop(opts, [:name, :middleware])
+    )
   end
 
   @doc """
@@ -485,14 +502,14 @@ defmodule JidoFoundation.Bridge do
   """
   def subscribe_to_signals(signal_path, handler_pid, opts \\ []) do
     bus_name = Keyword.get(opts, :bus, :foundation_signal_bus)
-    
+
     # Configure dispatch to the handler process  
     dispatch_opts = [
       dispatch: {:pid, [target: handler_pid, delivery_mode: :async]}
     ]
-    
+
     subscription_opts = Keyword.merge(dispatch_opts, Keyword.drop(opts, [:bus]))
-    
+
     Jido.Signal.Bus.subscribe(bus_name, signal_path, subscription_opts)
   end
 
@@ -523,7 +540,7 @@ defmodule JidoFoundation.Bridge do
   def get_signal_history(path \\ "*", opts \\ []) do
     bus_name = Keyword.get(opts, :bus, :foundation_signal_bus)
     start_timestamp = Keyword.get(opts, :since, 0)
-    
+
     Jido.Signal.Bus.replay(bus_name, path, start_timestamp, opts)
   end
 
@@ -562,86 +579,95 @@ defmodule JidoFoundation.Bridge do
   def emit_signal(agent, signal, opts \\ []) do
     # Agent parameter is used in telemetry metadata
     bus_name = Keyword.get(opts, :bus, :foundation_signal_bus)
-    
+
     # Preserve original signal ID for telemetry
-    original_signal_id = case signal do
-      %{id: id} -> id
-      _ -> nil
-    end
-    
+    original_signal_id =
+      case signal do
+        %{id: id} -> id
+        _ -> nil
+      end
+
     # Ensure signal is in the proper format
-    normalized_signal = case signal do
-      %Jido.Signal{} = sig -> 
-        sig
-      
-      signal_map when is_map(signal_map) ->
-        # Convert legacy signal format to Jido.Signal
-        type = Map.get(signal_map, :type) || 
-               Map.get(signal_map, :path) ||
-               "unknown"
-               
-        source = Map.get(signal_map, :source) ||
-                 "/agent/foundation"
-               
-        data = Map.get(signal_map, :data, %{})
-        
-        # Preserve original ID if present
-        signal_attrs = %{
-          type: type,
-          source: source,
-          data: data,
-          time: DateTime.utc_now() |> DateTime.to_iso8601()
-        }
-        
-        # Add ID if it exists in the original signal (convert to string for Jido.Signal)
-        signal_attrs = case Map.get(signal_map, :id) do
-          nil -> signal_attrs
-          id -> Map.put(signal_attrs, "id", to_string(id))
-        end
-        
-        case Jido.Signal.new(signal_attrs) do
-          {:ok, signal} -> signal
-          {:error, _} ->
-            # Fallback with minimal fields
-            case Jido.Signal.new(%{type: type, source: source}) do
-              {:ok, signal} -> %{signal | data: data}
-              {:error, _} -> nil
+    normalized_signal =
+      case signal do
+        %Jido.Signal{} = sig ->
+          sig
+
+        signal_map when is_map(signal_map) ->
+          # Convert legacy signal format to Jido.Signal
+          type =
+            Map.get(signal_map, :type) ||
+              Map.get(signal_map, :path) ||
+              "unknown"
+
+          source =
+            Map.get(signal_map, :source) ||
+              "/agent/foundation"
+
+          data = Map.get(signal_map, :data, %{})
+
+          # Preserve original ID if present
+          signal_attrs = %{
+            type: type,
+            source: source,
+            data: data,
+            time: DateTime.utc_now() |> DateTime.to_iso8601()
+          }
+
+          # Add ID if it exists in the original signal (convert to string for Jido.Signal)
+          signal_attrs =
+            case Map.get(signal_map, :id) do
+              nil -> signal_attrs
+              id -> Map.put(signal_attrs, "id", to_string(id))
             end
-        end
-        
-      _ ->
-        # Fallback for other formats
-        case Jido.Signal.new(%{
-          type: "unknown",
-          source: "/agent/foundation",
-          data: signal
-        }) do
-          {:ok, signal} -> signal
-          {:error, _} -> nil
-        end
-    end
-    
+
+          case Jido.Signal.new(signal_attrs) do
+            {:ok, signal} ->
+              signal
+
+            {:error, _} ->
+              # Fallback with minimal fields
+              case Jido.Signal.new(%{type: type, source: source}) do
+                {:ok, signal} -> %{signal | data: data}
+                {:error, _} -> nil
+              end
+          end
+
+        _ ->
+          # Fallback for other formats
+          case Jido.Signal.new(%{
+                 type: "unknown",
+                 source: "/agent/foundation",
+                 data: signal
+               }) do
+            {:ok, signal} -> signal
+            {:error, _} -> nil
+          end
+      end
+
     # Publish to the signal bus if signal creation succeeded
     case normalized_signal do
-      nil -> 
+      nil ->
         {:error, :invalid_signal_format}
-        
+
       signal ->
         # Get the bus name from Foundation Signal Bus service
-        actual_bus_name = case Foundation.Services.SignalBus.get_bus_name() do
-          bus when is_atom(bus) -> bus
-          {:error, :not_started} -> bus_name  # fallback to provided bus_name
-        end
-        
+        actual_bus_name =
+          case Foundation.Services.SignalBus.get_bus_name() do
+            bus when is_atom(bus) -> bus
+            # fallback to provided bus_name
+            {:error, :not_started} -> bus_name
+          end
+
         case Jido.Signal.Bus.publish(actual_bus_name, [signal]) do
           {:ok, [published_signal]} = result ->
             # Extract signal data from RecordedSignal structure
             signal_data = published_signal.signal
-            
+
             # Also emit traditional telemetry for backward compatibility
             # Use original signal ID if available, otherwise use the Jido.Signal ID
             telemetry_signal_id = original_signal_id || signal_data.id
-            
+
             :telemetry.execute(
               [:jido, :signal, :emitted],
               %{signal_id: telemetry_signal_id},
@@ -653,8 +679,9 @@ defmodule JidoFoundation.Bridge do
                 timestamp: System.system_time(:microsecond)
               }
             )
+
             result
-            
+
           error ->
             error
         end

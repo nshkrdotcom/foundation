@@ -212,8 +212,11 @@ defmodule JidoFoundation.MABEAMCoordinationTest do
               GenServer.stop(agent, :normal, 1000)
             end
           catch
-            :exit, {:noproc, _} -> :ok  # Process already dead
-            :exit, {:timeout, _} -> 
+            # Process already dead
+            :exit, {:noproc, _} ->
+              :ok
+
+            :exit, {:timeout, _} ->
               # Force kill if stop timeout
               Process.exit(agent, :kill)
           end
@@ -224,8 +227,11 @@ defmodule JidoFoundation.MABEAMCoordinationTest do
             GenServer.stop(coordinator_agent, :normal, 1000)
           end
         catch
-          :exit, {:noproc, _} -> :ok  # Process already dead
-          :exit, {:timeout, _} -> 
+          # Process already dead
+          :exit, {:noproc, _} ->
+            :ok
+
+          :exit, {:timeout, _} ->
             # Force kill if stop timeout
             Process.exit(coordinator_agent, :kill)
         end

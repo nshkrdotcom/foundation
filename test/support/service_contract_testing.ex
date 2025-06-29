@@ -57,28 +57,34 @@ defmodule Foundation.Support.ServiceContractTesting do
     violations = []
 
     # Test find_capable_and_healthy contract (current arity 2: capability, impl)
-    violations = violations ++ validate_function_contract(
-      discovery_module,
-      :find_capable_and_healthy,
-      [:test_capability, nil],
-      &validate_discovery_result/1
-    )
+    violations =
+      violations ++
+        validate_function_contract(
+          discovery_module,
+          :find_capable_and_healthy,
+          [:test_capability, nil],
+          &validate_discovery_result/1
+        )
 
     # Test find_agents_with_resources contract (current arity 3: memory, cpu, impl)
-    violations = violations ++ validate_function_contract(
-      discovery_module,
-      :find_agents_with_resources,
-      [0.5, 0.5, nil],
-      &validate_discovery_result/1
-    )
+    violations =
+      violations ++
+        validate_function_contract(
+          discovery_module,
+          :find_agents_with_resources,
+          [0.5, 0.5, nil],
+          &validate_discovery_result/1
+        )
 
     # Test find_least_loaded_agents contract (current arity 3: capability, count, impl)
-    violations = violations ++ validate_function_contract(
-      discovery_module,
-      :find_least_loaded_agents,
-      [:test_capability, 5, nil],
-      &validate_discovery_result/1
-    )
+    violations =
+      violations ++
+        validate_function_contract(
+          discovery_module,
+          :find_least_loaded_agents,
+          [:test_capability, 5, nil],
+          &validate_discovery_result/1
+        )
 
     case violations do
       [] -> :ok
@@ -106,6 +112,7 @@ defmodule Foundation.Support.ServiceContractTesting do
         {:module, ^module} ->
           if function_exported?(module, function, length(args)) do
             result = apply(module, function, args)
+
             case validator.(result) do
               :ok -> []
               {:error, reason} -> [{:contract_violation, module, function, reason}]
@@ -113,7 +120,7 @@ defmodule Foundation.Support.ServiceContractTesting do
           else
             [{:function_not_exported, module, function, length(args)}]
           end
-        
+
         {:error, reason} ->
           [{:module_compilation_error, module, reason}]
       end
@@ -141,6 +148,7 @@ defmodule Foundation.Support.ServiceContractTesting do
       {:ok, agents} when is_list(agents) ->
         # Validate each agent tuple format
         agent_violations = Enum.flat_map(agents, &validate_agent_tuple/1)
+
         case agent_violations do
           [] -> :ok
           violations -> {:error, {:invalid_agent_tuples, violations}}
@@ -154,7 +162,8 @@ defmodule Foundation.Support.ServiceContractTesting do
         {:error, {:missing_ok_tuple, "Function returned raw list instead of {:ok, list}"}}
 
       nil ->
-        {:error, {:invalid_return, "Function returned nil instead of {:ok, []} or {:error, reason}"}}
+        {:error,
+         {:invalid_return, "Function returned nil instead of {:ok, []} or {:error, reason}"}}
 
       other ->
         {:error, {:invalid_return, "Unknown return format: #{inspect(other)}"}}
@@ -169,20 +178,25 @@ defmodule Foundation.Support.ServiceContractTesting do
     case agent_tuple do
       {id, pid, metadata} when is_binary(id) or is_atom(id) ->
         violations = []
-        
+
         # Validate pid
-        violations = if is_pid(pid) or is_atom(pid) do
-          violations
-        else
-          [{:invalid_pid, "Agent pid must be a pid or atom, got: #{inspect(pid)}"} | violations]
-        end
+        violations =
+          if is_pid(pid) or is_atom(pid) do
+            violations
+          else
+            [{:invalid_pid, "Agent pid must be a pid or atom, got: #{inspect(pid)}"} | violations]
+          end
 
         # Validate metadata
-        violations = if is_map(metadata) do
-          violations
-        else
-          [{:invalid_metadata, "Agent metadata must be a map, got: #{inspect(metadata)}"} | violations]
-        end
+        violations =
+          if is_map(metadata) do
+            violations
+          else
+            [
+              {:invalid_metadata, "Agent metadata must be a map, got: #{inspect(metadata)}"}
+              | violations
+            ]
+          end
 
         violations
 
@@ -213,12 +227,13 @@ defmodule Foundation.Support.ServiceContractTesting do
       import ExUnitProperties
 
       property "#{unquote(discovery_module)} respects Discovery contract" do
-        check all capability <- atom(:alphanumeric),
-                  memory <- float(min: 0.0, max: 1.0),
-                  cpu <- float(min: 0.0, max: 1.0),
-                  count <- positive_integer(),
-                  max_runs: 20 do
-
+        check all(
+                capability <- atom(:alphanumeric),
+                memory <- float(min: 0.0, max: 1.0),
+                cpu <- float(min: 0.0, max: 1.0),
+                count <- positive_integer(),
+                max_runs: 20
+              ) do
           # Test find_capable_and_healthy
           result1 = unquote(discovery_module).find_capable_and_healthy(capability, nil)
           assert Foundation.Support.ServiceContractTesting.validate_discovery_result(result1) == :ok
@@ -246,13 +261,10 @@ defmodule Foundation.Support.ServiceContractTesting do
       # Already in correct format
       {:ok, _agents} = correct -> correct
       {:error, _reason} = error -> error
-
       # Upgrade raw list to {:ok, list} format
       agents when is_list(agents) -> {:ok, agents}
-
       # Upgrade nil to proper error
       nil -> {:error, :not_found}
-
       # Unknown format
       other -> {:error, {:unknown_format, other}}
     end

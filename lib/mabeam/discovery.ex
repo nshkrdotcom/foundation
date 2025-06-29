@@ -393,15 +393,17 @@ defmodule MABEAM.Discovery do
         {:ok, []}
 
       {:ok, agents} ->
-        result = agents
-        |> Enum.sort_by(fn {_id, _pid, metadata} ->
-          resources = Map.get(metadata, :resources, %{})
-          memory_usage = Map.get(resources, :memory_usage, 1.0)
-          cpu_usage = Map.get(resources, :cpu_usage, 1.0)
-          # Combined load score (lower is better)
-          memory_usage + cpu_usage
-        end)
-        |> Enum.take(count)
+        result =
+          agents
+          |> Enum.sort_by(fn {_id, _pid, metadata} ->
+            resources = Map.get(metadata, :resources, %{})
+            memory_usage = Map.get(resources, :memory_usage, 1.0)
+            cpu_usage = Map.get(resources, :cpu_usage, 1.0)
+            # Combined load score (lower is better)
+            memory_usage + cpu_usage
+          end)
+          |> Enum.take(count)
+
         {:ok, result}
 
       {:error, reason} ->

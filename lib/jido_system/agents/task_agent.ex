@@ -252,25 +252,28 @@ defmodule JidoSystem.Agents.TaskAgent do
       start_time = System.monotonic_time(:microsecond)
 
       # Create validate task instruction
-      _validate_instruction = Jido.Instruction.new!(%{
-        action: ValidateTask,
-        params: task_params
-      })
+      _validate_instruction =
+        Jido.Instruction.new!(%{
+          action: ValidateTask,
+          params: task_params
+        })
 
       # Validate task using Jido.Exec for consistent execution
       case Jido.Exec.run(ValidateTask, task_params, %{}) do
         {:ok, validated_task} ->
           # Create process task instruction
-          _process_instruction = Jido.Instruction.new!(%{
-            action: ProcessTask,
-            params: validated_task
-          })
+          _process_instruction =
+            Jido.Instruction.new!(%{
+              action: ProcessTask,
+              params: validated_task
+            })
 
           # Process the task using Jido.Exec for consistent execution
-          result = case Jido.Exec.run(ProcessTask, validated_task, %{agent_id: agent.id}) do
-            {:ok, task_result} -> task_result
-            {:error, _} = error -> error
-          end
+          result =
+            case Jido.Exec.run(ProcessTask, validated_task, %{agent_id: agent.id}) do
+              {:ok, task_result} -> task_result
+              {:error, _} = error -> error
+            end
 
           # Update performance metrics
           end_time = System.monotonic_time(:microsecond)

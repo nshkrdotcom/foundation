@@ -41,7 +41,8 @@ defmodule JidoFoundation.BridgeTest do
           try do
             GenServer.stop(agent, :normal, 5000)
           catch
-            :exit, _ -> :ok  # Process already stopped by registry cleanup, ignore
+            # Process already stopped by registry cleanup, ignore
+            :exit, _ -> :ok
           end
         end
       end)
@@ -84,7 +85,8 @@ defmodule JidoFoundation.BridgeTest do
           try do
             GenServer.stop(agent, :normal, 5000)
           catch
-            :exit, _ -> :ok  # Process already stopped by registry cleanup, ignore
+            # Process already stopped by registry cleanup, ignore
+            :exit, _ -> :ok
           end
         end
       end)
@@ -105,7 +107,8 @@ defmodule JidoFoundation.BridgeTest do
           try do
             GenServer.stop(agent, :normal, 5000)
           catch
-            :exit, _ -> :ok  # Process already stopped by registry cleanup, ignore
+            # Process already stopped by registry cleanup, ignore
+            :exit, _ -> :ok
           end
         end
       end)
@@ -135,7 +138,8 @@ defmodule JidoFoundation.BridgeTest do
           try do
             GenServer.stop(agent, :normal, 5000)
           catch
-            :exit, _ -> :ok  # Process already stopped by registry cleanup, ignore
+            # Process already stopped by registry cleanup, ignore
+            :exit, _ -> :ok
           end
         end
       end)
@@ -154,7 +158,8 @@ defmodule JidoFoundation.BridgeTest do
           try do
             GenServer.stop(agent, :normal, 5000)
           catch
-            :exit, _ -> :ok  # Process already stopped by registry cleanup, ignore
+            # Process already stopped by registry cleanup, ignore
+            :exit, _ -> :ok
           end
         end
       end)
@@ -189,7 +194,8 @@ defmodule JidoFoundation.BridgeTest do
           try do
             GenServer.stop(agent, :normal, 5000)
           catch
-            :exit, _ -> :ok  # Process already stopped by registry cleanup, ignore
+            # Process already stopped by registry cleanup, ignore
+            :exit, _ -> :ok
           end
         end
       end)
@@ -210,7 +216,8 @@ defmodule JidoFoundation.BridgeTest do
           try do
             GenServer.stop(agent, :normal, 5000)
           catch
-            :exit, _ -> :ok  # Process already stopped by registry cleanup, ignore
+            # Process already stopped by registry cleanup, ignore
+            :exit, _ -> :ok
           end
         end
       end)
@@ -318,7 +325,8 @@ defmodule JidoFoundation.BridgeTest do
             try do
               GenServer.stop(pid, :normal, 5000)
             catch
-              :exit, _ -> :ok  # Process already stopped by registry cleanup, ignore
+              # Process already stopped by registry cleanup, ignore
+              :exit, _ -> :ok
             end
           end
         end)
@@ -350,7 +358,8 @@ defmodule JidoFoundation.BridgeTest do
             try do
               GenServer.stop(pid, :normal, 5000)
             catch
-              :exit, _ -> :ok  # Process already stopped by registry cleanup, ignore
+              # Process already stopped by registry cleanup, ignore
+              :exit, _ -> :ok
             end
           end
         end)
@@ -437,7 +446,8 @@ defmodule JidoFoundation.BridgeTest do
           try do
             GenServer.stop(agent, :normal, 5000)
           catch
-            :exit, _ -> :ok  # Process already stopped by registry cleanup, ignore
+            # Process already stopped by registry cleanup, ignore
+            :exit, _ -> :ok
           end
         end
       end)
