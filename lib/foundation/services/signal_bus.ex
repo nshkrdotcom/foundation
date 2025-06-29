@@ -43,7 +43,8 @@ defmodule Foundation.Services.SignalBus do
   """
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) do
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+    name = Keyword.get(opts, :name, __MODULE__)
+    GenServer.start_link(__MODULE__, opts, name: name)
   end
   
   @doc """
@@ -52,9 +53,9 @@ defmodule Foundation.Services.SignalBus do
   Returns `:healthy` if the bus is running and operational,
   `:degraded` if there are issues, or `:unhealthy` if the bus is down.
   """
-  @spec health_check() :: :healthy | :degraded | :unhealthy
-  def health_check do
-    case GenServer.call(__MODULE__, :health_check, 1000) do
+  @spec health_check(atom()) :: :healthy | :degraded | :unhealthy
+  def health_check(name \\ __MODULE__) do
+    case GenServer.call(name, :health_check, 1000) do
       :healthy -> :healthy
       _ -> :unhealthy
     end
@@ -65,10 +66,10 @@ defmodule Foundation.Services.SignalBus do
   @doc """
   Gets the signal bus process identifier for direct use with Jido.Signal.Bus APIs.
   """
-  @spec get_bus_name() :: atom() | {:error, :not_started}
-  def get_bus_name do
+  @spec get_bus_name(atom()) :: atom() | {:error, :not_started}
+  def get_bus_name(name \\ __MODULE__) do
     try do
-      GenServer.call(__MODULE__, :get_bus_name, 1000)
+      GenServer.call(name, :get_bus_name, 1000)
     catch
       :exit, _ -> {:error, :not_started}
     end

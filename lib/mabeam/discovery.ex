@@ -386,14 +386,14 @@ defmodule MABEAM.Discovery do
   List of least loaded agents sorted by resource usage
   """
   @spec find_least_loaded_agents(capability :: atom(), count :: pos_integer(), impl :: term() | nil) ::
-          list({agent_id :: term(), pid(), metadata :: map()})
+          {:ok, list({agent_id :: term(), pid(), metadata :: map()})} | {:error, term()}
   def find_least_loaded_agents(capability, count \\ 5, impl \\ nil) do
     case find_capable_and_healthy(capability, impl) do
       {:ok, []} ->
-        []
+        {:ok, []}
 
       {:ok, agents} ->
-        agents
+        result = agents
         |> Enum.sort_by(fn {_id, _pid, metadata} ->
           resources = Map.get(metadata, :resources, %{})
           memory_usage = Map.get(resources, :memory_usage, 1.0)
@@ -402,9 +402,10 @@ defmodule MABEAM.Discovery do
           memory_usage + cpu_usage
         end)
         |> Enum.take(count)
+        {:ok, result}
 
-      {:error, _reason} ->
-        []
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 

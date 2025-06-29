@@ -14,8 +14,8 @@ defmodule Foundation.Services.SupervisorTest do
       children = Supervisor.which_children(pid)
       assert is_list(children)
 
-      # Should have 3 services: RetryService, ConnectionManager, RateLimiter
-      assert length(children) == 3
+      # Should have 4 services: RetryService, ConnectionManager, RateLimiter, SignalBus
+      assert length(children) == 4
 
       # Clean up
       Supervisor.stop(pid)
@@ -27,7 +27,7 @@ defmodule Foundation.Services.SupervisorTest do
 
       # Check that supervisor is properly configured
       children = Supervisor.which_children(pid)
-      assert length(children) == 3
+      assert length(children) == 4
 
       # The supervisor should be ready to accept child specifications
       assert Process.alive?(pid)
@@ -40,9 +40,9 @@ defmodule Foundation.Services.SupervisorTest do
       {:ok, supervisor_pid} = ServicesSupervisor.start_link(name: unique_name)
 
       # This test validates the supervision tree structure
-      # Should have 3 child services (RetryService, ConnectionManager, RateLimiter)
+      # Should have 4 child services (RetryService, ConnectionManager, RateLimiter, SignalBus)
       children = Supervisor.which_children(supervisor_pid)
-      assert length(children) == 3
+      assert length(children) == 4
 
       Supervisor.stop(supervisor_pid)
     end
@@ -81,7 +81,8 @@ defmodule Foundation.Services.SupervisorTest do
       assert Foundation.Services.RetryService in services
       assert Foundation.Services.ConnectionManager in services
       assert Foundation.Services.RateLimiter in services
-      assert length(services) == 3
+      assert Foundation.Services.SignalBus in services
+      assert length(services) == 4
     end
 
     test "validates service_running? checks service status" do
@@ -89,6 +90,7 @@ defmodule Foundation.Services.SupervisorTest do
       assert ServicesSupervisor.service_running?(Foundation.Services.RetryService)
       assert ServicesSupervisor.service_running?(Foundation.Services.ConnectionManager)
       assert ServicesSupervisor.service_running?(Foundation.Services.RateLimiter)
+      assert ServicesSupervisor.service_running?(Foundation.Services.SignalBus)
       refute ServicesSupervisor.service_running?(SomeNonExistentService)
     end
   end
