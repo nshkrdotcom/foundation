@@ -282,6 +282,16 @@ defmodule MABEAM.AgentRegistry do
     {:reply, "2.0", state}
   end
 
+  def handle_call({:count}, _from, state) do
+    count = :ets.info(state.main_table, :size)
+    {:reply, {:ok, count}, state}
+  end
+
+  def handle_call({:select, match_spec}, _from, state) do
+    results = :ets.select(state.main_table, match_spec)
+    {:reply, results, state}
+  end
+
   def handle_call({:get_table_names}, _from, state) do
     table_names = %{
       main: state.main_table,

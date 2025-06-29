@@ -119,7 +119,18 @@ defimpl Foundation.Registry, for: MABEAM.AgentRegistry do
     Enum.filter(results, fn {_id, _pid, metadata} -> filter_fn.(metadata) end)
   end
 
-  def protocol_version(_registry_pid) do
-    {:ok, "1.1"}
+  def count(registry_pid) do
+    tables = get_cached_table_names(registry_pid)
+    count = :ets.info(tables.main, :size)
+    {:ok, count}
+  end
+
+  def select(registry_pid, match_spec) do
+    tables = get_cached_table_names(registry_pid)
+    :ets.select(tables.main, match_spec)
+  end
+
+  def protocol_version(registry_pid) do
+    GenServer.call(registry_pid, {:protocol_version})
   end
 end

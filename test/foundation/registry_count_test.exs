@@ -6,7 +6,8 @@ defmodule Foundation.RegistryCountTest do
   setup do
     # Generate unique registry ID for each test to avoid conflicts
     registry_id = :"test_registry_#{:erlang.unique_integer([:positive])}"
-    {:ok, registry} = AgentRegistry.start_link(id: registry_id)
+    registry_name = :"test_registry_process_#{:erlang.unique_integer([:positive])}"
+    {:ok, registry} = start_supervised({AgentRegistry, [id: registry_id, name: registry_name]})
     {:ok, registry: registry}
   end
 

@@ -274,6 +274,22 @@ defmodule Foundation do
   end
 
   @doc """
+  Returns the count of registered processes.
+
+  ## Parameters
+  - `impl`: Optional explicit implementation (overrides config)
+
+  ## Examples
+      count = Foundation.count()
+      # => 42
+  """
+  @spec count(impl :: term() | nil) :: {:ok, non_neg_integer()}
+  def count(impl \\ nil) do
+    actual_impl = impl || registry_impl()
+    Foundation.Registry.count(actual_impl)
+  end
+
+  @doc """
   Unregisters a process.
 
   ## Parameters

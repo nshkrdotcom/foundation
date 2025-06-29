@@ -6,6 +6,7 @@ config :foundation,
   test_mode: true,      # Enable test mode for test supervisor
   debug_registry: false,
   ecto_repos: [],
+  registry_impl: MABEAM.AgentRegistry,  # Fix registry configuration
   ai: [
     provider: :mock,
     analysis: [

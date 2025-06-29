@@ -174,7 +174,7 @@ defmodule Foundation.Infrastructure.Cache do
   defp get_table_name(cache) do
     GenServer.call(cache, :get_table_name)
   rescue
-    _ -> raise ArgumentError, "Cache process not available"
+    e -> reraise ArgumentError, [message: "Cache process not available: #{Exception.message(e)}"], __STACKTRACE__
   end
   
   defp generate_table_name do

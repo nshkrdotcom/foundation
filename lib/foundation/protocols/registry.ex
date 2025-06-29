@@ -155,6 +155,31 @@ defprotocol Foundation.Registry do
         }
 
   @doc """
+  Returns the count of registered processes.
+
+  ## Parameters
+  - `impl`: The registry implementation
+
+  ## Returns
+  Number of processes currently registered
+  """
+  @spec count(t()) :: {:ok, non_neg_integer()}
+  def count(impl)
+
+  @doc """
+  Selects entries using ETS match specifications.
+
+  ## Parameters
+  - `impl`: The registry implementation
+  - `match_spec`: ETS match specification
+
+  ## Returns
+  List of selected entries
+  """
+  @spec select(t(), term()) :: list()
+  def select(impl, match_spec)
+
+  @doc """
   Returns the protocol version supported by this implementation.
 
   ## Returns

@@ -1,7 +1,12 @@
 # Configure Foundation for testing environment
-Application.put_env(:foundation, :registry_impl, nil)
+# Start MABEAM.AgentRegistry and set PID in config
+{:ok, registry_pid} = MABEAM.AgentRegistry.start_link(name: MABEAM.AgentRegistry, id: :test)
+Application.put_env(:foundation, :registry_impl, registry_pid)
 Application.put_env(:foundation, :coordination_impl, nil)
 Application.put_env(:foundation, :infrastructure_impl, nil)
+
+# Start Foundation.Infrastructure.Cache for cache tests
+{:ok, _cache_pid} = Foundation.Infrastructure.Cache.start_link(name: Foundation.Infrastructure.Cache)
 
 # Start ExUnit
 ExUnit.start()
