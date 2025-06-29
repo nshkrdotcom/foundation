@@ -37,7 +37,13 @@ defmodule JidoFoundation.BridgeTest do
       {:ok, agent} = MockJidoAgent.start_link(%{})
 
       on_exit(fn ->
-        if Process.alive?(agent), do: GenServer.stop(agent, :normal, 5000)
+        if Process.alive?(agent) do
+          try do
+            GenServer.stop(agent, :normal, 5000)
+          catch
+            :exit, _ -> :ok  # Process already stopped by registry cleanup, ignore
+          end
+        end
       end)
 
       assert :ok =
@@ -74,7 +80,13 @@ defmodule JidoFoundation.BridgeTest do
       {:ok, agent} = MockJidoAgent.start_link(%{})
 
       on_exit(fn ->
-        if Process.alive?(agent), do: GenServer.stop(agent, :normal, 5000)
+        if Process.alive?(agent) do
+          try do
+            GenServer.stop(agent, :normal, 5000)
+          catch
+            :exit, _ -> :ok  # Process already stopped by registry cleanup, ignore
+          end
+        end
       end)
 
       :ok = Bridge.register_agent(agent, capabilities: [:test], registry: registry)
@@ -89,7 +101,13 @@ defmodule JidoFoundation.BridgeTest do
       {:ok, agent} = MockJidoAgent.start_link(%{})
 
       on_exit(fn ->
-        if Process.alive?(agent), do: GenServer.stop(agent, :normal, 5000)
+        if Process.alive?(agent) do
+          try do
+            GenServer.stop(agent, :normal, 5000)
+          catch
+            :exit, _ -> :ok  # Process already stopped by registry cleanup, ignore
+          end
+        end
       end)
 
       :ok = Bridge.register_agent(agent, capabilities: [:test], registry: registry)
@@ -113,7 +131,13 @@ defmodule JidoFoundation.BridgeTest do
       {:ok, agent} = MockJidoAgent.start_link(%{})
 
       on_exit(fn ->
-        if Process.alive?(agent), do: GenServer.stop(agent, :normal, 5000)
+        if Process.alive?(agent) do
+          try do
+            GenServer.stop(agent, :normal, 5000)
+          catch
+            :exit, _ -> :ok  # Process already stopped by registry cleanup, ignore
+          end
+        end
       end)
 
       assert {:error, :agent_not_registered} =
@@ -126,7 +150,13 @@ defmodule JidoFoundation.BridgeTest do
       {:ok, agent} = MockJidoAgent.start_link(%{})
 
       on_exit(fn ->
-        if Process.alive?(agent), do: GenServer.stop(agent, :normal, 5000)
+        if Process.alive?(agent) do
+          try do
+            GenServer.stop(agent, :normal, 5000)
+          catch
+            :exit, _ -> :ok  # Process already stopped by registry cleanup, ignore
+          end
+        end
       end)
 
       :telemetry.attach(
@@ -155,7 +185,13 @@ defmodule JidoFoundation.BridgeTest do
       {:ok, agent} = MockJidoAgent.start_link(%{})
 
       on_exit(fn ->
-        if Process.alive?(agent), do: GenServer.stop(agent, :normal, 5000)
+        if Process.alive?(agent) do
+          try do
+            GenServer.stop(agent, :normal, 5000)
+          catch
+            :exit, _ -> :ok  # Process already stopped by registry cleanup, ignore
+          end
+        end
       end)
 
       result =
@@ -170,7 +206,13 @@ defmodule JidoFoundation.BridgeTest do
       {:ok, agent} = MockJidoAgent.start_link(%{})
 
       on_exit(fn ->
-        if Process.alive?(agent), do: GenServer.stop(agent, :normal, 5000)
+        if Process.alive?(agent) do
+          try do
+            GenServer.stop(agent, :normal, 5000)
+          catch
+            :exit, _ -> :ok  # Process already stopped by registry cleanup, ignore
+          end
+        end
       end)
 
       service_id = {:test_service, System.unique_integer()}
@@ -272,7 +314,13 @@ defmodule JidoFoundation.BridgeTest do
 
       on_exit(fn ->
         Enum.each(pids, fn pid ->
-          if Process.alive?(pid), do: GenServer.stop(pid, :normal, 5000)
+          if Process.alive?(pid) do
+            try do
+              GenServer.stop(pid, :normal, 5000)
+            catch
+              :exit, _ -> :ok  # Process already stopped by registry cleanup, ignore
+            end
+          end
         end)
       end)
 
@@ -298,7 +346,13 @@ defmodule JidoFoundation.BridgeTest do
 
       on_exit(fn ->
         Enum.each(pids, fn pid ->
-          if Process.alive?(pid), do: GenServer.stop(pid, :normal, 5000)
+          if Process.alive?(pid) do
+            try do
+              GenServer.stop(pid, :normal, 5000)
+            catch
+              :exit, _ -> :ok  # Process already stopped by registry cleanup, ignore
+            end
+          end
         end)
       end)
 
@@ -379,7 +433,13 @@ defmodule JidoFoundation.BridgeTest do
       assert Process.alive?(agent)
 
       on_exit(fn ->
-        if Process.alive?(agent), do: GenServer.stop(agent, :normal, 5000)
+        if Process.alive?(agent) do
+          try do
+            GenServer.stop(agent, :normal, 5000)
+          catch
+            :exit, _ -> :ok  # Process already stopped by registry cleanup, ignore
+          end
+        end
       end)
 
       # Verify registration
