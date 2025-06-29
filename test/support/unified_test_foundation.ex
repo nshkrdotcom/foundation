@@ -1,0 +1,400 @@
+defmodule Foundation.UnifiedTestFoundation do
+  @moduledoc """
+  Unified test configuration system for Foundation tests with multiple isolation levels.
+  
+  This module consolidates all test configuration patterns and provides a clean,
+  consistent interface for test isolation and contamination prevention.
+  
+  ## Isolation Modes
+  
+  - `:basic` - Minimal isolation for simple tests
+  - `:registry` - Registry isolation for MABEAM tests
+  - `:signal_routing` - Full signal routing isolation
+  - `:full_isolation` - Complete service isolation
+  - `:contamination_detection` - Full isolation + contamination monitoring
+  
+  ## Usage Examples
+  
+      # Basic registry isolation
+      defmodule MyTest do
+        use Foundation.UnifiedTestFoundation, :registry
+        
+        test "my test", %{registry: registry} do
+          # registry is isolated per test
+        end
+      end
+      
+      # Full signal routing isolation
+      defmodule SignalTest do
+        use Foundation.UnifiedTestFoundation, :signal_routing
+        
+        test "signals", %{test_context: ctx, signal_router: router} do
+          # Fully isolated signal routing
+        end
+      end
+      
+      # Contamination detection enabled
+      defmodule RobustTest do
+        use Foundation.UnifiedTestFoundation, :contamination_detection
+        
+        test "robust test", %{test_context: ctx} do
+          # All services isolated + contamination monitoring
+        end
+      end
+  """
+  
+  import ExUnit.Callbacks
+  
+  @doc """
+  Main entry point for test configuration.
+  """
+  defmacro __using__(mode) do
+    quote do
+      use ExUnit.Case, async: unquote(can_run_async?(mode))
+      import Foundation.UnifiedTestFoundation
+      import ExUnit.Callbacks
+      alias Foundation.TestIsolation
+      
+      setup do
+        unquote(setup_for_mode(mode))
+      end
+      
+      # Module-level configuration based on mode
+      unquote(module_config_for_mode(mode))
+    end
+  end
+  
+  # Mode-specific setup functions
+  
+  @doc """
+  Basic setup with minimal isolation.
+  """
+  def basic_setup(_context) do
+    test_id = :erlang.unique_integer([:positive])
+    
+    %{
+      test_id: test_id,
+      mode: :basic
+    }
+  end
+  
+  @doc """
+  Registry isolation setup.
+  """
+  def registry_setup(context) do
+    # Generate unique registry name using the proven pattern from Foundation.TestConfig
+    test_name =
+      Map.get(context, :test, "unknown")
+      |> to_string()
+      |> String.replace(~r/[^a-zA-Z0-9_]/, "_")
+
+    module_name =
+      context[:module]
+      |> to_string()
+      |> String.split(".")
+      |> List.last()
+      |> String.replace(~r/[^a-zA-Z0-9_]/, "_")
+
+    unique_id = :"#{module_name}_#{test_name}_#{System.unique_integer([:positive])}"
+
+    # Ensure no existing process with this name
+    case Process.whereis(unique_id) do
+      nil ->
+        :ok
+
+      pid ->
+        Process.unregister(unique_id)
+        GenServer.stop(pid)
+    end
+
+    # Start registry
+    {:ok, registry} = MABEAM.AgentRegistry.start_link(name: unique_id)
+
+    on_exit(fn ->
+      try do
+        if Process.alive?(registry) do
+          GenServer.stop(registry, :normal, 5000)
+        end
+      catch
+        :exit, {:noproc, _} -> :ok
+        :exit, {:normal, _} -> :ok
+        _, _ -> :ok
+      end
+    end)
+
+    %{
+      test_id: System.unique_integer([:positive]),
+      mode: :registry,
+      registry: registry,
+      registry_name: unique_id
+    }
+  end
+  
+  @doc """
+  Signal routing isolation setup.
+  """
+  def signal_routing_setup(context) do
+    # Start with registry setup
+    registry_result = registry_setup(context)
+    test_id = registry_result.test_id
+    
+    # Create test-scoped signal router
+    test_router_name = :"test_signal_router_#{test_id}"
+    {:ok, router_pid} = start_test_signal_router(test_router_name)
+    
+    # Enhanced cleanup for signal routing
+    on_exit(fn ->
+      cleanup_signal_routing(router_pid, test_id)
+    end)
+    
+    Map.merge(registry_result, %{
+      mode: :signal_routing,
+      signal_router: router_pid,
+      signal_router_name: test_router_name,
+      test_context: %{
+        test_id: test_id,
+        signal_router_name: test_router_name,
+        registry_name: registry_result.registry_name
+      }
+    })
+  end
+  
+  @doc """
+  Full isolation setup with all services isolated.
+  """
+  def full_isolation_setup(_context) do
+    test_id = :erlang.unique_integer([:positive])
+    
+    # Create comprehensive test context
+    test_context = %{
+      test_id: test_id,
+      signal_bus_name: :"test_signal_bus_#{test_id}",
+      signal_router_name: :"test_signal_router_#{test_id}",
+      registry_name: :"test_registry_#{test_id}",
+      telemetry_prefix: "test_#{test_id}",
+      supervisor_name: :"test_supervisor_#{test_id}"
+    }
+    
+    # Start isolated services
+    case Foundation.TestIsolation.start_isolated_test(test_context: test_context) do
+      {:ok, supervisor, enhanced_context} ->
+        on_exit(fn ->
+          Foundation.TestIsolation.stop_isolated_test(supervisor)
+        end)
+        
+        %{
+          test_id: test_id,
+          mode: :full_isolation,
+          test_context: enhanced_context,
+          supervisor: supervisor
+        }
+        
+      {:error, reason} ->
+        raise "Failed to start isolated test environment: #{inspect(reason)}"
+    end
+  end
+  
+  @doc """
+  Contamination detection setup with full monitoring.
+  """
+  def contamination_detection_setup(context) do
+    # Start with full isolation
+    base_setup = full_isolation_setup(context)
+    test_id = base_setup.test_id
+    
+    # Capture initial system state
+    initial_state = capture_system_state(test_id)
+    
+    # Setup contamination monitoring
+    on_exit(fn ->
+      final_state = capture_system_state(test_id)
+      detect_contamination(initial_state, final_state, test_id)
+    end)
+    
+    # Merge the contamination detection data with the base setup
+    Map.merge(base_setup, %{
+      mode: :contamination_detection,
+      initial_state: initial_state,
+      contamination_detection: true
+    })
+    |> Map.put(:test_context, Map.merge(base_setup.test_context, %{
+      mode: :contamination_detection,
+      contamination_detection: true
+    }))
+  end
+  
+  # Helper functions
+  
+  @doc """
+  Starts a test-scoped signal router.
+  """
+  def start_test_signal_router(router_name) do
+    # For now, use a simple placeholder until we can reference the SignalRouter
+    # This will be enhanced in the actual implementation
+    {:ok, spawn(fn -> 
+      Process.register(self(), router_name)
+      receive do
+        :stop -> :ok
+      end
+    end)}
+  end
+  
+  @doc """
+  Captures system state for contamination detection.
+  """
+  def capture_system_state(test_id) do
+    %{
+      test_id: test_id,
+      timestamp: System.system_time(:microsecond),
+      processes: Process.registered() |> Enum.filter(&is_test_process?(&1, test_id)),
+      telemetry: :telemetry.list_handlers([]) |> Enum.filter(&is_test_handler?(&1, test_id)),
+      ets: :ets.all() |> length(),
+      memory: :erlang.memory()
+    }
+  end
+  
+  @doc """
+  Detects contamination between initial and final system states.
+  """
+  def detect_contamination(initial_state, final_state, test_id) do
+    contamination_issues = []
+    
+    # Check for leftover processes
+    leftover_processes = final_state.processes -- initial_state.processes
+    contamination_issues = if leftover_processes != [] do
+      ["Leftover test processes: #{inspect(leftover_processes)}" | contamination_issues]
+    else
+      contamination_issues
+    end
+    
+    # Check for leftover telemetry handlers
+    leftover_handlers = final_state.telemetry -- initial_state.telemetry
+    contamination_issues = if leftover_handlers != [] do
+      handler_ids = Enum.map(leftover_handlers, & &1.id)
+      ["Leftover telemetry handlers: #{inspect(handler_ids)}" | contamination_issues]
+    else
+      contamination_issues
+    end
+    
+    # Check for significant ETS table growth
+    ets_growth = final_state.ets - initial_state.ets
+    contamination_issues = if ets_growth > 5 do
+      ["Significant ETS table growth: +#{ets_growth} tables" | contamination_issues]
+    else
+      contamination_issues
+    end
+    
+    # Report contamination if found
+    unless contamination_issues == [] do
+      IO.puts("\n⚠️  CONTAMINATION DETECTED in test_#{test_id}:")
+      Enum.each(contamination_issues, fn issue ->
+        IO.puts("   - #{issue}")
+      end)
+      IO.puts("")
+    end
+    
+    :ok
+  end
+  
+  @doc """
+  Cleanup function for signal routing resources.
+  """
+  def cleanup_signal_routing(router_pid, test_id) do
+    try do
+      if Process.alive?(router_pid) do
+        # Get telemetry handler ID before stopping
+        {:ok, state} = GenServer.call(router_pid, :get_state)
+        :telemetry.detach(state.telemetry_handler_id)
+        GenServer.stop(router_pid)
+      end
+    catch
+      _, _ -> :ok
+    end
+    
+    # Clean up any remaining test-specific telemetry handlers
+    cleanup_test_telemetry_handlers(test_id)
+  end
+  
+  @doc """
+  Cleans up telemetry handlers for a specific test.
+  """
+  def cleanup_test_telemetry_handlers(test_id) do
+    try do
+      :telemetry.list_handlers([])
+      |> Enum.filter(&is_test_handler?(&1, test_id))
+      |> Enum.each(fn handler ->
+        :telemetry.detach(handler.id)
+      end)
+    catch
+      _, _ -> :ok
+    end
+  end
+  
+  # Private helper functions
+  
+  defp can_run_async?(:basic), do: true
+  defp can_run_async?(:registry), do: false  # Registry tests often need serial execution
+  defp can_run_async?(:signal_routing), do: false  # Signal routing needs careful isolation
+  defp can_run_async?(:full_isolation), do: true  # Fully isolated can run async
+  defp can_run_async?(:contamination_detection), do: false  # Monitoring needs serial execution
+  
+  defp setup_for_mode(:basic) do
+    quote do
+      Foundation.UnifiedTestFoundation.basic_setup(%{})
+    end
+  end
+  
+  defp setup_for_mode(:registry) do
+    quote do
+      Foundation.UnifiedTestFoundation.registry_setup(%{})
+    end
+  end
+  
+  defp setup_for_mode(:signal_routing) do
+    quote do
+      Foundation.UnifiedTestFoundation.signal_routing_setup(%{})
+    end
+  end
+  
+  defp setup_for_mode(:full_isolation) do
+    quote do
+      Foundation.UnifiedTestFoundation.full_isolation_setup(%{})
+    end
+  end
+  
+  defp setup_for_mode(:contamination_detection) do
+    quote do
+      Foundation.UnifiedTestFoundation.contamination_detection_setup(%{})
+    end
+  end
+  
+  defp module_config_for_mode(:contamination_detection) do
+    quote do
+      @moduletag :contamination_detection
+      @moduletag :serial
+    end
+  end
+  
+  defp module_config_for_mode(:signal_routing) do
+    quote do
+      @moduletag :signal_routing
+      @moduletag :serial
+    end
+  end
+  
+  defp module_config_for_mode(_), do: quote(do: nil)
+  
+  defp is_test_process?(process_name, test_id) when is_atom(process_name) do
+    process_name
+    |> to_string()
+    |> String.contains?("test_#{test_id}")
+  end
+  
+  defp is_test_process?(_, _), do: false
+  
+  defp is_test_handler?(handler, test_id) do
+    handler.id
+    |> to_string()
+    |> String.contains?("test_#{test_id}")
+  end
+end

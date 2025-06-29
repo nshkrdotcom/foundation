@@ -1,6 +1,5 @@
 defmodule Foundation.AtomicTransactionTest do
-  use ExUnit.Case, async: true
-  use Foundation.TestConfig, :registry
+  use Foundation.UnifiedTestFoundation, :registry
 
   alias Foundation.AtomicTransaction
 

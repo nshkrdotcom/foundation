@@ -24,40 +24,68 @@ defmodule Foundation.TestIsolation do
       end
   """
   def start_isolated_test(opts \\ []) do
-    test_id = :erlang.unique_integer([:positive])
-    
-    # Create unique names for all services in this test
-    test_context = %{
-      test_id: test_id,
-      signal_bus_name: :"test_signal_bus_#{test_id}",
-      router_name: :"test_signal_router_#{test_id}",
-      registry_name: :"test_registry_#{test_id}",
-      telemetry_prefix: "test_#{test_id}"
-    }
+    # Allow custom test context to be passed in
+    test_context = case Keyword.get(opts, :test_context) do
+      nil ->
+        test_id = :erlang.unique_integer([:positive])
+        %{
+          test_id: test_id,
+          signal_bus_name: :"test_signal_bus_#{test_id}",
+          signal_router_name: :"test_signal_router_#{test_id}",
+          registry_name: :"test_registry_#{test_id}",
+          telemetry_prefix: "test_#{test_id}",
+          supervisor_name: :"test_supervisor_#{test_id}"
+        }
+      
+      custom_context ->
+        custom_context
+    end
     
     # Define test-scoped supervision tree
-    children = [
-      # Test-scoped signal bus
-      {JidoFoundation.Bridge, [name: test_context.signal_bus_name]},
-      
-      # Test-scoped registry if needed
-      {Registry, keys: :unique, name: test_context.registry_name},
-      
-      # Add other services as needed
-    ]
+    children = build_isolated_children(test_context, opts)
     
     supervisor_opts = [
       strategy: :one_for_one,
-      name: :"test_supervisor_#{test_id}"
+      name: test_context.supervisor_name
     ]
     
     case Supervisor.start_link(children, supervisor_opts) do
       {:ok, supervisor} ->
-        {:ok, supervisor, test_context}
+        # Enhanced test context with supervisor reference
+        enhanced_context = Map.put(test_context, :supervisor, supervisor)
+        {:ok, supervisor, enhanced_context}
         
       {:error, reason} ->
         {:error, reason}
     end
+  end
+  
+  @doc """
+  Builds the list of isolated child processes for the test supervision tree.
+  """
+  def build_isolated_children(test_context, opts \\ []) do
+    base_children = [
+      # Test-scoped MABEAM registry
+      {MABEAM.AgentRegistry, [name: test_context.registry_name]},
+      
+      # Test-scoped ETS registry if needed
+      {Registry, keys: :unique, name: :"ets_#{test_context.registry_name}"}
+    ]
+    
+    # Conditionally add signal bus if requested
+    signal_children = if Keyword.get(opts, :signal_bus, true) do
+      [
+        # Foundation Signal Bus for this test
+        {Foundation.Services.SignalBus, [
+          name: test_context.signal_bus_name, 
+          middleware: [{Jido.Signal.Bus.Middleware.Logger, []}]
+        ]}
+      ]
+    else
+      []
+    end
+    
+    base_children ++ signal_children
   end
   
   @doc """
