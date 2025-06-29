@@ -48,7 +48,7 @@ defmodule JidoFoundation.SignalRouter do
   use GenServer
   require Logger
 
-  defstruct [:subscriptions, :telemetry_attached]
+  defstruct [:subscriptions, :telemetry_attached, :telemetry_handler_id]
 
   ## Client API
 
@@ -106,15 +106,18 @@ defmodule JidoFoundation.SignalRouter do
   @impl true
   def init(opts) do
     attach_telemetry = Keyword.get(opts, :attach_telemetry, true)
+    # Create unique handler ID for this router instance
+    handler_id = "jido-signal-router-#{:erlang.unique_integer([:positive])}"
 
     state = %__MODULE__{
       subscriptions: %{},
-      telemetry_attached: false
+      telemetry_attached: false,
+      telemetry_handler_id: handler_id
     }
 
     state =
       if attach_telemetry do
-        attach_telemetry_handlers()
+        attach_telemetry_handlers(handler_id, self())
         %{state | telemetry_attached: true}
       else
         state
@@ -181,7 +184,7 @@ defmodule JidoFoundation.SignalRouter do
   end
 
   @impl true
-  def handle_cast({:route_signal, event, measurements, metadata}, state) do
+  def handle_call({:route_signal, event, measurements, metadata}, _from, state) do
     case event do
       [:jido, :signal, :emitted] ->
         signal_type = metadata[:signal_type]
@@ -194,7 +197,16 @@ defmodule JidoFoundation.SignalRouter do
         :ok
     end
 
-    {:noreply, state}
+    {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_cast({:route_signal, event, measurements, metadata}, state) do
+    # Keep cast handler for backward compatibility, but route to call handler
+    case handle_call({:route_signal, event, measurements, metadata}, nil, state) do
+      {:reply, :ok, new_state} -> {:noreply, new_state}
+      _other -> {:noreply, state}
+    end
   end
 
   @impl true
@@ -216,7 +228,7 @@ defmodule JidoFoundation.SignalRouter do
   @impl true
   def terminate(reason, state) do
     if state.telemetry_attached do
-      detach_telemetry_handlers()
+      detach_telemetry_handlers(state.telemetry_handler_id)
     end
 
     Logger.info("JidoFoundation.SignalRouter terminating: #{inspect(reason)}")
@@ -225,22 +237,29 @@ defmodule JidoFoundation.SignalRouter do
 
   ## Private Functions
 
-  defp attach_telemetry_handlers do
+  defp attach_telemetry_handlers(handler_id, router_pid) do
     :telemetry.attach_many(
-      "jido-signal-router",
+      handler_id,
       [
-        [:jido, :signal, :emitted],
-        [:jido, :signal, :routed]
+        [:jido, :signal, :emitted]  # Only listen to emitted signals, not routed to prevent recursion
       ],
       fn event, measurements, metadata, _config ->
-        GenServer.cast(__MODULE__, {:route_signal, event, measurements, metadata})
+        # Use synchronous call for deterministic routing behavior in tests
+        # This ensures telemetry events are emitted in the correct order
+        try do
+          GenServer.call(router_pid, {:route_signal, event, measurements, metadata}, 5000)
+        catch
+          :exit, {:noproc, _} -> :ok  # Router not running
+          :exit, {:timeout, _} -> :ok  # Timeout, continue
+          :exit, {:calling_self, _} -> :ok  # Prevent recursive calls
+        end
       end,
       %{}
     )
   end
 
-  defp detach_telemetry_handlers do
-    :telemetry.detach("jido-signal-router")
+  defp detach_telemetry_handlers(handler_id) do
+    :telemetry.detach(handler_id)
   end
 
   defp route_signal_to_handlers(signal_type, measurements, metadata, subscriptions) do
