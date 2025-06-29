@@ -1,20 +1,8 @@
 defmodule JidoSystem.Actions.ProcessTaskTest do
-  use ExUnit.Case, async: false
+  # Using registry isolation mode for ProcessTask tests with telemetry cleanup
+  use Foundation.UnifiedTestFoundation, :registry
 
   alias JidoSystem.Actions.ProcessTask
-
-  setup do
-    # Ensure clean telemetry state - detach any existing handlers
-    try do
-      :telemetry.detach("test_task_processing")
-      :telemetry.detach("test_validation")
-      :telemetry.detach("test_circuit_breaker")
-    rescue
-      _ -> :ok
-    end
-
-    :ok
-  end
 
   describe "task validation" do
     test "validates required parameters" do
