@@ -12,13 +12,17 @@ defmodule JidoFoundation.SignalRoutingTest do
     defstruct [:subscriptions, :handlers, :telemetry_handler_id]
 
     def start_link(opts \\ []) do
-      GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+      name = Keyword.get(opts, :name, __MODULE__)
+      GenServer.start_link(__MODULE__, opts, name: name)
     end
 
-    def init(_opts) do
+    def init(opts) do
       # Create unique telemetry handler ID for this router instance
       unique_id = :erlang.unique_integer([:positive])
       handler_id = "jido-signal-router-#{unique_id}"
+      
+      # Get the router name from the process
+      router_name = Keyword.get(opts, :name, __MODULE__)
       
       # Subscribe to all Jido signal telemetry events with unique handler ID
       :telemetry.attach_many(
@@ -28,7 +32,7 @@ defmodule JidoFoundation.SignalRoutingTest do
           [:jido, :signal, :routed]
         ],
         fn event, measurements, metadata, config ->
-          GenServer.cast(__MODULE__, {:route_signal, event, measurements, metadata, config})
+          GenServer.cast(router_name, {:route_signal, event, measurements, metadata, config})
         end,
         %{}
       )
@@ -36,16 +40,16 @@ defmodule JidoFoundation.SignalRoutingTest do
       {:ok, %__MODULE__{subscriptions: %{}, handlers: %{}, telemetry_handler_id: handler_id}}
     end
 
-    def subscribe(signal_type, handler_pid) do
-      GenServer.call(__MODULE__, {:subscribe, signal_type, handler_pid})
+    def subscribe(router_pid \\ __MODULE__, signal_type, handler_pid) do
+      GenServer.call(router_pid, {:subscribe, signal_type, handler_pid})
     end
 
-    def unsubscribe(signal_type, handler_pid) do
-      GenServer.call(__MODULE__, {:unsubscribe, signal_type, handler_pid})
+    def unsubscribe(router_pid \\ __MODULE__, signal_type, handler_pid) do
+      GenServer.call(router_pid, {:unsubscribe, signal_type, handler_pid})
     end
 
-    def get_subscriptions do
-      GenServer.call(__MODULE__, :get_subscriptions)
+    def get_subscriptions(router_pid \\ __MODULE__) do
+      GenServer.call(router_pid, :get_subscriptions)
     end
 
     def handle_call({:subscribe, signal_type, handler_pid}, _from, state) do
@@ -161,11 +165,16 @@ defmodule JidoFoundation.SignalRoutingTest do
 
   describe "Jido.Signal routing through Foundation.Telemetry" do
     setup do
-      # Start the signal router
-      {:ok, router_pid} = SignalRouter.start_link()
+      # Use existing Foundation.TestConfig pattern for reliability
+      # This creates an isolated registry that works well
+      test_id = :erlang.unique_integer([:positive])
+      
+      # Create test-scoped signal router with unique name to avoid conflicts
+      test_router_name = :"test_signal_router_#{test_id}"
+      {:ok, router_pid} = SignalRouter.start_link(name: test_router_name)
 
       on_exit(fn ->
-        # Get the unique handler ID from the router state and detach
+        # Clean up signal router and its telemetry handlers
         try do
           if Process.alive?(router_pid) do
             {:ok, state} = GenServer.call(router_pid, :get_state)
@@ -178,10 +187,10 @@ defmodule JidoFoundation.SignalRoutingTest do
         end
       end)
 
-      {:ok, router: router_pid}
+      {:ok, router: router_pid, test_id: test_id}
     end
 
-    test "routes signals to subscribed handlers by type", %{registry: registry, router: _router} do
+    test "routes signals to subscribed handlers by type", %{registry: registry, router: router, test_id: test_id} do
       # Create signal handlers
       {:ok, handler1} = SignalHandler.start_link("handler1")
       {:ok, handler2} = SignalHandler.start_link("handler2")
@@ -190,9 +199,9 @@ defmodule JidoFoundation.SignalRoutingTest do
       on_exit(fn ->
         # Clean up subscriptions
         try do
-          SignalRouter.unsubscribe("error.validation", handler1)
-          SignalRouter.unsubscribe("task.completed", handler2)
-          SignalRouter.unsubscribe("error.validation", handler3)
+          SignalRouter.unsubscribe(router, "error.validation", handler1)
+          SignalRouter.unsubscribe(router, "task.completed", handler2)
+          SignalRouter.unsubscribe(router, "error.validation", handler3)
         catch
           # Ignore errors if handlers are already dead
           _, _ -> :ok
@@ -218,10 +227,10 @@ defmodule JidoFoundation.SignalRoutingTest do
       end)
 
       # Subscribe handlers to different signal types
-      :ok = SignalRouter.subscribe("error.validation", handler1)
-      :ok = SignalRouter.subscribe("task.completed", handler2)
+      :ok = SignalRouter.subscribe(router, "error.validation", handler1)
+      :ok = SignalRouter.subscribe(router, "task.completed", handler2)
       # Multiple handlers for same type
-      :ok = SignalRouter.subscribe("error.validation", handler3)
+      :ok = SignalRouter.subscribe(router, "error.validation", handler3)
 
       # Create an agent to emit signals
       {:ok, agent} = Task.start_link(fn -> :timer.sleep(:infinity) end)
@@ -250,7 +259,7 @@ defmodule JidoFoundation.SignalRoutingTest do
         end
       end)
 
-      # Emit different types of signals
+      # Emit different types of signals (using shared bus for Phase 1 simplicity)
       Bridge.emit_signal(agent, %{
         id: 1,
         type: "error.validation",
@@ -295,7 +304,7 @@ defmodule JidoFoundation.SignalRoutingTest do
       assert hd(handler3_signals).type == "error.validation"
     end
 
-    test "supports dynamic subscription management", %{registry: registry, router: _router} do
+    test "supports dynamic subscription management", %{registry: registry, router: router} do
       {:ok, handler} = SignalHandler.start_link("dynamic_handler")
       {:ok, agent} = Task.start_link(fn -> :timer.sleep(:infinity) end)
 
@@ -307,11 +316,11 @@ defmodule JidoFoundation.SignalRoutingTest do
       :ok = Bridge.register_agent(agent, capabilities: [:dynamic_routing], registry: registry)
 
       # Initially no subscriptions
-      assert SignalRouter.get_subscriptions() == %{}
+      assert SignalRouter.get_subscriptions(router) == %{}
 
       # Subscribe to task signals
-      :ok = SignalRouter.subscribe("task.started", handler)
-      subscriptions = SignalRouter.get_subscriptions()
+      :ok = SignalRouter.subscribe(router, "task.started", handler)
+      subscriptions = SignalRouter.get_subscriptions(router)
       assert subscriptions["task.started"] == [handler]
 
       # Attach telemetry handler BEFORE emitting signals
@@ -350,8 +359,8 @@ defmodule JidoFoundation.SignalRoutingTest do
       assert length(signals) == 1
 
       # Unsubscribe
-      :ok = SignalRouter.unsubscribe("task.started", handler)
-      subscriptions = SignalRouter.get_subscriptions()
+      :ok = SignalRouter.unsubscribe(router, "task.started", handler)
+      subscriptions = SignalRouter.get_subscriptions(router)
       assert subscriptions["task.started"] == []
 
       # Emit another signal - should not be received
@@ -370,7 +379,7 @@ defmodule JidoFoundation.SignalRoutingTest do
       assert length(signals) == 1
     end
 
-    test "emits routing telemetry events", %{registry: registry, router: _router} do
+    test "emits routing telemetry events", %{registry: registry, router: router} do
       test_pid = self()
 
       # Attach telemetry handler for routing events
@@ -396,7 +405,7 @@ defmodule JidoFoundation.SignalRoutingTest do
       end)
 
       :ok = Bridge.register_agent(agent, capabilities: [:routing_telemetry], registry: registry)
-      :ok = SignalRouter.subscribe("workflow.completed", handler)
+      :ok = SignalRouter.subscribe(router, "workflow.completed", handler)
 
       # Emit signal
       Bridge.emit_signal(agent, %{
@@ -413,7 +422,7 @@ defmodule JidoFoundation.SignalRoutingTest do
       assert metadata.handlers == [handler]
     end
 
-    test "handles signal routing errors gracefully", %{registry: registry, router: _router} do
+    test "handles signal routing errors gracefully", %{registry: registry, router: router} do
       # Create a dead handler process
       dead_handler = spawn(fn -> :ok end)
       ref = Process.monitor(dead_handler)
@@ -425,7 +434,7 @@ defmodule JidoFoundation.SignalRoutingTest do
       :ok = Bridge.register_agent(agent, capabilities: [:error_handling], registry: registry)
 
       # Subscribe the dead handler
-      :ok = SignalRouter.subscribe("error.test", dead_handler)
+      :ok = SignalRouter.subscribe(router, "error.test", dead_handler)
 
       # Emit signal - should not crash the router
       result =
@@ -439,10 +448,10 @@ defmodule JidoFoundation.SignalRoutingTest do
       assert result == :ok
 
       # Router should still be alive
-      assert Process.alive?(Process.whereis(SignalRouter))
+      assert Process.alive?(router)
     end
 
-    test "supports wildcard signal subscriptions", %{registry: registry, router: _router} do
+    test "supports wildcard signal subscriptions", %{registry: registry, router: router} do
       {:ok, wildcard_handler} = SignalHandler.start_link("wildcard_handler")
       {:ok, specific_handler} = SignalHandler.start_link("specific_handler")
       {:ok, agent} = Task.start_link(fn -> :timer.sleep(:infinity) end)
@@ -456,8 +465,8 @@ defmodule JidoFoundation.SignalRoutingTest do
       :ok = Bridge.register_agent(agent, capabilities: [:wildcard_routing], registry: registry)
 
       # Subscribe to all error signals (wildcard pattern)
-      :ok = SignalRouter.subscribe("error.*", wildcard_handler)
-      :ok = SignalRouter.subscribe("error.validation", specific_handler)
+      :ok = SignalRouter.subscribe(router, "error.*", wildcard_handler)
+      :ok = SignalRouter.subscribe(router, "error.validation", specific_handler)
 
       # Attach telemetry handler BEFORE emitting signals
       test_pid = self()

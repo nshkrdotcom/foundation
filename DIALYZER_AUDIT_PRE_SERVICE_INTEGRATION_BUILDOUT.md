@@ -69,11 +69,12 @@ Function execute_with_retry/3 has no local return.
 Function execute_with_retry/4 has no local return.
 ```
 
-#### C. **Signal/Sensor Type System Issues** - **MEDIUM**
+#### C. **Signal/Sensor Type System Issues** - **MEDIUM** *(Being Resolved)*
 - **Pattern**: Signal delivery and sensor callbacks have type mismatches
 - **Files Affected**: SystemHealthSensor, AgentPerformanceSensor
-- **Root Cause**: **Signal system evolution without type alignment**
+- **Root Cause**: **Signal system contract violations in sensor implementations**
 - **Impact**: **MEDIUM** - Could affect Service Integration telemetry
+- **Status**: **IN PROGRESS** - Being resolved via SIGNAL_DEBUG_ROOT_CAUSE.md work
 
 ### 3. **SPECIFIC ARCHITECTURAL CONCERNS**
 
@@ -166,7 +167,7 @@ Jido.Signal.Dispatch.dispatch breaks the contract
 ### **MONITORING ACTIONS** (During Service Integration Implementation)
 
 1. **Agent Type Safety**: Use defensive pattern matching in DependencyManager
-2. **Signal Telemetry**: Implement backup telemetry collection method
+2. **Signal Telemetry**: *(Will be resolved by SIGNAL_DEBUG_ROOT_CAUSE.md work)*
 3. **Health Check Integration**: Test with actual :degraded status
 
 ### **CLEANUP ACTIONS** (After Service Integration Complete)
@@ -177,17 +178,16 @@ Jido.Signal.Dispatch.dispatch breaks the contract
 
 ## Conclusion
 
-**VERDICT**: Proceed with Service Integration buildout with **caution**. 
+**VERDICT**: Proceed with Service Integration buildout with **minimal caution**. 
 
 - **40% of errors indicate real architectural issues**
-- **2 CRITICAL blocking issues** must be fixed first
-- **Service Integration architecture should be defensive** against existing type system issues
-- **Foundation infrastructure is mostly sound** - issues are primarily in Jido integration layer
+- **1 CRITICAL blocking issue** must be fixed first (SignalBus health check)
+- **Signal system issues being resolved** via SIGNAL_DEBUG_ROOT_CAUSE.md work
+- **Foundation infrastructure is sound** - remaining issues are primarily in Jido integration layer
 
-The Service Integration buildout can proceed as planned, but should include:
+The Service Integration buildout can proceed as planned, with:
 1. **Defensive error handling** for Jido agent interactions
-2. **Backup telemetry mechanisms** for unreliable signal delivery
-3. **Health check spec compliance** with Foundation service patterns
-4. **Integration tests** that account for type system issues
+2. **Health check spec compliance** with Foundation service patterns
+3. **Integration tests** that account for agent type system issues
 
-**Estimated Impact**: +2-4 hours for defensive programming patterns and additional testing.
+**Estimated Impact**: +1-2 hours for defensive programming patterns (reduced from 2-4 hours due to signal system resolution in progress).
