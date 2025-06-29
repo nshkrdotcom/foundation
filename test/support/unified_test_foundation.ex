@@ -12,6 +12,7 @@ defmodule Foundation.UnifiedTestFoundation do
   - `:signal_routing` - Full signal routing isolation
   - `:full_isolation` - Complete service isolation
   - `:contamination_detection` - Full isolation + contamination monitoring
+  - `:service_integration` - Service Integration Architecture testing with SIA components
   
   ## Usage Examples
   
@@ -39,6 +40,15 @@ defmodule Foundation.UnifiedTestFoundation do
         
         test "robust test", %{test_context: ctx} do
           # All services isolated + contamination monitoring
+        end
+      end
+      
+      # Service Integration Architecture testing
+      defmodule ServiceIntegrationTest do
+        use Foundation.UnifiedTestFoundation, :service_integration
+        
+        test "service integration", %{sia_context: ctx} do
+          # SIA components available for testing
         end
       end
   """
@@ -260,6 +270,57 @@ defmodule Foundation.UnifiedTestFoundation do
     }))
   end
   
+  @doc """
+  Service Integration Architecture setup for testing SIA components.
+  """
+  def service_integration_setup(context) do
+    # Start with full isolation as base
+    base_setup = full_isolation_setup(context)
+    test_id = base_setup.test_id
+    
+    # Initialize SIA components for testing
+    sia_context = %{
+      test_id: test_id,
+      service_integration_enabled: true,
+      
+      # SIA component names (test-isolated)
+      contract_validator_name: :"test_contract_validator_#{test_id}",
+      dependency_manager_name: :"test_dependency_manager_#{test_id}",
+      health_checker_name: :"test_health_checker_#{test_id}",
+      signal_coordinator_name: :"test_signal_coordinator_#{test_id}",
+      
+      # Component configuration
+      test_mode: true,
+      mock_foundation_services: true
+    }
+    
+    # Start test-isolated SIA components if available
+    sia_services = start_sia_components_safely(sia_context)
+    
+    # Enhanced cleanup for SIA components
+    on_exit(fn ->
+      cleanup_sia_components(sia_services, test_id)
+    end)
+    
+    # Merge with base setup
+    Map.merge(base_setup, %{
+      mode: :service_integration,
+      sia_context: sia_context,
+      sia_services: sia_services,
+      service_integration: %{
+        contract_validation: Map.get(sia_services, :contract_validator),
+        dependency_management: Map.get(sia_services, :dependency_manager),
+        health_checking: Map.get(sia_services, :health_checker),
+        signal_coordination: Map.get(sia_services, :signal_coordinator)
+      }
+    })
+    |> Map.put(:test_context, Map.merge(base_setup.test_context, %{
+      mode: :service_integration,
+      sia_enabled: true,
+      sia_context: sia_context
+    }))
+  end
+  
   # Helper functions
   
   @doc """
@@ -368,6 +429,7 @@ defmodule Foundation.UnifiedTestFoundation do
   defp can_run_async?(:signal_routing), do: false  # Signal routing needs careful isolation
   defp can_run_async?(:full_isolation), do: true  # Fully isolated can run async
   defp can_run_async?(:contamination_detection), do: false  # Monitoring needs serial execution
+  defp can_run_async?(:service_integration), do: false  # SIA needs careful coordination
   
   defp setup_for_mode(:basic) do
     quote do
@@ -399,6 +461,12 @@ defmodule Foundation.UnifiedTestFoundation do
     end
   end
   
+  defp setup_for_mode(:service_integration) do
+    quote do
+      Foundation.UnifiedTestFoundation.service_integration_setup(%{})
+    end
+  end
+  
   defp module_config_for_mode(:contamination_detection) do
     quote do
       @moduletag :contamination_detection
@@ -409,6 +477,13 @@ defmodule Foundation.UnifiedTestFoundation do
   defp module_config_for_mode(:signal_routing) do
     quote do
       @moduletag :signal_routing
+      @moduletag :serial
+    end
+  end
+  
+  defp module_config_for_mode(:service_integration) do
+    quote do
+      @moduletag :service_integration
       @moduletag :serial
     end
   end
@@ -427,5 +502,117 @@ defmodule Foundation.UnifiedTestFoundation do
     handler.id
     |> to_string()
     |> String.contains?("test_#{test_id}")
+  end
+  
+  # SIA component management helpers
+  
+  @doc """
+  Safely starts SIA components for testing, handling cases where modules may not be loaded.
+  """
+  def start_sia_components_safely(sia_context) do
+    components = %{}
+    
+    # Try to start each SIA component, gracefully handling module loading issues
+    components = try_start_component(
+      components, 
+      :contract_validator,
+      Foundation.ServiceIntegration.ContractValidator,
+      [name: sia_context.contract_validator_name]
+    )
+    
+    components = try_start_component(
+      components,
+      :dependency_manager, 
+      Foundation.ServiceIntegration.DependencyManager,
+      [name: sia_context.dependency_manager_name]
+    )
+    
+    components = try_start_component(
+      components,
+      :health_checker,
+      Foundation.ServiceIntegration.HealthChecker, 
+      [name: sia_context.health_checker_name]
+    )
+    
+    # SignalCoordinator is stateless, just note availability
+    components = if Code.ensure_loaded?(Foundation.ServiceIntegration.SignalCoordinator) do
+      Map.put(components, :signal_coordinator, Foundation.ServiceIntegration.SignalCoordinator)
+    else
+      Map.put(components, :signal_coordinator, :not_available)
+    end
+    
+    components
+  end
+  
+  defp try_start_component(components, key, module, opts) do
+    case Code.ensure_loaded?(module) do
+      {:module, ^module} ->
+        try do
+          case module.start_link(opts) do
+            {:ok, pid} ->
+              Map.put(components, key, pid)
+            {:error, {:already_started, pid}} ->
+              Map.put(components, key, pid)
+            {:error, _reason} ->
+              Map.put(components, key, :failed_to_start)
+          end
+        rescue
+          _ ->
+            Map.put(components, key, :start_exception)
+        end
+        
+      {:error, _} ->
+        Map.put(components, key, :not_available)
+    end
+  end
+  
+  @doc """
+  Cleans up SIA components after test completion.
+  """
+  def cleanup_sia_components(sia_services, test_id) do
+    # Stop any running SIA component processes
+    Enum.each(sia_services, fn {_key, service} ->
+      case service do
+        pid when is_pid(pid) ->
+          try do
+            if Process.alive?(pid) do
+              GenServer.stop(pid, :normal, 5000)
+            end
+          catch
+            _, _ -> :ok
+          end
+          
+        _other ->
+          :ok
+      end
+    end)
+    
+    # Clean up any SIA-specific telemetry handlers
+    cleanup_sia_telemetry_handlers(test_id)
+  end
+  
+  @doc """
+  Cleans up SIA-specific telemetry handlers.
+  """
+  def cleanup_sia_telemetry_handlers(test_id) do
+    try do
+      :telemetry.list_handlers([])
+      |> Enum.filter(&is_sia_test_handler?(&1, test_id))
+      |> Enum.each(fn handler ->
+        :telemetry.detach(handler.id)
+      end)
+    catch
+      _, _ -> :ok
+    end
+  end
+  
+  defp is_sia_test_handler?(handler, test_id) do
+    handler_id = to_string(handler.id)
+    String.contains?(handler_id, "test_#{test_id}") and
+    (String.contains?(handler_id, "service_integration") or
+     String.contains?(handler_id, "contract_validator") or  
+     String.contains?(handler_id, "dependency_manager") or
+     String.contains?(handler_id, "health_checker") or
+     String.contains?(handler_id, "signal_coordinator"))
   end
 end

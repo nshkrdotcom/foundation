@@ -172,59 +172,72 @@ defmodule JidoFoundation.Bridge do
   end
 
   @doc """
-  Executes a Jido action with retry logic using Jido.Exec.
+  Executes a Jido action with retry logic and Foundation integration.
 
-  This function replaces custom retry logic with Jido's built-in retry mechanism
-  for better integration and consistency with the Jido framework.
+  ## Parameters
 
-  ## Options
+  - `action_module` - The action module to execute
+  - `params` - Parameters to pass to the action (default: %{})
+  - `context` - Execution context (default: %{})
+  - `opts` - Execution options (default: [])
 
-  - `:max_retries` - Maximum number of retry attempts (default: 3)
-  - `:backoff` - Initial backoff time in milliseconds (default: 250)
-  - `:timeout` - Action timeout in milliseconds (default: 30_000)
-  - `:log_level` - Log level for the execution (default: :info)
+  ## Returns
+
+  - `{:ok, result}` - On successful execution
+  - `{:error, reason}` - On failure after all retries
 
   ## Examples
 
-      # Execute action with default retry settings
-      JidoFoundation.Bridge.execute_with_retry(action_module, params, context)
-
-      # Execute with custom retry settings
-      JidoFoundation.Bridge.execute_with_retry(
-        action_module, 
-        params, 
-        context,
-        max_retries: 5, 
-        backoff: 500
-      )
+      {:ok, result} = execute_with_retry(MyAction, %{data: "test"})
+      {:error, reason} = execute_with_retry(BadAction, %{})
   """
+  @spec execute_with_retry(module(), map(), map(), keyword()) :: 
+    {:ok, any()} | {:error, any()}
   def execute_with_retry(action_module, params \\ %{}, context \\ %{}, opts \\ []) do
-    # Enhance context with Foundation metadata
-    enhanced_context = Map.merge(context, %{
-      foundation_bridge: true,
-      agent_framework: :jido,
-      timestamp: System.system_time(:microsecond)
-    })
+    try do
+      # Enhance context with Foundation metadata
+      enhanced_context = Map.merge(context, %{
+        foundation_bridge: true,
+        agent_framework: :jido,
+        timestamp: System.system_time(:microsecond)
+      })
 
-    # Extract Jido.Exec options
-    exec_opts = [
-      max_retries: Keyword.get(opts, :max_retries, 3),
-      backoff: Keyword.get(opts, :backoff, 250),
-      timeout: Keyword.get(opts, :timeout, 30_000),
-      log_level: Keyword.get(opts, :log_level, :info)
-    ]
+      # Extract Jido.Exec options
+      exec_opts = [
+        max_retries: Keyword.get(opts, :max_retries, 3),
+        backoff: Keyword.get(opts, :backoff, 250),
+        timeout: Keyword.get(opts, :timeout, 30_000),
+        log_level: Keyword.get(opts, :log_level, :info)
+      ]
 
-    # Use Jido.Exec for proper action execution with built-in retry
-    case Jido.Exec.run(action_module, params, enhanced_context, exec_opts) do
-      {:ok, result} = success ->
-        Logger.debug("Jido action executed successfully via Bridge", 
-          action: action_module, result: inspect(result))
-        success
+      # Use Jido.Exec for proper action execution with built-in retry
+      case Jido.Exec.run(action_module, params, enhanced_context, exec_opts) do
+        {:ok, result} = success ->
+          Logger.debug("Jido action executed successfully via Bridge", 
+            action: action_module, result: inspect(result))
+          success
 
-      {:error, reason} = error ->
-        Logger.warning("Jido action failed after retries via Bridge", 
-          action: action_module, reason: inspect(reason))
-        error
+        {:error, reason} = error ->
+          Logger.warning("Jido action failed after retries via Bridge", 
+            action: action_module, reason: inspect(reason))
+          error
+
+        # Handle unexpected return formats
+        other ->
+          Logger.warning("Jido action returned unexpected format via Bridge",
+            action: action_module, result: inspect(other))
+          {:error, {:unexpected_return_format, other}}
+      end
+    rescue
+      error ->
+        Logger.error("Exception during Jido action execution via Bridge",
+          action: action_module, error: inspect(error))
+        {:error, {:execution_exception, error}}
+    catch
+      kind, value ->
+        Logger.error("Caught #{kind} during Jido action execution via Bridge",
+          action: action_module, value: inspect(value))
+        {:error, {:execution_caught, {kind, value}}}
     end
   end
 
