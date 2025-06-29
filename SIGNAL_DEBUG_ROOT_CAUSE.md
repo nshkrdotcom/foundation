@@ -283,3 +283,77 @@ Implementing these fixes should:
 **Strategy**: Fix immediate test infrastructure issues first for quick wins, then address underlying architectural problems for long-term reliability.
 
 **Status**: Comprehensive root cause analysis complete, multi-layered solution approach designed, ready for implementation with clear priority ordering.
+
+---
+
+## 🔧 IMPLEMENTATION PROGRESS
+
+### ✅ Fix 1 COMPLETED: Unique Telemetry Handler IDs
+
+**Implementation**: Modified SignalRouter to use unique telemetry handler IDs per test instance.
+
+```elixir
+# BEFORE: Fixed handler ID causing collisions
+:telemetry.attach_many("jido-signal-router", ...)
+
+# AFTER: Unique handler ID per router instance  
+unique_id = :erlang.unique_integer([:positive])
+handler_id = "jido-signal-router-#{unique_id}"
+:telemetry.attach_many(handler_id, ...)
+```
+
+**Results**: 
+- ✅ **Telemetry handlers now working** - Different handler IDs per test (e.g., "jido-signal-router-10946", "jido-signal-router-1429")
+- ✅ **Signal routing events reaching tests** - No more "process mailbox is empty" errors
+- ✅ **Test progression beyond timeout failures** - Tests now execute signal routing logic
+
+**NEW ISSUE DISCOVERED**: Duplicate signal delivery - handlers receiving signals multiple times:
+```
+Unexpected handler2_signals: [signal1, signal1] # Expected: [signal1]
+assert length(handler1_signals) == 1  # left: 2, right: 1
+```
+
+**Root Cause**: Signal Bus publishing working correctly but signal routing logic delivering duplicates to handlers.
+
+### 🔍 Next Investigation: Duplicate Signal Delivery
+
+**Analysis Needed**: Why are signals being delivered multiple times to the same handler?
+
+**Hypothesis**: 
+1. SignalRouter pattern matching logic routing signal to handler multiple times
+2. Signal Bus emitting duplicate events  
+3. Handler subscription logic creating duplicate subscriptions
+
+**Status**: Major progress - resolved telemetry handler collisions, now debugging signal delivery duplication.
+
+### ✅ MAJOR SUCCESS: 4 of 5 Test Failures Resolved!
+
+**Latest Test Results**: 
+- ✅ Test 1: "routes signals to subscribed handlers by type" - **PASSING**
+- ❌ Test 2: "supports dynamic subscription management" - **1 failure remaining** (signals=2, expected=1)  
+- ✅ Test 3: "emits routing telemetry events" - **PASSING**
+- ✅ Test 4: "handles signal routing errors gracefully" - **PASSING**
+- ✅ Test 5: "supports wildcard signal subscriptions" - **PASSING**
+
+**Improvement**: **80% success rate** (4/5 tests passing) vs 0% before fix.
+
+### ✅ Fix 2 COMPLETED: Defensive Process Cleanup
+
+**Implementation**: Added race condition protection to MABEAM coordination test cleanup.
+
+```elixir
+# BEFORE: Race condition prone
+if Process.alive?(agent), do: GenServer.stop(agent)
+
+# AFTER: Defensive with timeout and error handling
+try do
+  if Process.alive?(agent) do
+    GenServer.stop(agent, :normal, 1000)
+  end
+catch
+  :exit, {:noproc, _} -> :ok  # Process already dead
+  :exit, {:timeout, _} -> Process.exit(agent, :kill)
+end
+```
+
+**Status**: Both immediate fixes implemented. Remaining issue is signal unsubscription timing in Test 2.

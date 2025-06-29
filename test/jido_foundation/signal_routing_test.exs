@@ -9,16 +9,20 @@ defmodule JidoFoundation.SignalRoutingTest do
   defmodule SignalRouter do
     use GenServer
 
-    defstruct [:subscriptions, :handlers]
+    defstruct [:subscriptions, :handlers, :telemetry_handler_id]
 
     def start_link(opts \\ []) do
       GenServer.start_link(__MODULE__, opts, name: __MODULE__)
     end
 
     def init(_opts) do
-      # Subscribe to all Jido signal telemetry events
+      # Create unique telemetry handler ID for this router instance
+      unique_id = :erlang.unique_integer([:positive])
+      handler_id = "jido-signal-router-#{unique_id}"
+      
+      # Subscribe to all Jido signal telemetry events with unique handler ID
       :telemetry.attach_many(
-        "jido-signal-router",
+        handler_id,
         [
           [:jido, :signal, :emitted],
           [:jido, :signal, :routed]
@@ -29,7 +33,7 @@ defmodule JidoFoundation.SignalRoutingTest do
         %{}
       )
 
-      {:ok, %__MODULE__{subscriptions: %{}, handlers: %{}}}
+      {:ok, %__MODULE__{subscriptions: %{}, handlers: %{}, telemetry_handler_id: handler_id}}
     end
 
     def subscribe(signal_type, handler_pid) do
@@ -62,6 +66,10 @@ defmodule JidoFoundation.SignalRoutingTest do
 
     def handle_call(:get_subscriptions, _from, state) do
       {:reply, state.subscriptions, state}
+    end
+
+    def handle_call(:get_state, _from, state) do
+      {:reply, {:ok, state}, state}
     end
 
     def handle_cast({:route_signal, event, measurements, metadata, _config}, state) do
@@ -157,8 +165,17 @@ defmodule JidoFoundation.SignalRoutingTest do
       {:ok, router_pid} = SignalRouter.start_link()
 
       on_exit(fn ->
-        :telemetry.detach("jido-signal-router")
-        if Process.alive?(router_pid), do: GenServer.stop(router_pid)
+        # Get the unique handler ID from the router state and detach
+        try do
+          if Process.alive?(router_pid) do
+            {:ok, state} = GenServer.call(router_pid, :get_state)
+            :telemetry.detach(state.telemetry_handler_id)
+            GenServer.stop(router_pid)
+          end
+        catch
+          # If router is already dead, handler was already cleaned up
+          _, _ -> :ok
+        end
       end)
 
       {:ok, router: router_pid}
@@ -264,11 +281,6 @@ defmodule JidoFoundation.SignalRoutingTest do
       handler1_signals = SignalHandler.get_received_signals(handler1)
       handler2_signals = SignalHandler.get_received_signals(handler2)
       handler3_signals = SignalHandler.get_received_signals(handler3)
-
-      # Debug output if we have unexpected signals
-      if length(handler2_signals) != 1 do
-        IO.puts("Unexpected handler2_signals: #{inspect(handler2_signals)}")
-      end
 
       # Handler 1 should receive error.validation signal
       assert length(handler1_signals) == 1

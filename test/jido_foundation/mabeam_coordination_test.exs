@@ -205,11 +205,30 @@ defmodule JidoFoundation.MABEAMCoordinationTest do
       {:ok, coordinator_agent} = CoordinatingAgent.start_link(id: "coordinator")
 
       on_exit(fn ->
+        # Defensive process cleanup with race condition protection
         Enum.each(worker_agents, fn agent ->
-          if Process.alive?(agent), do: GenServer.stop(agent)
+          try do
+            if Process.alive?(agent) do
+              GenServer.stop(agent, :normal, 1000)
+            end
+          catch
+            :exit, {:noproc, _} -> :ok  # Process already dead
+            :exit, {:timeout, _} -> 
+              # Force kill if stop timeout
+              Process.exit(agent, :kill)
+          end
         end)
 
-        if Process.alive?(coordinator_agent), do: GenServer.stop(coordinator_agent)
+        try do
+          if Process.alive?(coordinator_agent) do
+            GenServer.stop(coordinator_agent, :normal, 1000)
+          end
+        catch
+          :exit, {:noproc, _} -> :ok  # Process already dead
+          :exit, {:timeout, _} -> 
+            # Force kill if stop timeout
+            Process.exit(coordinator_agent, :kill)
+        end
       end)
 
       # Register all agents
