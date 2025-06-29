@@ -1,96 +1,150 @@
-# JIDO FOUNDATION SYSTEM RECOVERY
+# Foundation Jido System - Production Architecture Mission
 
-## JIDO ARCHITECTURE CONTEXT
+## 📋 MISSION OVERVIEW
 
-### What is Jido?
-Jido (自動) is a toolkit for building autonomous, distributed agent systems in Elixir. The name comes from the Japanese word meaning "automatic" or "automated", where 自 (ji) means "self" and 動 (dō) means "movement".
+Transform the Foundation/JidoSystem into a **production-grade multi-agent platform** with sound architectural principles, comprehensive infrastructure services, and robust error handling. This mission focuses on building upon the solid Foundation established while integrating missing functionality in a way that ensures **correct design, proper supervision, and clean coupling** between Jido agents and Foundation infrastructure.
 
-**Key Jido Concepts:**
-- **Actions**: Fundamental building blocks - discrete, composable units of functionality
-- **Agents**: Stateful entities that can plan and execute Actions, built on OTP GenServer
-- **Sensors**: Real-time monitoring and data gathering components
-- **Instructions**: Event-driven messages that coordinate workflows
-- **Workflows**: Composable chains of Actions for complex behaviors
+## 🎯 PRIMARY DIRECTIVE
 
-### Foundation JidoSystem Integration
+**Build a sound architecture that can be reasoned about** - avoiding the structural flaws, broken concurrency primitives, ad-hoc processes, and poor coupling that existed in lib_old. Every implementation must follow **supervision-first**, **protocol-based**, and **test-driven** principles.
 
-The Foundation layer provides protocol-based infrastructure for Jido agents:
+## 📖 CURRENT IMPLEMENTATION PLAN
 
-- **Registry Protocol**: Agent discovery and lifecycle management
-- **Coordination Protocol**: Multi-agent orchestration and communication  
-- **Infrastructure Protocol**: Shared services (caching, telemetry, etc.)
-- **MABEAM**: Multi-Agent BEAM orchestration for distributed coordination
+**Reference Document**: `FOUNDATION_JIDO_INTEGRATION_PLAN.md`
 
-**JidoSystem Agents:**
-- **TaskAgent**: Processes discrete units of work with queue management
-- **MonitorAgent**: Collects metrics and monitors system health
-- **CoordinatorAgent**: Orchestrates workflows and manages agent coordination
-- **FoundationAgent**: Bridge pattern connecting Jido agents to Foundation infrastructure
+**Current Phase**: STAGE 1 - Foundation Infrastructure Services (Weeks 1-3)
+- 1A: Core Service Architecture (Week 1)  
+- 1B: Enhanced Infrastructure (Week 2)
+- 1C: Service Discovery Foundation (Week 3)
 
-### Design Principles
+## 🏗️ ARCHITECTURAL PRINCIPLES
 
-Jido follows core principles that guide this Foundation implementation:
+### 1. Supervision-First Architecture
+- **Every process must have a supervisor** - No ad-hoc spawning
+- **Proper supervision trees** - Clear parent-child relationships  
+- **Graceful shutdown** - All processes handle termination properly
+- **Restart strategies** - Appropriate restart policies for each service
 
-1. **Error Tuples Over Exceptions**: Explicit error handling with `{:ok, result}` / `{:error, reason}`
-2. **Data-First Architecture**: Focus on data transformation over behavioral inheritance
-3. **Rich Compile-Time Discovery**: Metadata for introspection and validation
-4. **Event-Driven Processing**: Actions and instructions as communication primitives
-5. **Agents as Dynamic ETL**: Extract-Transform-Load processing with composition
-6. **Balanced Data Validation**: "Validate what you know" approach for flexibility
-7. **Robust Error Recovery**: OTP supervision with graceful degradation
+### 2. Protocol-Based Coupling
+- **Foundation protocols as interfaces** - Clean abstraction boundaries
+- **Jido agents use protocols, not implementations** - Loose coupling
+- **Swappable implementations** - Production vs test vs development
+- **Clear service contracts** - Well-defined interface specifications
+
+### 3. Test-Driven Development
+- **Every feature starts with a failing test** - Red, Green, Refactor cycle
+- **Comprehensive test coverage** - Study `test_old/` for coverage patterns
+- **Integration test scenarios** - Cross-service interaction validation
+- **Property-based testing** - Behavioral guarantees and edge cases
+
+### 4. Production-Ready Infrastructure
+- **Circuit breakers and retry mechanisms** - Resilience against failures
+- **Proper error boundaries** - Services fail independently
+- **Monitoring and alerting** - Complete observability pipeline
+- **Performance optimization** - Resource efficiency and scalability
+
+## 🔄 EXECUTION PROCESS
+
+### Phase Completion Cycle:
+1. **Study Context**: Read specified documents and current implementations
+2. **Test Drive**: Write comprehensive failing tests (study `test_old/` for patterns)
+3. **Implement**: Build with architectural principles
+4. **Validate**: All tests passing, no regressions
+5. **Commit**: Stable code with comprehensive test coverage
+6. **Review**: Update plans if needed, proceed to next phase
+
+### Quality Gates (Must Pass Before Commit):
+- ✅ **ALL TESTS PASSING** (281+ tests, 0 failures)
+- ✅ **NO WARNINGS** (0 compilation warnings)  
+- ✅ **NO DIALYZER ERRORS** (clean dialyzer run)
+- ✅ **NO CREDO WARNINGS** (clean credo run)
+- ✅ **ARCHITECTURAL COMPLIANCE** (supervision, protocols, error boundaries)
+
+## 📝 WORK TRACKING
+
+### Documentation Structure:
+- **CLAUDE.md** - This file (NEVER MODIFY - front controller only)
+- **CLAUDE_WORKLOG.md** - Append-only work log for all implementation notes
+- **FOUNDATION_JIDO_INTEGRATION_PLAN.md** - Master implementation plan (modifiable)
+- **Sub-plans** - Stage-specific plans (modifiable as needed)
+
+### Work Log Protocol:
+- **All implementation notes go to CLAUDE_WORKLOG.md** (append-only)
+- **Daily progress updates** with test results and architectural decisions
+- **Phase completion summaries** with lessons learned
+- **Plan updates** documented with rationale for changes
+
+## 🎖️ SUCCESS DEFINITION
+
+### Overall Mission Success:
+- **Production-grade multi-agent platform** ready for deployment
+- **Zero architectural debt** - sound design throughout
+- **Comprehensive infrastructure** - all lib_old functionality integrated properly
+- **Complete test coverage** - robust test suite covering all scenarios
+- **Performance optimized** - efficient resource usage and scalability
+
+### Stage-by-Stage Success:
+- **Stage 1**: Foundation infrastructure services with proper supervision
+- **Stage 2**: Jido agents integrated with infrastructure via protocols  
+- **Stage 3**: Event processing and signal routing infrastructure
+- **Stage 4**: Complete monitoring, alerting, and health checking
+- **Stage 5**: Advanced patterns and production optimization
+
+## ⚠️ CRITICAL CONSTRAINTS
+
+### Architectural Constraints:
+- **No ad-hoc process spawning** - everything under supervision
+- **Protocol-based interfaces only** - no direct cross-layer calls
+- **Error boundaries enforced** - services fail independently
+- **Test coverage required** - no untested code
+
+### Implementation Constraints:
+- **Test-driven development** - tests before implementation
+- **All tests must pass** - no commits with failing tests
+- **Clean code standards** - no warnings or style violations
+- **Documentation updated** - architectural decisions recorded
 
 ---
 
-# CLAUDE RECOVERY EXECUTION PROTOCOL
+## 📋 IMPORTANT NOTES
 
-## MISSION: COMPLETE FOUNDATION JIDOSYSTEM RECOVERY
-**DURATION**: HOURS AND HOURS WITHOUT STOPPING
-**COMPLETION CRITERIA**: ALL 6 PHASES 100% COMPLETE
+### This Document (CLAUDE.md):
+- **NEVER MODIFY THIS FILE** - it serves as the immutable front controller
+- **Reference only** - all work goes to CLAUDE_WORKLOG.md
+- **Mission statement** - core principles and execution process
+- **Quality gates** - standards that must be maintained
 
-## EXECUTION RULES
-1. **DO NOT STOP FOR ANY REASON**
-2. **NO HELP REQUESTS**
-3. **NO QUESTIONS**
-4. **PERFECT COMPLETED FUNCTIONALITY ONLY**
+### Work Process:
+- **Follow FOUNDATION_JIDO_INTEGRATION_PLAN.md** for detailed implementation steps
+- **Study test_old/** for comprehensive test coverage patterns
+- **Append all work to CLAUDE_WORKLOG.md** with timestamps and context
+- **Update sub-plans as needed** based on implementation discoveries
+- **Commit only when all quality gates pass** - no exceptions
 
-## PHASE COMPLETION REQUIREMENTS
-Each phase MUST meet ALL criteria before commit:
-- ✅ ALL TESTS PASSING (281/281)
-- ✅ NO WARNINGS (0 compilation warnings)
-- ✅ NO DIALYZER ERRORS (clean dialyzer run)
-- ✅ NO CREDO WARNINGS (clean credo run)
-- ✅ COMMIT WORK
+### Test-Driven Focus:
+- **Study test_old/ directory structure** to understand comprehensive testing patterns
+- **Write failing tests first** for every new feature or enhancement
+- **Achieve comprehensive coverage** including edge cases and error scenarios
+- **Integration tests** to validate cross-service interactions
+- **Property-based tests** where applicable for behavioral guarantees
 
-Then immediately proceed to next phase.
+---
 
-## 6-PHASE RECOVERY PLAN
+**Mission Start Date**: Current Session  
+**Current Phase**: STAGE 1A - Core Service Architecture  
+**Work Log**: CLAUDE_WORKLOG.md (append-only)  
+**Master Plan**: FOUNDATION_JIDO_INTEGRATION_PLAN.md (modifiable)  
 
-### PHASE 1: IMMEDIATE STABILIZATION
-Fix test failures and warnings to achieve stability baseline.
+**COMMITMENT**: Build production-grade architecture with zero compromises on quality, supervision, or testing standards.
 
-### PHASE 2: COMPLETE CORE IMPLEMENTATION  
-Complete Foundation infrastructure and JidoSystem robustness.
+## ⚠️ CRITICAL EXECUTION DIRECTIVE
 
-### PHASE 3: MABEAM COORDINATION ENHANCEMENT
-Implement reliable multi-agent orchestration.
+**DO NOT STOP UNTIL ALL 5 STAGES ARE COMPLETE**  
+This is a continuous implementation session that will take many hours. Work must continue through all stages:
+- ✅ STAGE 1: Foundation Infrastructure Services (Weeks 1-3)
+- ✅ STAGE 2: Jido Agent Infrastructure Integration (Weeks 4-6)  
+- ✅ STAGE 3: Signal and Event Infrastructure (Weeks 7-8)
+- ✅ STAGE 4: Monitoring and Alerting Infrastructure (Weeks 9-10)
+- ✅ STAGE 5: Advanced Patterns and Optimization (Weeks 11-12)
 
-### PHASE 4: DISTRIBUTION READINESS
-Prepare architecture for distributed deployment.
-
-### PHASE 5: PRODUCTION HARDENING
-Add security, compliance, monitoring, scaling.
-
-### PHASE 6: FINAL CLEANUP & OPTIMIZATION
-Final quality pass and optimization.
-
-## SUCCESS DEFINITION
-- Foundation JidoSystem is 100% functional
-- All tests pass with zero failures
-- Zero warnings or errors of any kind
-- Production-ready multi-agent system
-- Complete recovery from previous code loss
-
-## EXECUTION STATUS
-**CURRENT PHASE**: 1 of 6
-**STATUS**: IN PROGRESS - 14 test failures remaining (down from 27)
-**NEXT ACTION**: Continue fixing test failures and warnings
+**No stopping, no pausing, complete all 5 stages with all tests passing and commits made.**

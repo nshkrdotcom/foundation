@@ -33,7 +33,21 @@ defmodule Foundation.Error do
   @type error_category :: :config | :system | :data | :external
 
   @typedoc "Specific error subcategory within a category"
-  @type error_subcategory :: :structure | :validation | :access | :runtime | :initialization | :resources | :dependencies | :serialization | :corruption | :not_found | :network | :service | :timeout | :auth
+  @type error_subcategory ::
+          :structure
+          | :validation
+          | :access
+          | :runtime
+          | :initialization
+          | :resources
+          | :dependencies
+          | :serialization
+          | :corruption
+          | :not_found
+          | :network
+          | :service
+          | :timeout
+          | :auth
 
   @typedoc "Error severity level"
   @type error_severity :: :low | :medium | :high | :critical
@@ -116,10 +130,9 @@ defmodule Foundation.Error do
     {:data, :validation, :invalid_input} => {3204, :low, "Invalid input provided"},
 
     # Foundation-specific errors
-    {:system, :initialization, :registry_not_configured} => 
+    {:system, :initialization, :registry_not_configured} =>
       {2103, :high, "Foundation.Registry implementation not configured"},
-    {:system, :runtime, :process_not_alive} =>
-      {2402, :medium, "Process is not alive"}
+    {:system, :runtime, :process_not_alive} => {2402, :medium, "Process is not alive"}
   }
 
   # Additional error definitions needed by tests
@@ -361,9 +374,11 @@ defmodule Foundation.Error do
           ["Restore from backup", "Contact system administrator"]
 
         :registry_not_configured ->
-          ["Set :foundation, :registry_impl in application configuration",
-           "Ensure registry implementation module is available",
-           "Review Foundation setup documentation"]
+          [
+            "Set :foundation, :registry_impl in application configuration",
+            "Ensure registry implementation module is available",
+            "Review Foundation setup documentation"
+          ]
 
         _ ->
           ["Check logs for details", "Review error context", "Contact support if needed"]

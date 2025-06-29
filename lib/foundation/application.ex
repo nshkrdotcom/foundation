@@ -33,14 +33,16 @@ defmodule Foundation.Application do
   def start(_type, _args) do
     Logger.info("Starting Foundation Protocol Platform v2.1")
 
-    # Foundation provides a minimal supervision tree since it's primarily
-    # a protocol definition and stateless facade
+    # Foundation supervision tree with service layer architecture
     children = [
       # Performance monitor for metrics collection
       Foundation.PerformanceMonitor,
 
       # Resource management for production safety
-      Foundation.ResourceManager
+      Foundation.ResourceManager,
+
+      # Service layer supervisor for Foundation services
+      Foundation.Services.Supervisor
     ]
 
     opts = [strategy: :one_for_one, name: Foundation.Supervisor]

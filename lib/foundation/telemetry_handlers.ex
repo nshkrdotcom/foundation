@@ -1,14 +1,14 @@
 defmodule Foundation.TelemetryHandlers do
   @moduledoc """
   Named telemetry handlers for better performance in Foundation tests and runtime.
-  
+
   This module provides named functions for telemetry handlers to replace
   anonymous functions which can cause performance warnings.
   """
 
   @doc """
   Handle Jido agent events for testing.
-  
+
   This handler sends telemetry events to the test process for verification.
   """
   def handle_jido_events(event, measurements, metadata, config) do
@@ -18,16 +18,17 @@ defmodule Foundation.TelemetryHandlers do
 
   @doc """
   Handle error events during testing.
-  
+
   Logs error telemetry events and forwards to test process.
   """
   def handle_error_events(event, measurements, metadata, config) do
     require Logger
-    Logger.debug("Error telemetry event: #{inspect(event)}", 
-      measurements: measurements, 
+
+    Logger.debug("Error telemetry event: #{inspect(event)}",
+      measurements: measurements,
       metadata: metadata
     )
-    
+
     test_pid = config[:test_pid] || self()
     send(test_pid, {:error_telemetry, event, measurements, metadata})
   end

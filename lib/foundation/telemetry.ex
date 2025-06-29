@@ -1,19 +1,19 @@
 defmodule Foundation.Telemetry do
   @moduledoc """
   Telemetry integration for the Foundation framework.
-  
+
   This module provides a convenient interface to :telemetry with Foundation-specific
   conventions and enhancements.
   """
 
   @doc """
   Emits a telemetry event with the given measurements and metadata.
-  
+
   ## Parameters
     - `event` - List of atoms representing the event name
     - `measurements` - Map of measurement values (typically numbers)
     - `metadata` - Map of additional metadata
-  
+
   ## Examples
       Foundation.Telemetry.emit([:foundation, :request, :complete], %{duration: 100}, %{path: "/api/users"})
   """
@@ -23,7 +23,7 @@ defmodule Foundation.Telemetry do
 
   @doc """
   Attaches a telemetry handler to a specific event.
-  
+
   ## Parameters
     - `handler_id` - Unique identifier for the handler
     - `event` - Event name to attach to
@@ -36,7 +36,7 @@ defmodule Foundation.Telemetry do
 
   @doc """
   Attaches a telemetry handler to multiple events.
-  
+
   ## Parameters
     - `handler_id` - Unique identifier for the handler
     - `events` - List of event names to attach to
@@ -49,7 +49,7 @@ defmodule Foundation.Telemetry do
 
   @doc """
   Detaches a telemetry handler.
-  
+
   ## Parameters
     - `handler_id` - Handler ID to detach
   """
@@ -66,12 +66,12 @@ defmodule Foundation.Telemetry do
 
   @doc """
   Executes a function and measures its duration, emitting a telemetry event.
-  
+
   ## Parameters
     - `event` - Event name for the measurement
     - `metadata` - Additional metadata for the event
     - `fun` - Function to execute and measure
-  
+
   ## Examples
       Foundation.Telemetry.span([:db, :query], %{query: "SELECT * FROM users"}, fn ->
         # Execute database query
@@ -80,11 +80,11 @@ defmodule Foundation.Telemetry do
   """
   def span(event, metadata, fun) do
     start_time = System.monotonic_time()
-    
+
     try do
       result = fun.()
       duration = System.monotonic_time() - start_time
-      
+
       emit(event ++ [:stop], %{duration: duration}, Map.put(metadata, :result, :ok))
       result
     rescue

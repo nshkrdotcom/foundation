@@ -6,7 +6,60 @@ Application.put_env(:foundation, :coordination_impl, nil)
 Application.put_env(:foundation, :infrastructure_impl, nil)
 
 # Start Foundation.Infrastructure.Cache for cache tests
-{:ok, _cache_pid} = Foundation.Infrastructure.Cache.start_link(name: Foundation.Infrastructure.Cache)
+{:ok, _cache_pid} =
+  Foundation.Infrastructure.Cache.start_link(name: Foundation.Infrastructure.Cache)
+
+# Filter out notice logs from Jido framework during tests
+Logger.add_backend(:console)
+Logger.configure_backend(:console, level: :info)
+
+# Add runtime filter to suppress Jido notice logs
+:logger.add_primary_filter(:suppress_jido_notices, {fn log_event, _config ->
+   case log_event do
+     %{level: :notice, msg: {format, args}} when is_binary(format) ->
+       # Check if this is a notice level log with "Executing" (Jido action notices)
+       message_str =
+         case args do
+           [] ->
+             format
+
+           _ ->
+             try do
+               :io_lib.format(format, args) |> IO.iodata_to_binary()
+             rescue
+               _ -> format
+             end
+         end
+
+       if String.contains?(message_str, "Executing JidoSystem") or
+            String.contains?(message_str, "Executing Jido") do
+         # Filter out
+         :stop
+       else
+         # Let through
+         :ignore
+       end
+
+     %{level: :notice, msg: message} when is_binary(message) ->
+       if String.contains?(message, "Executing JidoSystem") or
+            String.contains?(message, "Executing Jido") do
+         # Filter out
+         :stop
+       else
+         # Let through
+         :ignore
+       end
+
+     # Also filter any notice level logs from Jido modules
+     %{level: :notice} ->
+       # Filter out all notice level logs during tests
+       :stop
+
+     _ ->
+       # Let through other log formats and levels
+       :ignore
+   end
+ end, %{}})
 
 # Start ExUnit
 ExUnit.start()

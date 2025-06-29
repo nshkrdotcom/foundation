@@ -68,17 +68,18 @@ defmodule Foundation.RegistryCountTest do
 
       # Spawn multiple processes to register agents concurrently
       parent = self()
-      
-      tasks = for i <- 1..100 do
-        Task.async(fn ->
-          agent_id = :"agent_#{i}"
-          # Create a new process for each agent
-          {:ok, pid} = Agent.start_link(fn -> :ok end)
-          result = Foundation.Registry.register(registry, agent_id, pid, metadata)
-          send(parent, {:registered, agent_id, result})
-          result
-        end)
-      end
+
+      tasks =
+        for i <- 1..100 do
+          Task.async(fn ->
+            agent_id = :"agent_#{i}"
+            # Create a new process for each agent
+            {:ok, pid} = Agent.start_link(fn -> :ok end)
+            result = Foundation.Registry.register(registry, agent_id, pid, metadata)
+            send(parent, {:registered, agent_id, result})
+            result
+          end)
+        end
 
       # Wait for all registrations to complete
       Enum.each(tasks, &Task.await/1)

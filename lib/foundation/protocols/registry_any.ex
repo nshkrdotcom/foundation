@@ -1,7 +1,7 @@
 defimpl Foundation.Registry, for: Any do
   @moduledoc """
   Fallback implementation for Foundation.Registry protocol.
-  
+
   This implementation uses the process dictionary for storage,
   making it suitable for testing and simple use cases.
   """
@@ -13,10 +13,11 @@ defimpl Foundation.Registry, for: Any do
   """
   def register(_impl, key, pid, metadata \\ %{}) do
     agents = Process.get(:registered_agents, %{})
-    
+
     case Map.has_key?(agents, key) do
       true ->
         {:error, :already_exists}
+
       false ->
         new_agents = Map.put(agents, key, {pid, metadata})
         Process.put(:registered_agents, new_agents)
@@ -29,7 +30,7 @@ defimpl Foundation.Registry, for: Any do
   """
   def lookup(_impl, key) do
     agents = Process.get(:registered_agents, %{})
-    
+
     case Map.get(agents, key) do
       {pid, metadata} -> {:ok, {pid, metadata}}
       nil -> :error
@@ -41,14 +42,14 @@ defimpl Foundation.Registry, for: Any do
   """
   def find_by_attribute(_impl, attribute, value) do
     agents = Process.get(:registered_agents, %{})
-    
-    results = 
+
+    results =
       agents
       |> Enum.filter(fn {_key, {_pid, metadata}} ->
         Map.get(metadata, attribute) == value
       end)
       |> Enum.map(fn {key, {pid, metadata}} -> {key, pid, metadata} end)
-    
+
     {:ok, results}
   end
 
@@ -57,8 +58,8 @@ defimpl Foundation.Registry, for: Any do
   """
   def query(_impl, criteria) when is_list(criteria) do
     agents = Process.get(:registered_agents, %{})
-    
-    results = 
+
+    results =
       agents
       |> Enum.filter(fn {_key, {_pid, metadata}} ->
         Enum.all?(criteria, fn {path, value, op} ->
@@ -67,7 +68,7 @@ defimpl Foundation.Registry, for: Any do
         end)
       end)
       |> Enum.map(fn {key, {pid, metadata}} -> {key, pid, metadata} end)
-    
+
     {:ok, results}
   end
 
@@ -83,12 +84,12 @@ defimpl Foundation.Registry, for: Any do
   """
   def list_all(_impl, filter_fn \\ nil) do
     agents = Process.get(:registered_agents, %{})
-    
-    results = 
+
+    results =
       agents
       |> Enum.map(fn {key, {pid, metadata}} -> {key, pid, metadata} end)
       |> apply_filter(filter_fn)
-    
+
     results
   end
 
@@ -97,12 +98,13 @@ defimpl Foundation.Registry, for: Any do
   """
   def update_metadata(_impl, key, new_metadata) do
     agents = Process.get(:registered_agents, %{})
-    
+
     case Map.get(agents, key) do
       {pid, _old_metadata} ->
         new_agents = Map.put(agents, key, {pid, new_metadata})
         Process.put(:registered_agents, new_agents)
         :ok
+
       nil ->
         {:error, :not_found}
     end
@@ -113,12 +115,13 @@ defimpl Foundation.Registry, for: Any do
   """
   def unregister(_impl, key) do
     agents = Process.get(:registered_agents, %{})
-    
+
     case Map.has_key?(agents, key) do
       true ->
         new_agents = Map.delete(agents, key)
         Process.put(:registered_agents, new_agents)
         :ok
+
       false ->
         {:error, :not_found}
     end
@@ -139,12 +142,12 @@ defimpl Foundation.Registry, for: Any do
     # For the Any implementation, we'll use a simplified approach
     # since ETS match specs are complex to implement generically
     agents = Process.get(:registered_agents, %{})
-    
+
     # Convert to list format that ETS would return
-    results = 
+    results =
       agents
       |> Enum.map(fn {key, {pid, metadata}} -> {key, pid, metadata} end)
-    
+
     # Note: This is a simplified implementation that returns all entries
     # A full implementation would need to parse and apply the match_spec
     results
@@ -177,10 +180,15 @@ defimpl Foundation.Registry, for: Any do
   defp apply_operation(actual, expected, :lt), do: actual < expected
   defp apply_operation(actual, expected, :gte), do: actual >= expected
   defp apply_operation(actual, expected, :lte), do: actual <= expected
-  defp apply_operation(actual, expected_list, :in) when is_list(expected_list), do: actual in expected_list
-  defp apply_operation(actual, expected_list, :not_in) when is_list(expected_list), do: actual not in expected_list
+
+  defp apply_operation(actual, expected_list, :in) when is_list(expected_list),
+    do: actual in expected_list
+
+  defp apply_operation(actual, expected_list, :not_in) when is_list(expected_list),
+    do: actual not in expected_list
 
   defp apply_filter(results, nil), do: results
+
   defp apply_filter(results, filter_fn) do
     Enum.filter(results, fn {_key, _pid, metadata} -> filter_fn.(metadata) end)
   end

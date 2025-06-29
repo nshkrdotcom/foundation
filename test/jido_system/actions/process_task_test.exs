@@ -1,9 +1,9 @@
 defmodule JidoSystem.Actions.ProcessTaskTest do
   use ExUnit.Case, async: false
-  
+
   alias JidoSystem.Actions.ProcessTask
   alias Foundation.{Telemetry, CircuitBreaker}
-  
+
   setup do
     # Ensure clean telemetry state - detach any existing handlers
     try do
@@ -13,10 +13,10 @@ defmodule JidoSystem.Actions.ProcessTaskTest do
     rescue
       _ -> :ok
     end
-    
+
     :ok
   end
-  
+
   describe "task validation" do
     test "validates required parameters" do
       valid_params = %{
@@ -29,71 +29,75 @@ defmodule JidoSystem.Actions.ProcessTaskTest do
         retry_attempts: 3,
         circuit_breaker: true
       }
-      
+
       {:ok, result} = ProcessTask.run(valid_params, %{})
-      
+
       assert result.task_id == "test_task_1"
       assert result.status == :completed
       assert is_map(result.result)
     end
-    
+
     test "rejects invalid task_id" do
       invalid_params = %{
-        task_id: "",  # Empty string
+        # Empty string
+        task_id: "",
         task_type: :data_processing,
         input_data: %{source: "test.csv"},
         timeout: 30_000,
         retry_attempts: 3,
         circuit_breaker: false
       }
-      
+
       {:error, error} = ProcessTask.run(invalid_params, %{})
       assert match?({:validation_failed, :invalid_task_id}, error)
     end
-    
+
     test "rejects invalid task_type" do
       invalid_params = %{
         task_id: "test_task",
-        task_type: "not_an_atom",  # Should be atom
+        # Should be atom
+        task_type: "not_an_atom",
         input_data: %{source: "test.csv"},
         timeout: 30_000,
         retry_attempts: 3,
         circuit_breaker: false
       }
-      
+
       {:error, error} = ProcessTask.run(invalid_params, %{})
       assert match?({:validation_failed, :invalid_task_type}, error)
     end
-    
+
     test "rejects invalid input_data" do
       invalid_params = %{
         task_id: "test_task",
         task_type: :data_processing,
-        input_data: "not_a_map",  # Should be map
+        # Should be map
+        input_data: "not_a_map",
         timeout: 30_000,
         retry_attempts: 3,
         circuit_breaker: false
       }
-      
+
       {:error, error} = ProcessTask.run(invalid_params, %{})
       assert match?({:validation_failed, :invalid_input_data}, error)
     end
-    
+
     test "rejects timeout that's too short" do
       invalid_params = %{
         task_id: "test_task",
         task_type: :data_processing,
         input_data: %{},
-        timeout: 500,  # Less than 1000ms minimum
+        # Less than 1000ms minimum
+        timeout: 500,
         retry_attempts: 3,
         circuit_breaker: false
       }
-      
+
       {:error, error} = ProcessTask.run(invalid_params, %{})
       assert match?({:validation_failed, :timeout_too_short}, error)
     end
   end
-  
+
   describe "task processing types" do
     test "processes data_processing tasks" do
       params = %{
@@ -102,18 +106,19 @@ defmodule JidoSystem.Actions.ProcessTaskTest do
         input_data: %{source: "test.csv", format: "csv"},
         timeout: 30_000,
         retry_attempts: 3,
-        circuit_breaker: false  # Disable for simpler testing
+        # Disable for simpler testing
+        circuit_breaker: false
       }
-      
+
       {:ok, result} = ProcessTask.run(params, %{})
-      
+
       assert result.task_id == "data_task"
       assert result.status == :completed
       assert is_map(result.result)
       assert Map.has_key?(result.result, :validation)
       assert Map.has_key?(result.result, :processed_data)
     end
-    
+
     test "processes validation tasks" do
       params = %{
         task_id: "validation_task",
@@ -130,15 +135,15 @@ defmodule JidoSystem.Actions.ProcessTaskTest do
         retry_attempts: 3,
         circuit_breaker: false
       }
-      
+
       {:ok, result} = ProcessTask.run(params, %{})
-      
+
       assert result.task_id == "validation_task"
       assert result.status == :completed
       assert Map.has_key?(result.result, :validation_results)
       assert result.result.status == :valid
     end
-    
+
     test "processes transformation tasks" do
       params = %{
         task_id: "transform_task",
@@ -154,9 +159,9 @@ defmodule JidoSystem.Actions.ProcessTaskTest do
         retry_attempts: 3,
         circuit_breaker: false
       }
-      
+
       {:ok, result} = ProcessTask.run(params, %{})
-      
+
       assert result.task_id == "transform_task"
       assert result.status == :completed
       assert Map.has_key?(result.result, :transformed_data)
@@ -164,7 +169,7 @@ defmodule JidoSystem.Actions.ProcessTaskTest do
       assert result.result.transformed_data.value == "HELLO"
       assert Map.has_key?(result.result.transformed_data, :transformed_at)
     end
-    
+
     test "processes analysis tasks" do
       params = %{
         task_id: "analysis_task",
@@ -181,15 +186,15 @@ defmodule JidoSystem.Actions.ProcessTaskTest do
         retry_attempts: 3,
         circuit_breaker: false
       }
-      
+
       {:ok, result} = ProcessTask.run(params, %{})
-      
+
       assert result.task_id == "analysis_task"
       assert result.status == :completed
       assert Map.has_key?(result.result, :record_count)
       assert Map.has_key?(result.result, :data_quality_score)
     end
-    
+
     test "processes notification tasks" do
       params = %{
         task_id: "notification_task",
@@ -203,15 +208,15 @@ defmodule JidoSystem.Actions.ProcessTaskTest do
         retry_attempts: 3,
         circuit_breaker: false
       }
-      
+
       {:ok, result} = ProcessTask.run(params, %{})
-      
+
       assert result.task_id == "notification_task"
       assert result.status == :completed
       assert result.result.sent_count == 2
       assert result.result.message == "Test notification"
     end
-    
+
     test "rejects unsupported task types" do
       params = %{
         task_id: "unsupported_task",
@@ -221,34 +226,35 @@ defmodule JidoSystem.Actions.ProcessTaskTest do
         retry_attempts: 3,
         circuit_breaker: false
       }
-      
+
       {:error, result} = ProcessTask.run(params, %{})
-      
+
       assert result.task_id == "unsupported_task"
       assert result.status == :failed
       assert match?({:retries_exhausted, {:unsupported_task_type, :unsupported_type}}, result.error)
     end
   end
-  
+
   describe "retry mechanism" do
     test "retries failed operations" do
       # Create a task that will fail initially but might succeed on retry
       params = %{
         task_id: "retry_task",
         task_type: :data_processing,
-        input_data: %{}, # Empty data should cause validation to fail
+        # Empty data should cause validation to fail
+        input_data: %{},
         timeout: 30_000,
         retry_attempts: 2,
         circuit_breaker: false
       }
-      
+
       {:error, result} = ProcessTask.run(params, %{})
-      
+
       # Should have attempted retries
       assert result.task_id == "retry_task"
       assert result.status == :failed
     end
-    
+
     test "succeeds without retries when task is valid" do
       params = %{
         task_id: "no_retry_needed",
@@ -258,25 +264,25 @@ defmodule JidoSystem.Actions.ProcessTaskTest do
         retry_attempts: 3,
         circuit_breaker: false
       }
-      
+
       {:ok, result} = ProcessTask.run(params, %{})
-      
+
       assert result.task_id == "no_retry_needed"
       assert result.status == :completed
     end
   end
-  
+
   describe "telemetry emission" do
     test "emits start and completion telemetry" do
       test_pid = self()
       ref = make_ref()
-      
+
       events = [
         [:jido_system, :task, :started],
         [:jido_system, :task, :completed],
         [:jido_system, :task, :processing]
       ]
-      
+
       :telemetry.attach_many(
         "test_task_telemetry",
         events,
@@ -285,7 +291,7 @@ defmodule JidoSystem.Actions.ProcessTaskTest do
         end,
         %{}
       )
-      
+
       params = %{
         task_id: "telemetry_task",
         task_type: :data_processing,
@@ -294,31 +300,31 @@ defmodule JidoSystem.Actions.ProcessTaskTest do
         retry_attempts: 3,
         circuit_breaker: false
       }
-      
+
       {:ok, _result} = ProcessTask.run(params, %{agent_id: "test_agent"})
-      
+
       # Should receive start telemetry
       assert_receive {^ref, [:jido_system, :task, :started], measurements, metadata}
       assert measurements.count == 1
       assert metadata.task_id == "telemetry_task"
       assert metadata.task_type == :data_processing
       assert metadata.agent_id == "test_agent"
-      
+
       # Should receive processing telemetry
       assert_receive {^ref, [:jido_system, :task, :processing], _, _}
-      
+
       # Should receive completion telemetry
       assert_receive {^ref, [:jido_system, :task, :completed], measurements, metadata}
       assert measurements.count == 1
       assert metadata.result == :success
-      
+
       :telemetry.detach("test_task_telemetry")
     end
-    
+
     test "emits failure telemetry on errors" do
       test_pid = self()
       ref = make_ref()
-      
+
       :telemetry.attach(
         "test_failure_telemetry",
         [:jido_system, :task, :failed],
@@ -327,7 +333,7 @@ defmodule JidoSystem.Actions.ProcessTaskTest do
         end,
         %{}
       )
-      
+
       params = %{
         task_id: "failure_task",
         task_type: :unsupported_type,
@@ -336,17 +342,17 @@ defmodule JidoSystem.Actions.ProcessTaskTest do
         retry_attempts: 3,
         circuit_breaker: false
       }
-      
+
       {:error, _result} = ProcessTask.run(params, %{})
-      
+
       assert_receive {^ref, :failed, measurements, metadata}
       assert measurements.count == 1
       assert metadata.task_id == "failure_task"
-      
+
       :telemetry.detach("test_failure_telemetry")
     end
   end
-  
+
   describe "circuit breaker integration" do
     test "uses circuit breaker when enabled" do
       params = %{
@@ -357,14 +363,14 @@ defmodule JidoSystem.Actions.ProcessTaskTest do
         timeout: 5000,
         retry_attempts: 3
       }
-      
+
       # Should complete successfully with circuit breaker
       {:ok, result} = ProcessTask.run(params, %{})
-      
+
       assert result.task_id == "circuit_breaker_task"
       assert result.status == :completed
     end
-    
+
     test "bypasses circuit breaker when disabled" do
       params = %{
         task_id: "no_circuit_breaker_task",
@@ -374,46 +380,48 @@ defmodule JidoSystem.Actions.ProcessTaskTest do
         retry_attempts: 3,
         circuit_breaker: false
       }
-      
+
       # Should complete successfully without circuit breaker
       {:ok, result} = ProcessTask.run(params, %{})
-      
+
       assert result.task_id == "no_circuit_breaker_task"
       assert result.status == :completed
     end
   end
-  
+
   describe "error handling" do
     test "handles crashes gracefully" do
       # This test would need to simulate a crash scenario
       # For now, we test that the action handles invalid input gracefully
       params = %{
-        task_id: nil,  # This should cause a crash
+        # This should cause a crash
+        task_id: nil,
         task_type: :data_processing,
         input_data: %{},
         timeout: 30_000,
         retry_attempts: 3,
         circuit_breaker: false
       }
-      
+
       {:error, error} = ProcessTask.run(params, %{})
-      
+
       assert match?({:validation_failed, _}, error)
     end
-    
+
     test "provides detailed error information" do
       params = %{
         task_id: "error_detail_task",
         task_type: :validation,
-        input_data: %{name: "test"},  # Valid input data to avoid crashes
+        # Valid input data to avoid crashes
+        input_data: %{name: "test"},
         options: %{},
         timeout: 30_000,
         retry_attempts: 3,
         circuit_breaker: false
       }
-      
+
       {:ok, result} = ProcessTask.run(params, %{})
-      
+
       assert result.task_id == "error_detail_task"
       assert result.status == :completed
       assert Map.has_key?(result, :result)
@@ -421,7 +429,7 @@ defmodule JidoSystem.Actions.ProcessTaskTest do
       assert Map.has_key?(result, :duration)
     end
   end
-  
+
   describe "performance and timing" do
     test "tracks execution duration" do
       params = %{
@@ -432,15 +440,15 @@ defmodule JidoSystem.Actions.ProcessTaskTest do
         retry_attempts: 3,
         circuit_breaker: false
       }
-      
+
       start_time = System.monotonic_time(:microsecond)
       {:ok, result} = ProcessTask.run(params, %{})
       end_time = System.monotonic_time(:microsecond)
-      
+
       assert result.duration > 0
-      assert result.duration <= (end_time - start_time)
+      assert result.duration <= end_time - start_time
     end
-    
+
     test "completes within reasonable time for simple tasks" do
       params = %{
         task_id: "timing_task",
@@ -450,9 +458,9 @@ defmodule JidoSystem.Actions.ProcessTaskTest do
         retry_attempts: 3,
         circuit_breaker: false
       }
-      
+
       {duration_microseconds, {:ok, result}} = :timer.tc(ProcessTask, :run, [params, %{}])
-      
+
       # Should complete within 1 second for simple tasks
       assert duration_microseconds < 1_000_000
       assert result.status == :completed
