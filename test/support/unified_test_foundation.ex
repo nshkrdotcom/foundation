@@ -229,14 +229,8 @@ defmodule Foundation.UnifiedTestFoundation do
   Starts a test-scoped signal router.
   """
   def start_test_signal_router(router_name) do
-    # For now, use a simple placeholder until we can reference the SignalRouter
-    # This will be enhanced in the actual implementation
-    {:ok, spawn(fn -> 
-      Process.register(self(), router_name)
-      receive do
-        :stop -> :ok
-      end
-    end)}
+    # Use the actual SignalRouter from the signal routing test
+    JidoFoundation.SignalRoutingTest.SignalRouter.start_link(name: router_name)
   end
   
   @doc """

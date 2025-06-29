@@ -1,6 +1,6 @@
 defmodule JidoFoundation.ActionRetryTest do
-  use ExUnit.Case, async: true
-  use Foundation.TestConfig, :registry
+  # Using registry isolation mode for Action Retry tests
+  use Foundation.UnifiedTestFoundation, :registry
 
   alias JidoFoundation.Bridge
 

@@ -1,29 +1,6 @@
 defmodule MABEAM.CoordinationTest do
-  use ExUnit.Case, async: false
-
-  # Shared setup for meck cleanup
-  defp setup_mocks(_context) do
-    # Clean up any existing mocks before each test
-    for module <- [MABEAM.Discovery, Foundation] do
-      try do
-        if :meck.validate(module), do: :meck.unload(module)
-      catch
-        _, _ -> :ok
-      end
-    end
-
-    on_exit(fn ->
-      for module <- [MABEAM.Discovery, Foundation] do
-        try do
-          if :meck.validate(module), do: :meck.unload(module)
-        catch
-          _, _ -> :ok
-        end
-      end
-    end)
-
-    :ok
-  end
+  # Using registry isolation mode for MABEAM Coordination tests with meck contamination prevention
+  use Foundation.UnifiedTestFoundation, :registry
 
   # Mock Foundation and Discovery for testing coordination logic
   defmodule MockFoundation do
@@ -117,17 +94,7 @@ defmodule MABEAM.CoordinationTest do
     end
   end
 
-  # Mock the Foundation and Discovery modules for these tests
-  setup do
-    # Store original modules if needed for cleanup
-    Process.put(:original_foundation, Foundation)
-    Process.put(:original_discovery, MABEAM.Discovery)
-
-    :ok
-  end
-
   describe "capability-based coordination" do
-    setup :setup_mocks
 
     test "coordinate_capable_agents starts consensus with capability filtering" do
       # Mock MABEAM.Discovery.find_capable_and_healthy
@@ -220,7 +187,6 @@ defmodule MABEAM.CoordinationTest do
   end
 
   describe "resource-based coordination" do
-    setup :setup_mocks
 
     test "coordinate_resource_allocation finds agents with sufficient resources" do
       :meck.new(MABEAM.Discovery, [:passthrough])
@@ -270,7 +236,6 @@ defmodule MABEAM.CoordinationTest do
   end
 
   describe "load balancing coordination" do
-    setup :setup_mocks
 
     test "coordinate_load_balancing analyzes load and starts rebalancing" do
       :meck.new(MABEAM.Discovery, [:passthrough])
@@ -366,7 +331,6 @@ defmodule MABEAM.CoordinationTest do
   end
 
   describe "capability transition coordination" do
-    setup :setup_mocks
 
     test "coordinate_capability_transition selects least loaded agents" do
       :meck.new(MABEAM.Discovery, [:passthrough])
@@ -423,7 +387,6 @@ defmodule MABEAM.CoordinationTest do
   end
 
   describe "capability-based barrier creation" do
-    setup :setup_mocks
 
     test "create_capability_barrier creates barrier for capable agents" do
       :meck.new(MABEAM.Discovery, [:passthrough])
@@ -497,7 +460,6 @@ defmodule MABEAM.CoordinationTest do
   end
 
   describe "allocation strategy implementation" do
-    setup :setup_mocks
 
     test "greedy strategy selects agents with most available resources" do
       # Test the internal allocation strategy logic through resource coordination
@@ -534,7 +496,6 @@ defmodule MABEAM.CoordinationTest do
   end
 
   describe "error handling and edge cases" do
-    setup :setup_mocks
 
     test "handles Foundation consensus failures gracefully" do
       :meck.new(MABEAM.Discovery, [:passthrough])
@@ -608,7 +569,6 @@ defmodule MABEAM.CoordinationTest do
   end
 
   describe "logging and observability" do
-    setup :setup_mocks
 
     test "logs coordination activities appropriately" do
       # Capture log messages during coordination

@@ -1,5 +1,6 @@
 defmodule Foundation.ResourceManagerTest do
-  use ExUnit.Case, async: false
+  # Using registry isolation mode for Foundation ResourceManager tests
+  use Foundation.UnifiedTestFoundation, :registry
 
   alias Foundation.ResourceManager
 

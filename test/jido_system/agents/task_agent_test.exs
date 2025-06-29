@@ -1,6 +1,6 @@
 defmodule JidoSystem.Agents.TaskAgentTest do
-  use ExUnit.Case, async: false
-  use Foundation.TestConfig, :registry
+  # Using registry isolation mode for TaskAgent tests with comprehensive telemetry cleanup
+  use Foundation.UnifiedTestFoundation, :registry
 
   alias JidoSystem.Agents.TaskAgent
   alias JidoSystem.Actions.{ProcessTask, QueueTask}

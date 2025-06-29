@@ -1,6 +1,6 @@
 defmodule JidoFoundation.SignalIntegrationTest do
-  use ExUnit.Case, async: true
-  use Foundation.TestConfig, :registry
+  # Using registry isolation mode for signal integration tests
+  use Foundation.UnifiedTestFoundation, :registry
 
   alias JidoFoundation.Bridge
 

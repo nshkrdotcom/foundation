@@ -1,7 +1,6 @@
 defmodule JidoFoundation.SignalRoutingTest do
-  # Global signal router state requires synchronous execution
-  use ExUnit.Case, async: false
-  use Foundation.TestConfig, :registry
+  # Using signal routing isolation mode for comprehensive isolation
+  use Foundation.UnifiedTestFoundation, :signal_routing
 
   alias JidoFoundation.Bridge
 
@@ -164,33 +163,7 @@ defmodule JidoFoundation.SignalRoutingTest do
   end
 
   describe "Jido.Signal routing through Foundation.Telemetry" do
-    setup do
-      # Use existing Foundation.TestConfig pattern for reliability
-      # This creates an isolated registry that works well
-      test_id = :erlang.unique_integer([:positive])
-      
-      # Create test-scoped signal router with unique name to avoid conflicts
-      test_router_name = :"test_signal_router_#{test_id}"
-      {:ok, router_pid} = SignalRouter.start_link(name: test_router_name)
-
-      on_exit(fn ->
-        # Clean up signal router and its telemetry handlers
-        try do
-          if Process.alive?(router_pid) do
-            {:ok, state} = GenServer.call(router_pid, :get_state)
-            :telemetry.detach(state.telemetry_handler_id)
-            GenServer.stop(router_pid)
-          end
-        catch
-          # If router is already dead, handler was already cleaned up
-          _, _ -> :ok
-        end
-      end)
-
-      {:ok, router: router_pid, test_id: test_id}
-    end
-
-    test "routes signals to subscribed handlers by type", %{registry: registry, router: router, test_id: test_id} do
+    test "routes signals to subscribed handlers by type", %{registry: registry, signal_router: router, test_context: ctx} do
       # Create signal handlers
       {:ok, handler1} = SignalHandler.start_link("handler1")
       {:ok, handler2} = SignalHandler.start_link("handler2")
@@ -304,7 +277,7 @@ defmodule JidoFoundation.SignalRoutingTest do
       assert hd(handler3_signals).type == "error.validation"
     end
 
-    test "supports dynamic subscription management", %{registry: registry, router: router} do
+    test "supports dynamic subscription management", %{registry: registry, signal_router: router, test_context: ctx} do
       {:ok, handler} = SignalHandler.start_link("dynamic_handler")
       {:ok, agent} = Task.start_link(fn -> :timer.sleep(:infinity) end)
 
@@ -379,7 +352,7 @@ defmodule JidoFoundation.SignalRoutingTest do
       assert length(signals) == 1
     end
 
-    test "emits routing telemetry events", %{registry: registry, router: router} do
+    test "emits routing telemetry events", %{registry: registry, signal_router: router, test_context: ctx} do
       test_pid = self()
 
       # Attach telemetry handler for routing events
@@ -422,7 +395,7 @@ defmodule JidoFoundation.SignalRoutingTest do
       assert metadata.handlers == [handler]
     end
 
-    test "handles signal routing errors gracefully", %{registry: registry, router: router} do
+    test "handles signal routing errors gracefully", %{registry: registry, signal_router: router, test_context: ctx} do
       # Create a dead handler process
       dead_handler = spawn(fn -> :ok end)
       ref = Process.monitor(dead_handler)
@@ -451,7 +424,7 @@ defmodule JidoFoundation.SignalRoutingTest do
       assert Process.alive?(router)
     end
 
-    test "supports wildcard signal subscriptions", %{registry: registry, router: router} do
+    test "supports wildcard signal subscriptions", %{registry: registry, signal_router: router, test_context: ctx} do
       {:ok, wildcard_handler} = SignalHandler.start_link("wildcard_handler")
       {:ok, specific_handler} = SignalHandler.start_link("specific_handler")
       {:ok, agent} = Task.start_link(fn -> :timer.sleep(:infinity) end)

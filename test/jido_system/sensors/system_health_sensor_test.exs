@@ -1,5 +1,6 @@
 defmodule JidoSystem.Sensors.SystemHealthSensorTest do
-  use ExUnit.Case, async: false
+  # Using registry isolation mode for SystemHealthSensor tests with comprehensive cleanup
+  use Foundation.UnifiedTestFoundation, :registry
 
   alias JidoSystem.Sensors.SystemHealthSensor
   alias Jido.Signal

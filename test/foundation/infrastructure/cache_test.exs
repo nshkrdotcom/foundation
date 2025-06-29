@@ -1,5 +1,6 @@
 defmodule Foundation.Infrastructure.CacheTest do
-  use ExUnit.Case, async: false
+  # Using registry isolation mode for Foundation Infrastructure Cache tests
+  use Foundation.UnifiedTestFoundation, :registry
   alias Foundation.Infrastructure.Cache
 
   describe "basic cache operations" do

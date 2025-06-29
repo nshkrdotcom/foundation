@@ -1,6 +1,6 @@
 defmodule JidoSystem.Agents.FoundationAgentTest do
-  use ExUnit.Case, async: false
-  use Foundation.TestConfig, :registry
+  # Using registry isolation mode for FoundationAgent tests
+  use Foundation.UnifiedTestFoundation, :registry
 
   alias JidoSystem.Agents.FoundationAgent
 
