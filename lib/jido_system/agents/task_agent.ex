@@ -127,12 +127,9 @@ defmodule JidoSystem.Agents.TaskAgent do
     case super(agent, result, directives) do
       {:ok, updated_agent} ->
         # Update task-specific metrics based on result
+        # Note: State modifications like queue updates and status changes are now handled by directives
         new_state =
           case result do
-            %{updated_queue: updated_queue} ->
-              # Handle QueueTask result - update the queue
-              %{updated_agent.state | status: :idle, task_queue: updated_queue, current_task: nil}
-
             %{status: :completed, duration: duration} = result_map ->
               # Handle ProcessTask successful result with metrics update
               new_metrics =
@@ -159,9 +156,17 @@ defmodule JidoSystem.Agents.TaskAgent do
                   current_task: nil
               }
 
+            %{queued: true} ->
+              # Handle QueueTask result - directives handle queue update, just clear current_task
+              %{updated_agent.state | current_task: nil}
+
             %{status: :paused} ->
-              # Handle PauseProcessing result
-              %{updated_agent.state | status: :paused, current_task: nil}
+              # Handle PauseProcessing result - directive handles status, just clear current_task
+              %{updated_agent.state | current_task: nil}
+
+            %{status: :idle} ->
+              # Handle ResumeProcessing result - directive handles status, just clear current_task  
+              %{updated_agent.state | current_task: nil}
 
             %{} ->
               # Generic success case
@@ -246,11 +251,26 @@ defmodule JidoSystem.Agents.TaskAgent do
     try do
       start_time = System.monotonic_time(:microsecond)
 
-      # Validate task
-      case ValidateTask.run(task_params, %{}) do
+      # Create validate task instruction
+      validate_instruction = Jido.Instruction.new!(%{
+        action: ValidateTask,
+        params: task_params
+      })
+
+      # Validate task using Jido.Exec for consistent execution
+      case Jido.Exec.run(ValidateTask, task_params, %{}) do
         {:ok, validated_task} ->
-          # Process the task
-          result = ProcessTask.run(validated_task, %{agent_id: agent.id})
+          # Create process task instruction
+          process_instruction = Jido.Instruction.new!(%{
+            action: ProcessTask,
+            params: validated_task
+          })
+
+          # Process the task using Jido.Exec for consistent execution
+          result = case Jido.Exec.run(ProcessTask, validated_task, %{agent_id: agent.id}) do
+            {:ok, task_result} -> task_result
+            {:error, _} = error -> error
+          end
 
           # Update performance metrics
           end_time = System.monotonic_time(:microsecond)

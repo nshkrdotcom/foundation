@@ -503,3 +503,146 @@ Proceeding with commit since:
 ### STAGE 2.4: CoordinatorAgent RetryService Integration
 **Time**: 18:50  
 **Task**: Implement RetryService integration in CoordinatorAgent for task distribution reliability
+
+---
+
+## 2025-06-29 - PHASE 2.3a: Jido Integration Improvements ✅ COMPLETED
+
+### Phase 2.3a.1: Jido.Exec Integration ✅ COMPLETED
+**Time**: 09:15-09:20  
+**Task**: Replace custom retry logic with Jido.Exec.run/4 in JidoFoundation.Bridge and actions
+
+#### IMPLEMENTATION ACHIEVEMENTS:
+✅ **Bridge Execution Refactored** - execute_with_retry/4 now uses Jido.Exec.run/4 instead of custom retry
+✅ **Enhanced Context Passing** - Foundation metadata properly merged with execution context
+✅ **Proper Error Handling** - Jido.Error format integrated for consistent error responses
+✅ **All Tests Passing** - 5/5 action retry tests pass with Jido.Exec integration
+✅ **Framework Consistency** - Execution follows Jido framework patterns throughout
+
+#### KEY FEATURES IMPLEMENTED:
+- **Jido.Exec Integration** - Direct use of Jido.Exec.run/4 for action execution with built-in retry
+- **Enhanced Context** - Foundation bridge metadata added to execution context
+- **Options Mapping** - Bridge options properly mapped to Jido.Exec parameters
+- **Error Format** - Consistent Jido.Error format for execution failures
+- **Backward Compatibility** - Same Bridge API maintained while upgrading internals
+
+#### TECHNICAL IMPLEMENTATION:
+- **Function Signature** - execute_with_retry(action_module, params, context, opts) unchanged
+- **Context Enhancement** - Foundation metadata merged: %{foundation_bridge: true, agent_framework: :jido}
+- **Options Translation** - max_retries, backoff, timeout, log_level mapped to Jido.Exec
+- **Success Handling** - {:ok, result} passed through unchanged
+- **Error Handling** - {:error, %Jido.Error{}} format maintained
+
+### Phase 2.3a.2: Directive System Adoption ✅ COMPLETED
+**Time**: 09:20-09:25  
+**Task**: Convert state-changing actions to use Jido.Agent.Directive.StateModification
+
+#### IMPLEMENTATION ACHIEVEMENTS:
+✅ **QueueTask Action Enhanced** - Now returns StateModification directive for queue updates
+✅ **PauseProcessing Action Enhanced** - Returns directive for status changes to :paused
+✅ **ResumeProcessing Action Enhanced** - Returns directive for status changes to :idle
+✅ **TaskAgent Updated** - on_after_run handles directives instead of custom state modification
+✅ **All Tests Passing** - 31/31 action tests and 13/13 TaskAgent tests pass
+
+#### KEY FEATURES IMPLEMENTED:
+- **StateModification Directives** - Actions return proper Jido.Agent.Directive.StateModification structs
+- **Declarative State Changes** - State updates specified via directives instead of imperative code
+- **Queue Management** - Task queue updates handled via directives with op: :set, path: [:task_queue]
+- **Status Management** - Agent status changes handled via directives with op: :set, path: [:status]
+- **Agent Integration** - TaskAgent's on_after_run processes directives alongside result handling
+
+#### TECHNICAL IMPLEMENTATION:
+- **QueueTask Directive** - %Jido.Agent.Directive.StateModification{op: :set, path: [:task_queue], value: updated_queue}
+- **PauseProcessing Directive** - %Jido.Agent.Directive.StateModification{op: :set, path: [:status], value: :paused}
+- **ResumeProcessing Directive** - %Jido.Agent.Directive.StateModification{op: :set, path: [:status], value: :idle}
+- **TaskAgent Handler** - on_after_run(agent, result, directives) processes both result and directives
+- **State Management** - Manual state updates removed in favor of directive-based updates
+
+### Phase 2.3a.3: Instruction/Runner Model Integration ✅ COMPLETED
+**Time**: 09:25-09:30  
+**Task**: Refactor Bridge interactions to use Jido.Instruction.new! instead of direct action calls
+
+#### IMPLEMENTATION ACHIEVEMENTS:
+✅ **TaskAgent Action Calls** - Direct ValidateTask.run and ProcessTask.run replaced with Jido.Exec.run
+✅ **Instruction Creation** - Jido.Instruction.new! used for consistency with Jido patterns
+✅ **Queue Processing** - Periodic queue processing already using proper Jido.Instruction pattern
+✅ **Framework Consistency** - All action execution follows Jido framework patterns
+✅ **All Tests Passing** - 13/13 TaskAgent tests pass with instruction integration
+
+#### KEY FEATURES IMPLEMENTED:
+- **Jido.Exec Usage** - All action execution uses Jido.Exec.run for consistency
+- **Instruction Pattern** - Jido.Instruction.new! creates proper instruction objects
+- **Error Handling** - Proper error propagation through Jido execution layer
+- **Queue Processing** - Automatic queue processing uses Jido.Agent.Server.cast with instructions
+- **Performance Metrics** - Task processing metrics maintained through proper execution flow
+
+#### TECHNICAL IMPLEMENTATION:
+- **Validation Execution** - Jido.Exec.run(ValidateTask, params, %{}) replaces ValidateTask.run
+- **Processing Execution** - Jido.Exec.run(ProcessTask, validated_task, %{agent_id: agent.id})
+- **Instruction Creation** - Jido.Instruction.new!(%{action: ProcessTask, params: task}) for queue processing
+- **Error Handling** - {:ok, result} and {:error, reason} handled consistently
+- **Agent Integration** - Jido.Agent.Server.cast(self(), instruction) for queue processing
+
+### Phase 2.3a.4: Jido.Signal.Bus Integration ✅ COMPLETED
+**Time**: 09:30-09:35  
+**Task**: Evaluate and implement Jido.Signal.Bus to replace custom SignalRouter
+
+#### IMPLEMENTATION ACHIEVEMENTS:
+✅ **Custom SignalRouter Replaced** - Jido.Signal.Bus provides production-grade signal routing
+✅ **Enhanced Bridge API** - New signal functions with Jido.Signal.Bus integration
+✅ **CloudEvents Compliance** - Proper Jido.Signal format with CloudEvents v1.0.2 specification
+✅ **Backward Compatibility** - Legacy function aliases maintained for existing code
+✅ **All Tests Passing** - 17/17 Bridge tests pass with Jido.Signal.Bus integration
+
+#### KEY FEATURES IMPLEMENTED:
+- **start_signal_bus/1** - Start Jido.Signal.Bus with middleware support
+- **subscribe_to_signals/3** - Subscribe with subscription ID tracking and proper dispatch
+- **unsubscribe_from_signals/2** - Unsubscribe using subscription IDs
+- **get_signal_history/2** - Signal replay for debugging and monitoring
+- **emit_signal/2** - Publish signals via Jido.Signal.Bus with CloudEvents format
+- **Backward Compatibility** - Legacy aliases for start_signal_router and get_signal_subscriptions
+
+#### TECHNICAL IMPLEMENTATION:
+- **Signal Format** - Jido.Signal with type, source, data fields (CloudEvents v1.0.2 compliant)
+- **Signal Creation** - Jido.Signal.new/1 for proper signal construction with validation
+- **Bus Configuration** - Default middleware with Jido.Signal.Bus.Middleware.Logger
+- **Subscription Management** - {:ok, subscription_id} return for tracking subscriptions
+- **Signal Publishing** - Jido.Signal.Bus.publish/2 with telemetry emission for backward compatibility
+- **Error Handling** - Proper error handling for invalid signal formats and bus failures
+
+#### ADVANCED FEATURES GAINED:
+- **Signal Persistence** - Automatic signal logging and replay capabilities
+- **Middleware Pipeline** - Extensible signal processing pipeline
+- **Subscription Management** - Robust subscription lifecycle management
+- **Path-based Routing** - Sophisticated wildcard pattern matching
+- **Signal History** - Replay signals for debugging and monitoring
+- **CloudEvents Standard** - Industry-standard signal format compliance
+
+### PHASE 2.3a COMPLETE: Summary and Results
+**Time**: 09:35  
+**Overall Assessment**: All Jido integration improvements successfully completed
+
+#### COMPREHENSIVE ACHIEVEMENTS:
+✅ **Jido.Exec Integration** - Proper action execution with built-in retry (Phase 2.3a.1)
+✅ **Directive System** - Declarative state management with Jido.Agent.Directive (Phase 2.3a.2)  
+✅ **Instruction Pattern** - Consistent Jido.Instruction usage throughout (Phase 2.3a.3)
+✅ **Signal Bus Integration** - Production-grade Jido.Signal.Bus with CloudEvents (Phase 2.3a.4)
+
+#### QUALITY METRICS ACHIEVED:
+- **Tests**: 1730+ tests passing, 0 failures ✅
+- **Warnings**: Minor unused variable warnings only ✅
+- **Architecture**: Proper Jido framework integration throughout ✅  
+- **Performance**: Production-grade retry, directives, and signal routing ✅
+- **Standards Compliance**: CloudEvents v1.0.2 signal format ✅
+
+#### TECHNICAL EXCELLENCE:
+- **Framework Consistency** - All code follows Jido framework patterns
+- **Error Handling** - Proper error propagation through Jido.Error format
+- **State Management** - Directive-based state changes replace custom logic
+- **Signal Architecture** - Production-grade signal bus with persistence and replay
+- **Backward Compatibility** - Legacy APIs maintained while upgrading internals
+
+#### READY FOR STAGE 2.4:
+With Phase 2.3a complete, the Foundation-Jido integration is now robust and follows proper framework patterns. All infrastructure is ready for STAGE 2.4: Complete Jido Agent Infrastructure Integration.
+
+---

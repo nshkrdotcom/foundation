@@ -83,7 +83,7 @@ defmodule MABEAM.Discovery do
   - Typical performance: 10-50 microseconds vs 1-10 milliseconds
   """
   @spec find_capable_and_healthy(capability :: atom(), impl :: term() | nil) ::
-          list({agent_id :: term(), pid(), metadata :: map()})
+          {:ok, list({agent_id :: term(), pid(), metadata :: map()})} | {:error, term()}
   def find_capable_and_healthy(capability, impl \\ nil) do
     criteria = [
       {[:capability], capability, :eq},
@@ -92,11 +92,11 @@ defmodule MABEAM.Discovery do
 
     case Foundation.query(criteria, impl) do
       {:ok, agents} ->
-        agents
+        {:ok, agents}
 
       {:error, reason} ->
         Logger.warning("Failed to find capable and healthy agents: #{inspect(reason)}")
-        []
+        {:error, reason}
     end
   end
 
@@ -116,7 +116,7 @@ defmodule MABEAM.Discovery do
       agents = MABEAM.Discovery.find_agents_with_resources(0.5, 0.3)
   """
   @spec find_agents_with_resources(min_memory :: float(), min_cpu :: float(), impl :: term() | nil) ::
-          list({agent_id :: term(), pid(), metadata :: map()})
+          {:ok, list({agent_id :: term(), pid(), metadata :: map()})} | {:error, term()}
   def find_agents_with_resources(min_memory, min_cpu, impl \\ nil) do
     criteria = [
       {[:resources, :memory_available], min_memory, :gte},
@@ -126,11 +126,11 @@ defmodule MABEAM.Discovery do
 
     case Foundation.query(criteria, impl) do
       {:ok, agents} ->
-        agents
+        {:ok, agents}
 
       {:error, reason} ->
         Logger.warning("Failed to find agents with resources: #{inspect(reason)}")
-        []
+        {:error, reason}
     end
   end
 
@@ -158,7 +158,7 @@ defmodule MABEAM.Discovery do
           min_cpu :: float(),
           impl :: term() | nil
         ) ::
-          list({agent_id :: term(), pid(), metadata :: map()})
+          {:ok, list({agent_id :: term(), pid(), metadata :: map()})} | {:error, term()}
   def find_capable_agents_with_resources(capability, min_memory, min_cpu, impl \\ nil) do
     criteria = [
       {[:capability], capability, :eq},
@@ -169,11 +169,11 @@ defmodule MABEAM.Discovery do
 
     case Foundation.query(criteria, impl) do
       {:ok, agents} ->
-        agents
+        {:ok, agents}
 
       {:error, reason} ->
         Logger.warning("Failed to find capable agents with resources: #{inspect(reason)}")
-        []
+        {:error, reason}
     end
   end
 
@@ -192,7 +192,7 @@ defmodule MABEAM.Discovery do
       agents = MABEAM.Discovery.find_agents_by_multiple_capabilities([:inference, :training])
   """
   @spec find_agents_by_multiple_capabilities(capabilities :: [atom()], impl :: term() | nil) ::
-          list({agent_id :: term(), pid(), metadata :: map()})
+          {:ok, list({agent_id :: term(), pid(), metadata :: map()})} | {:error, term()}
   def find_agents_by_multiple_capabilities(capabilities, impl \\ nil) when is_list(capabilities) do
     criteria =
       Enum.map(capabilities, fn capability ->
@@ -201,11 +201,11 @@ defmodule MABEAM.Discovery do
 
     case Foundation.query(criteria, impl) do
       {:ok, agents} ->
-        agents
+        {:ok, agents}
 
       {:error, reason} ->
         Logger.warning("Failed to find agents with multiple capabilities: #{inspect(reason)}")
-        []
+        {:error, reason}
     end
   end
 
@@ -222,7 +222,7 @@ defmodule MABEAM.Discovery do
       agents = MABEAM.Discovery.find_agents_by_resource_range({0.0, 0.3}, {0.0, 0.3})
   """
   @spec find_agents_by_resource_range({float(), float()}, {float(), float()}, impl :: term() | nil) ::
-          list({agent_id :: term(), pid(), metadata :: map()})
+          {:ok, list({agent_id :: term(), pid(), metadata :: map()})} | {:error, term()}
   def find_agents_by_resource_range({min_mem, max_mem}, {min_cpu, max_cpu}, impl \\ nil) do
     criteria = [
       {[:resources, :memory_usage], min_mem, :gte},
@@ -234,11 +234,11 @@ defmodule MABEAM.Discovery do
 
     case Foundation.query(criteria, impl) do
       {:ok, agents} ->
-        agents
+        {:ok, agents}
 
       {:error, reason} ->
         Logger.warning("Failed to find agents by resource range: #{inspect(reason)}")
-        []
+        {:error, reason}
     end
   end
 
@@ -389,10 +389,10 @@ defmodule MABEAM.Discovery do
           list({agent_id :: term(), pid(), metadata :: map()})
   def find_least_loaded_agents(capability, count \\ 5, impl \\ nil) do
     case find_capable_and_healthy(capability, impl) do
-      [] ->
+      {:ok, []} ->
         []
 
-      agents ->
+      {:ok, agents} ->
         agents
         |> Enum.sort_by(fn {_id, _pid, metadata} ->
           resources = Map.get(metadata, :resources, %{})
@@ -402,6 +402,9 @@ defmodule MABEAM.Discovery do
           memory_usage + cpu_usage
         end)
         |> Enum.take(count)
+
+      {:error, _reason} ->
+        []
     end
   end
 
@@ -413,7 +416,7 @@ defmodule MABEAM.Discovery do
   Testing helper: find capable and healthy with explicit implementation.
   """
   @spec find_capable_and_healthy_with_explicit_impl(capability :: atom(), impl :: term()) ::
-          list({agent_id :: term(), pid(), metadata :: map()})
+          {:ok, list({agent_id :: term(), pid(), metadata :: map()})} | {:error, term()}
   def find_capable_and_healthy_with_explicit_impl(capability, impl) do
     find_capable_and_healthy(capability, impl)
   end

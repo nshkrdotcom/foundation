@@ -236,7 +236,9 @@ defmodule Foundation.Services.RetryService do
   end
 
   defp get_retry_policy(:immediate, max_retries) do
-    policy = constant_backoff(0) |> Stream.take(max_retries)
+    # Use 1ms delay instead of 0 to respect ElixirRetry's pos_integer contract
+    # This maintains "immediate" retry semantics while being library-compliant
+    policy = constant_backoff(1) |> Stream.take(max_retries)
     {:ok, policy}
   end
 

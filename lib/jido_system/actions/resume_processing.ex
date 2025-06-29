@@ -14,12 +14,18 @@ defmodule JidoSystem.Actions.ResumeProcessing do
     state = Map.get(context, :state, %{})
     previous_status = Map.get(state, :status)
 
-    # Return the result indicating resume was requested
+    # Return result with StateModification directive to resume the agent
+    status_directive = %Jido.Agent.Directive.StateModification{
+      op: :set,
+      path: [:status],
+      value: :idle
+    }
+
     {:ok,
      %{
        status: :idle,
        previous_status: previous_status,
        resumed_at: DateTime.utc_now()
-     }}
+     }, status_directive}
   end
 end

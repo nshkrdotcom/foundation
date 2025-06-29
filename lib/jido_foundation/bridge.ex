@@ -172,106 +172,62 @@ defmodule JidoFoundation.Bridge do
   end
 
   @doc """
-  Executes a Jido action with retry logic and Foundation infrastructure support.
+  Executes a Jido action with retry logic using Jido.Exec.
+
+  This function replaces custom retry logic with Jido's built-in retry mechanism
+  for better integration and consistency with the Jido framework.
 
   ## Options
 
   - `:max_retries` - Maximum number of retry attempts (default: 3)
-  - `:backoff_strategy` - Backoff strategy `:exponential` or `:linear` (default: `:exponential`)
-  - `:base_delay` - Base delay in milliseconds (default: 100)
-  - `:max_delay` - Maximum delay in milliseconds (default: 30_000)
-  - `:retryable_errors` - List of error atoms that should trigger retries (default: all errors)
-  - `:timeout` - Action timeout in milliseconds
-  - `:service_id` - Circuit breaker identifier (defaults to agent PID)
+  - `:backoff` - Initial backoff time in milliseconds (default: 250)
+  - `:timeout` - Action timeout in milliseconds (default: 30_000)
+  - `:log_level` - Log level for the execution (default: :info)
 
   ## Examples
 
-      JidoFoundation.Bridge.execute_with_retry(agent, fn ->
-        Jido.Action.execute(agent, :flaky_action, params)
-      end, max_retries: 3, backoff_strategy: :exponential)
+      # Execute action with default retry settings
+      JidoFoundation.Bridge.execute_with_retry(action_module, params, context)
+
+      # Execute with custom retry settings
+      JidoFoundation.Bridge.execute_with_retry(
+        action_module, 
+        params, 
+        context,
+        max_retries: 5, 
+        backoff: 500
+      )
   """
-  def execute_with_retry(agent_pid, action_fun, opts \\ []) when is_function(action_fun, 0) do
-    retry_config = %{
+  def execute_with_retry(action_module, params \\ %{}, context \\ %{}, opts \\ []) do
+    # Enhance context with Foundation metadata
+    enhanced_context = Map.merge(context, %{
+      foundation_bridge: true,
+      agent_framework: :jido,
+      timestamp: System.system_time(:microsecond)
+    })
+
+    # Extract Jido.Exec options
+    exec_opts = [
       max_retries: Keyword.get(opts, :max_retries, 3),
-      backoff_strategy: Keyword.get(opts, :backoff_strategy, :exponential),
-      base_delay: Keyword.get(opts, :base_delay, 100),
-      max_delay: Keyword.get(opts, :max_delay, 30_000),
-      retryable_errors: Keyword.get(opts, :retryable_errors, :all),
-      service_id: Keyword.get(opts, :service_id, {:jido_agent_retry, agent_pid})
-    }
+      backoff: Keyword.get(opts, :backoff, 250),
+      timeout: Keyword.get(opts, :timeout, 30_000),
+      log_level: Keyword.get(opts, :log_level, :info)
+    ]
 
-    do_execute_with_retry(agent_pid, action_fun, 1, retry_config)
-  end
-
-  defp do_execute_with_retry(agent_pid, action_fun, attempt, retry_config) do
-    # Execute the action with circuit breaker protection
-    result = execute_protected(agent_pid, action_fun, service_id: retry_config.service_id)
-
-    case result do
-      {:ok, _} = success ->
+    # Use Jido.Exec for proper action execution with built-in retry
+    case Jido.Exec.run(action_module, params, enhanced_context, exec_opts) do
+      {:ok, result} = success ->
+        Logger.debug("Jido action executed successfully via Bridge", 
+          action: action_module, result: inspect(result))
         success
 
-      {:error, reason} when attempt < retry_config.max_retries ->
-        handle_retry_attempt(agent_pid, action_fun, attempt, retry_config, reason, result)
-
-      error ->
-        # Max retries exceeded or other error
-        Logger.warning(
-          "Max retries exceeded for agent #{inspect(agent_pid)}, " <>
-            "final result: #{inspect(error)}"
-        )
-
+      {:error, reason} = error ->
+        Logger.warning("Jido action failed after retries via Bridge", 
+          action: action_module, reason: inspect(reason))
         error
     end
   end
 
-  defp handle_retry_attempt(agent_pid, action_fun, attempt, retry_config, reason, result) do
-    # Check if this error is retryable
-    if should_retry?(reason, retry_config.retryable_errors) do
-      # Calculate delay
-      delay =
-        calculate_delay(
-          attempt,
-          retry_config.backoff_strategy,
-          retry_config.base_delay,
-          retry_config.max_delay
-        )
-
-      # Log retry attempt
-      Logger.info(
-        "Retrying Jido action for agent #{inspect(agent_pid)}, " <>
-          "attempt #{attempt}/#{retry_config.max_retries}, delay: #{delay}ms"
-      )
-
-      # Wait before retry (this is acceptable in the retry mechanism)
-      if delay > 0, do: Process.sleep(delay)
-
-      # Recursive retry
-      do_execute_with_retry(agent_pid, action_fun, attempt + 1, retry_config)
-    else
-      # Non-retryable error, return immediately
-      Logger.info("Non-retryable error for agent #{inspect(agent_pid)}: #{inspect(reason)}")
-      result
-    end
-  end
-
-  defp should_retry?(_reason, :all), do: true
-
-  defp should_retry?(reason, retryable_errors) when is_list(retryable_errors) do
-    reason in retryable_errors
-  end
-
-  defp calculate_delay(attempt, :exponential, base_delay, max_delay) do
-    # Exponential backoff: base_delay * 2^(attempt-1)
-    delay = base_delay * :math.pow(2, attempt - 1)
-    min(trunc(delay), max_delay)
-  end
-
-  defp calculate_delay(attempt, :linear, base_delay, max_delay) do
-    # Linear backoff: base_delay * attempt
-    delay = base_delay * attempt
-    min(delay, max_delay)
-  end
 
   @doc """
   Sets up monitoring for a Jido agent.
@@ -466,76 +422,220 @@ defmodule JidoFoundation.Bridge do
   # Signal integration and routing functions
 
   @doc """
-  Starts the signal routing system for Jido signals.
+  Starts the Jido signal bus for Foundation agents.
 
-  This creates a global signal router that listens to all Jido signal
-  telemetry events and routes them to subscribed handlers.
+  The signal bus provides production-grade signal routing for Jido agents
+  with features like persistence, replay, and middleware support.
+
+  ## Options
+
+  - `:name` - Bus name (default: `:foundation_signal_bus`)
+  - `:middleware` - List of middleware modules (default: logger middleware)
 
   ## Examples
 
-      {:ok, router_pid} = Bridge.start_signal_router()
+      {:ok, bus_pid} = Bridge.start_signal_bus()
+      {:ok, bus_pid} = Bridge.start_signal_bus(name: :my_bus, middleware: [{MyMiddleware, []}])
+  """
+  def start_signal_bus(opts \\ []) do
+    name = Keyword.get(opts, :name, :foundation_signal_bus)
+    middleware = Keyword.get(opts, :middleware, [{Jido.Signal.Bus.Middleware.Logger, []}])
+    
+    # Start Jido Signal Bus with Foundation-specific configuration
+    Jido.Signal.Bus.start_link([
+      name: name,
+      middleware: middleware
+    ] ++ Keyword.drop(opts, [:name, :middleware]))
+  end
+
+  @doc """
+  Subscribes a handler to receive signals matching a specific path pattern.
+
+  Uses Jido.Signal.Bus path patterns, which support wildcards and more
+  sophisticated routing than the previous custom SignalRouter.
+
+  ## Examples
+
+      # Subscribe to exact signal type  
+      {:ok, subscription_id} = Bridge.subscribe_to_signals("agent.task.completed", handler_pid)
+
+      # Subscribe to all task signals
+      {:ok, subscription_id} = Bridge.subscribe_to_signals("agent.task.*", handler_pid)
+
+      # Subscribe to all agent signals
+      {:ok, subscription_id} = Bridge.subscribe_to_signals("agent.*", handler_pid)
+
+  ## Returns
+
+  - `{:ok, subscription_id}` - Unique subscription identifier for unsubscribing
+  - `{:error, reason}` - If subscription fails
+  """
+  def subscribe_to_signals(signal_path, handler_pid, opts \\ []) do
+    bus_name = Keyword.get(opts, :bus, :foundation_signal_bus)
+    
+    # Configure dispatch to the handler process  
+    dispatch_opts = [
+      dispatch: {:pid, [target: handler_pid, delivery_mode: :async]}
+    ]
+    
+    subscription_opts = Keyword.merge(dispatch_opts, Keyword.drop(opts, [:bus]))
+    
+    Jido.Signal.Bus.subscribe(bus_name, signal_path, subscription_opts)
+  end
+
+  @doc """
+  Unsubscribes a handler from receiving signals using the subscription ID.
+
+  ## Examples
+
+      {:ok, subscription_id} = Bridge.subscribe_to_signals("agent.task.*", handler_pid)
+      :ok = Bridge.unsubscribe_from_signals(subscription_id)
+  """
+  def unsubscribe_from_signals(subscription_id, opts \\ []) do
+    bus_name = Keyword.get(opts, :bus, :foundation_signal_bus)
+    Jido.Signal.Bus.unsubscribe(bus_name, subscription_id)
+  end
+
+  @doc """
+  Gets signal replay from the bus for debugging and monitoring.
+
+  ## Examples
+
+      # Get all recent signals
+      {:ok, signals} = Bridge.get_signal_history()
+
+      # Get signals matching a specific path
+      {:ok, signals} = Bridge.get_signal_history("agent.task.*")
+  """
+  def get_signal_history(path \\ "*", opts \\ []) do
+    bus_name = Keyword.get(opts, :bus, :foundation_signal_bus)
+    start_timestamp = Keyword.get(opts, :since, 0)
+    
+    Jido.Signal.Bus.replay(bus_name, path, start_timestamp, opts)
+  end
+
+  @doc """
+  Emits a Jido signal through the signal bus.
+
+  This function publishes signals to the Jido.Signal.Bus, which provides
+  proper signal routing to all subscribers with persistence and middleware support.
+
+  ## Signal Format
+
+  Signals should be Jido.Signal structs or maps with:
+  - `:type` - Signal type (e.g., "agent.task.completed")
+  - `:source` - Signal source (e.g., "/agent/task_processor")
+  - `:data` - Signal payload
+  - `:time` - ISO 8601 timestamp (optional, auto-generated)
+
+  ## Examples
+
+      # Emit a task completion signal
+      signal = %Jido.Signal{
+        type: "agent.task.completed",
+        source: "/agent/task_processor",
+        data: %{result: "success", duration: 150}
+      }
+      {:ok, [signal]} = Bridge.emit_signal(signal)
+
+      # Emit using map format (will be converted to Jido.Signal)  
+      signal_map = %{
+        type: "agent.error.occurred",
+        source: "/agent/worker",
+        data: %{error: "timeout", retry_count: 3}
+      }
+      {:ok, [signal]} = Bridge.emit_signal(signal_map)
+  """
+  def emit_signal(signal, opts \\ []) do
+    bus_name = Keyword.get(opts, :bus, :foundation_signal_bus)
+    
+    # Ensure signal is in the proper format
+    normalized_signal = case signal do
+      %Jido.Signal{} = sig -> 
+        sig
+      
+      signal_map when is_map(signal_map) ->
+        # Convert legacy signal format to Jido.Signal
+        type = Map.get(signal_map, :type) || 
+               Map.get(signal_map, :path) ||
+               "unknown"
+               
+        source = Map.get(signal_map, :source) ||
+                 "/agent/foundation"
+               
+        data = Map.get(signal_map, :data, %{})
+        
+        case Jido.Signal.new(%{
+          type: type,
+          source: source,
+          data: data,
+          time: DateTime.utc_now() |> DateTime.to_iso8601()
+        }) do
+          {:ok, signal} -> signal
+          {:error, _} ->
+            # Fallback with minimal fields
+            case Jido.Signal.new(%{type: type, source: source}) do
+              {:ok, signal} -> %{signal | data: data}
+              {:error, _} -> nil
+            end
+        end
+        
+      _ ->
+        # Fallback for other formats
+        case Jido.Signal.new(%{
+          type: "unknown",
+          source: "/agent/foundation",
+          data: signal
+        }) do
+          {:ok, signal} -> signal
+          {:error, _} -> nil
+        end
+    end
+    
+    # Publish to the signal bus if signal creation succeeded
+    case normalized_signal do
+      nil -> 
+        {:error, :invalid_signal_format}
+        
+      signal ->
+        case Jido.Signal.Bus.publish(bus_name, [signal]) do
+          {:ok, [published_signal]} = result ->
+            # Also emit traditional telemetry for backward compatibility
+            :telemetry.execute(
+              [:jido, :signal, :emitted],
+              %{signal_id: published_signal.id},
+              %{
+                signal_type: published_signal.type,
+                signal_source: published_signal.source,
+                framework: :jido,
+                timestamp: System.system_time(:microsecond)
+              }
+            )
+            result
+            
+          error ->
+            error
+        end
+    end
+  end
+
+  # Backward compatibility aliases
+
+  @doc """
+  Legacy alias for start_signal_bus/1. Prefer start_signal_bus/1 for new code.
   """
   def start_signal_router(opts \\ []) do
-    JidoFoundation.SignalRouter.start_link(opts)
+    start_signal_bus(opts)
   end
 
   @doc """
-  Subscribes a handler to receive signals of a specific type.
-
-  Supports wildcard patterns using '*' at the end of signal types.
-
-  ## Examples
-
-      # Subscribe to exact signal type
-      Bridge.subscribe_to_signals("task.completed", handler_pid)
-
-      # Subscribe to all error signals
-      Bridge.subscribe_to_signals("error.*", handler_pid)
+  Legacy alias for get_signal_history/2. Prefer get_signal_history/2 for new code.
   """
-  def subscribe_to_signals(signal_type, handler_pid) do
-    JidoFoundation.SignalRouter.subscribe(signal_type, handler_pid)
-  end
-
-  @doc """
-  Unsubscribes a handler from receiving signals of a specific type.
-  """
-  def unsubscribe_from_signals(signal_type, handler_pid) do
-    JidoFoundation.SignalRouter.unsubscribe(signal_type, handler_pid)
-  end
-
-  @doc """
-  Gets all current signal subscriptions.
-  """
-  def get_signal_subscriptions do
-    JidoFoundation.SignalRouter.get_subscriptions()
-  end
-
-  @doc """
-  Emits a Jido signal through Foundation telemetry system.
-
-  ## Examples
-
-      signal = %{type: "task.completed", source: "agent://123", data: %{result: "success"}}
-      Bridge.emit_signal(agent_pid, signal)
-  """
-  def emit_signal(agent_pid, signal) do
-    # Extract signal data for telemetry
-    signal_id = Map.get(signal, :id, System.unique_integer())
-    signal_type = Map.get(signal, :type, "unknown")
-
-    # Emit telemetry event for the signal
-    :telemetry.execute(
-      [:jido, :signal, :emitted],
-      %{signal_id: signal_id},
-      %{
-        agent_id: agent_pid,
-        signal_type: signal_type,
-        framework: :jido,
-        timestamp: System.system_time(:microsecond)
-      }
-    )
-
-    :ok
+  def get_signal_subscriptions(opts \\ []) do
+    case get_signal_history("*", opts) do
+      {:ok, signals} -> signals
+      {:error, _} -> []
+    end
   end
 
   @doc """

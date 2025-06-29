@@ -62,11 +62,11 @@ defmodule MABEAM.Coordination do
           {:ok, term()} | {:error, term()}
   def coordinate_capable_agents(capability, coordination_type, proposal, impl \\ nil) do
     case MABEAM.Discovery.find_capable_and_healthy(capability, impl) do
-      [] ->
+      {:ok, []} ->
         Logger.warning("No capable agents found for coordination: #{inspect(capability)}")
         {:error, :no_capable_agents}
 
-      agents ->
+      {:ok, agents} ->
         participant_ids = Enum.map(agents, fn {id, _pid, _metadata} -> id end)
 
         Logger.info(
@@ -74,6 +74,10 @@ defmodule MABEAM.Coordination do
         )
 
         handle_coordination_type(coordination_type, participant_ids, proposal, impl)
+
+      {:error, reason} ->
+        Logger.warning("Failed to find capable agents for coordination: #{inspect(reason)}")
+        {:error, reason}
     end
   end
 
@@ -115,31 +119,35 @@ defmodule MABEAM.Coordination do
     min_memory = Map.get(required_resources, :memory, 0.0)
     min_cpu = Map.get(required_resources, :cpu, 0.0)
 
-    eligible_agents = MABEAM.Discovery.find_agents_with_resources(min_memory, min_cpu, impl)
+    case MABEAM.Discovery.find_agents_with_resources(min_memory, min_cpu, impl) do
+      {:ok, []} ->
+        Logger.warning("No agents meet resource requirements: #{inspect(required_resources)}")
+        {:error, :insufficient_resources}
 
-    if Enum.empty?(eligible_agents) do
-      Logger.warning("No agents meet resource requirements: #{inspect(required_resources)}")
-      {:error, :insufficient_resources}
-    else
-      # Apply allocation strategy to select optimal participants
-      selected_agents =
-        apply_allocation_strategy(eligible_agents, allocation_strategy, required_resources)
+      {:ok, eligible_agents} ->
+        # Apply allocation strategy to select optimal participants
+        selected_agents =
+          apply_allocation_strategy(eligible_agents, allocation_strategy, required_resources)
 
-      participant_ids = Enum.map(selected_agents, fn {id, _pid, _metadata} -> id end)
+        participant_ids = Enum.map(selected_agents, fn {id, _pid, _metadata} -> id end)
 
-      proposal = %{
-        type: :resource_allocation,
-        required_resources: required_resources,
-        allocation_strategy: allocation_strategy,
-        eligible_agents: participant_ids,
-        selected_agents: participant_ids
-      }
+        proposal = %{
+          type: :resource_allocation,
+          required_resources: required_resources,
+          allocation_strategy: allocation_strategy,
+          eligible_agents: participant_ids,
+          selected_agents: participant_ids
+        }
 
-      Logger.info(
-        "Starting resource allocation coordination with #{length(participant_ids)} agents using #{allocation_strategy} strategy"
-      )
+        Logger.info(
+          "Starting resource allocation coordination with #{length(participant_ids)} agents using #{allocation_strategy} strategy"
+        )
 
-      Foundation.start_consensus(participant_ids, proposal, 30_000, impl)
+        Foundation.start_consensus(participant_ids, proposal, 30_000, impl)
+
+      {:error, reason} ->
+        Logger.warning("Failed to find agents with resources: #{inspect(reason)}")
+        {:error, reason}
     end
   end
 
@@ -165,33 +173,38 @@ defmodule MABEAM.Coordination do
         ) ::
           {:ok, term()} | {:error, term()}
   def coordinate_load_balancing(capability, target_load, _rebalance_threshold \\ 0.2, impl \\ nil) do
-    agents = MABEAM.Discovery.find_capable_and_healthy(capability, impl)
+    case MABEAM.Discovery.find_capable_and_healthy(capability, impl) do
+      {:ok, agents} ->
+        case analyze_load_distribution(agents, target_load) do
+          {:needs_rebalancing, overloaded, underloaded} ->
+            proposal = %{
+              type: :load_balancing,
+              capability: capability,
+              target_load: target_load,
+              overloaded_agents: Enum.map(overloaded, fn {id, _pid, _metadata} -> id end),
+              underloaded_agents: Enum.map(underloaded, fn {id, _pid, _metadata} -> id end)
+            }
 
-    case analyze_load_distribution(agents, target_load) do
-      {:needs_rebalancing, overloaded, underloaded} ->
-        proposal = %{
-          type: :load_balancing,
-          capability: capability,
-          target_load: target_load,
-          overloaded_agents: Enum.map(overloaded, fn {id, _pid, _metadata} -> id end),
-          underloaded_agents: Enum.map(underloaded, fn {id, _pid, _metadata} -> id end)
-        }
+            all_participants = Enum.map(agents, fn {id, _pid, _metadata} -> id end)
 
-        all_participants = Enum.map(agents, fn {id, _pid, _metadata} -> id end)
+            Logger.info(
+              "Starting load balancing coordination for #{length(all_participants)} #{capability} agents"
+            )
 
-        Logger.info(
-          "Starting load balancing coordination for #{length(all_participants)} #{capability} agents"
-        )
+            Foundation.start_consensus(all_participants, proposal, 45_000, impl)
 
-        Foundation.start_consensus(all_participants, proposal, 45_000, impl)
+          :balanced ->
+            Logger.debug("Load balancing not needed for #{capability} agents - system is balanced")
+            {:error, :no_rebalancing_needed}
 
-      :balanced ->
-        Logger.debug("Load balancing not needed for #{capability} agents - system is balanced")
-        {:error, :no_rebalancing_needed}
+          :insufficient_agents ->
+            Logger.warning("Insufficient #{capability} agents for load balancing")
+            {:error, :insufficient_agents}
+        end
 
-      :insufficient_agents ->
-        Logger.warning("Insufficient #{capability} agents for load balancing")
-        {:error, :insufficient_agents}
+      {:error, reason} ->
+        Logger.warning("Failed to find capable agents for load balancing: #{inspect(reason)}")
+        {:error, reason}
     end
   end
 
@@ -222,30 +235,35 @@ defmodule MABEAM.Coordination do
         impl \\ nil
       ) do
     # Find agents with source capability who could potentially transition
-    source_agents = MABEAM.Discovery.find_capable_and_healthy(source_capability, impl)
+    case MABEAM.Discovery.find_capable_and_healthy(source_capability, impl) do
+      {:ok, source_agents} ->
+        if length(source_agents) < transition_count do
+          {:error, {:insufficient_source_agents, length(source_agents), transition_count}}
+        else
+          # Select least loaded agents for transition
+          transition_candidates =
+            MABEAM.Discovery.find_least_loaded_agents(source_capability, transition_count, impl)
 
-    if length(source_agents) < transition_count do
-      {:error, {:insufficient_source_agents, length(source_agents), transition_count}}
-    else
-      # Select least loaded agents for transition
-      transition_candidates =
-        MABEAM.Discovery.find_least_loaded_agents(source_capability, transition_count, impl)
+          participant_ids = Enum.map(transition_candidates, fn {id, _pid, _metadata} -> id end)
 
-      participant_ids = Enum.map(transition_candidates, fn {id, _pid, _metadata} -> id end)
+          proposal = %{
+            type: :capability_transition,
+            source_capability: source_capability,
+            target_capability: target_capability,
+            transition_agents: participant_ids,
+            transition_count: transition_count
+          }
 
-      proposal = %{
-        type: :capability_transition,
-        source_capability: source_capability,
-        target_capability: target_capability,
-        transition_agents: participant_ids,
-        transition_count: transition_count
-      }
+          Logger.info(
+            "Starting capability transition coordination: #{source_capability} -> #{target_capability} for #{length(participant_ids)} agents"
+          )
 
-      Logger.info(
-        "Starting capability transition coordination: #{source_capability} -> #{target_capability} for #{length(participant_ids)} agents"
-      )
+          Foundation.start_consensus(participant_ids, proposal, 60_000, impl)
+        end
 
-      Foundation.start_consensus(participant_ids, proposal, 60_000, impl)
+      {:error, reason} ->
+        Logger.warning("Failed to find source agents for capability transition: #{inspect(reason)}")
+        {:error, reason}
     end
   end
 
@@ -272,29 +290,36 @@ defmodule MABEAM.Coordination do
         ) ::
           {:ok, {term(), pos_integer()}} | {:error, term()}
   def create_capability_barrier(capability, barrier_id, additional_filters \\ %{}, impl \\ nil) do
-    agents =
+    agents_result =
       if map_size(additional_filters) > 0 do
         apply_additional_filters(capability, additional_filters, impl)
       else
         MABEAM.Discovery.find_capable_and_healthy(capability, impl)
       end
 
-    participant_count = length(agents)
+    case agents_result do
+      {:ok, agents} ->
+        participant_count = length(agents)
 
-    if participant_count == 0 do
-      {:error, :no_eligible_participants}
-    else
-      case Foundation.create_barrier(barrier_id, participant_count, impl) do
-        :ok ->
-          Logger.info(
-            "Created barrier #{inspect(barrier_id)} for #{participant_count} #{capability} agents"
-          )
+        if participant_count == 0 do
+          {:error, :no_eligible_participants}
+        else
+          case Foundation.create_barrier(barrier_id, participant_count, impl) do
+            :ok ->
+              Logger.info(
+                "Created barrier #{inspect(barrier_id)} for #{participant_count} #{capability} agents"
+              )
 
-          {:ok, {barrier_id, participant_count}}
+              {:ok, {barrier_id, participant_count}}
 
-        error ->
-          error
-      end
+            error ->
+              error
+          end
+        end
+
+      {:error, reason} ->
+        Logger.warning("Failed to find agents for barrier creation: #{inspect(reason)}")
+        {:error, reason}
     end
   end
 
@@ -433,13 +458,18 @@ defmodule MABEAM.Coordination do
   end
 
   defp apply_additional_filters(capability, filters, impl) do
-    base_agents = MABEAM.Discovery.find_capable_and_healthy(capability, impl)
+    case MABEAM.Discovery.find_capable_and_healthy(capability, impl) do
+      {:ok, base_agents} ->
+        filtered_agents = Enum.filter(base_agents, fn {_id, _pid, metadata} ->
+          Enum.all?(filters, fn {key, expected_value} ->
+            Map.get(metadata, key) == expected_value
+          end)
+        end)
+        {:ok, filtered_agents}
 
-    Enum.filter(base_agents, fn {_id, _pid, metadata} ->
-      Enum.all?(filters, fn {key, expected_value} ->
-        Map.get(metadata, key) == expected_value
-      end)
-    end)
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   defp generate_barrier_id do

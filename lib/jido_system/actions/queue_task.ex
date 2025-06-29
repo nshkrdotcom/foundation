@@ -32,8 +32,13 @@ defmodule JidoSystem.Actions.QueueTask do
       # Add task to queue based on priority
       updated_queue = add_task_to_queue(task_queue, params.task, params.priority)
 
-      # Return the result with the updated queue
-      # The agent will handle the state update
+      # Return result with StateModification directive instead of custom key
+      queue_directive = %Jido.Agent.Directive.StateModification{
+        op: :set,
+        path: [:task_queue],
+        value: updated_queue
+      }
+
       {:ok,
        %{
          queued: true,
@@ -41,9 +46,8 @@ defmodule JidoSystem.Actions.QueueTask do
          priority: params.priority,
          queue_name: params.queue_name,
          queued_at: DateTime.utc_now(),
-         queue_size: :queue.len(updated_queue),
-         updated_queue: updated_queue
-       }}
+         queue_size: :queue.len(updated_queue)
+       }, queue_directive}
     end
   end
 

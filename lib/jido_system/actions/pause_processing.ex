@@ -16,13 +16,19 @@ defmodule JidoSystem.Actions.PauseProcessing do
     state = Map.get(context, :state, %{})
     previous_status = Map.get(state, :status)
 
-    # Return the result indicating pause was requested
+    # Return result with StateModification directive to pause the agent
+    status_directive = %Jido.Agent.Directive.StateModification{
+      op: :set,
+      path: [:status],
+      value: :paused
+    }
+
     {:ok,
      %{
        status: :paused,
        previous_status: previous_status,
        reason: params.reason,
        paused_at: DateTime.utc_now()
-     }}
+     }, status_directive}
   end
 end

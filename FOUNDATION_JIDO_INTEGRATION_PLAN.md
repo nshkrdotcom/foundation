@@ -105,10 +105,34 @@ This comprehensive plan merges the Jido integration roadmap (JIDO_PLAN.md) with 
 
 ---
 
-## 🤖 STAGE 2: Jido Agent Infrastructure Integration (Weeks 4-6)
+## 🔧 STAGE 2.3a: Jido Integration & Architecture Fixes (Weeks 3-4)
+**Focus**: Critical Jido integration improvements and architectural flaw fixes
+
+### STAGE 2.3a: Critical Refactoring Phase
+**NOTE**: This phase must be completed before proceeding to STAGE 2.4. This stage addresses critical architectural flaws and improves Jido library integration.
+
+#### Required Reference Documents:
+- **JIDO_REFACTOR.md** - Complete Jido integration improvements with proper library usage
+- **FLAWS_FIX.md** - Critical architectural flaw fixes including error handling and contract compliance
+
+#### Implementation Strategy:
+1. **Parallel Execution**: Both JIDO_REFACTOR.md and FLAWS_FIX.md tasks can be executed in parallel
+2. **Test-Driven Approach**: All changes must include comprehensive tests and achieve zero regressions
+3. **Quality Gates**: All tests must pass before proceeding to STAGE 2.4
+4. **Enhanced Test Coverage**: Revise and enhance existing tests to ensure coverage for revised features
+
+#### Key Objectives:
+- **Proper Jido Library Usage**: Replace custom implementations with proper Jido.Exec, Directive system, and Instruction/Runner model
+- **Error Handling Standardization**: Fix silent failures and implement proper error propagation
+- **Contract Compliance**: Fix RetryService and other third-party library integration issues
+- **Type System Alignment**: Align function specifications with actual implementations
+
+---
+
+## 🤖 STAGE 2.4: Jido Agent Infrastructure Integration (Weeks 5-7)
 **Focus**: Integrate Jido agents with Foundation infrastructure services
 
-### STAGE 2A: Agent Lifecycle Enhancement (Week 4)
+### STAGE 2.4A: Agent Lifecycle Enhancement (Week 5)
 
 #### JIDO_PLAN.md Reference:
 - **Phase 1.1**: Basic Agent Lifecycle (Priority: HIGH)
@@ -141,7 +165,7 @@ This comprehensive plan merges the Jido integration roadmap (JIDO_PLAN.md) with 
 - **Implementation**: Proper supervision tree integration for all agents
 - **Enhancement**: Process isolation and error boundaries
 
-### STAGE 2B: Action Infrastructure Protection (Week 5)
+### STAGE 2.4B: Action Infrastructure Protection (Week 6)
 
 #### JIDO_PLAN.md Reference:
 - **Phase 2.1**: Action Execution with Foundation Protection (Priority: HIGH)
@@ -169,7 +193,7 @@ This comprehensive plan merges the Jido integration roadmap (JIDO_PLAN.md) with 
 - **Implementation**: Integrate actions with ResourceManager
 - **Enhancement**: Action resource pooling and automatic release
 
-### STAGE 2C: Action Monitoring and Telemetry (Week 6)
+### STAGE 2.4C: Action Monitoring and Telemetry (Week 7)
 
 #### Current Files to Study:
 - `lib/foundation/telemetry.ex` - Current telemetry wrapper
@@ -190,10 +214,10 @@ This comprehensive plan merges the Jido integration roadmap (JIDO_PLAN.md) with 
 
 ---
 
-## 📡 STAGE 3: Signal and Event Infrastructure (Weeks 7-8)
+## 📡 STAGE 3: Signal and Event Infrastructure (Weeks 8-9)
 **Focus**: Event processing and signal routing infrastructure
 
-### STAGE 3A: Signal Routing Enhancement (Week 7)
+### STAGE 3A: Signal Routing Enhancement (Week 8)
 
 #### JIDO_PLAN.md Reference:
 - **Phase 3.1**: Signal Routing through Foundation (Priority: MEDIUM)
@@ -217,7 +241,7 @@ This comprehensive plan merges the Jido integration roadmap (JIDO_PLAN.md) with 
 - **Implementation**: Workflow coordination via signals
 - **Integration**: Broadcast and multicast signal patterns
 
-### STAGE 3B: Event Store and Persistence (Week 8)
+### STAGE 3B: Event Store and Persistence (Week 9)
 
 #### JIDO_PLAN.md Reference:
 - **Phase 3.3**: Event Sourcing Integration (Priority: LOW - but needed for production)
@@ -240,10 +264,10 @@ This comprehensive plan merges the Jido integration roadmap (JIDO_PLAN.md) with 
 
 ---
 
-## 🚨 STAGE 4: Monitoring and Alerting Infrastructure (Weeks 9-10)
+## 🚨 STAGE 4: Monitoring and Alerting Infrastructure (Weeks 10-11)
 **Focus**: Production monitoring, alerting, and health checking
 
-### STAGE 4A: Alerting Service Implementation (Week 9)
+### STAGE 4A: Alerting Service Implementation (Week 10)
 
 #### JidoSystem Monitoring Files to Study:
 - `lib/jido_system/agents/monitor_agent.ex` - Current monitoring implementation
@@ -263,7 +287,7 @@ This comprehensive plan merges the Jido integration roadmap (JIDO_PLAN.md) with 
 - **Implementation**: Create `Foundation.Services.HealthCheckService`
 - **Integration**: All agents register health checks
 
-### STAGE 4B: Advanced Monitoring (Week 10)
+### STAGE 4B: Advanced Monitoring (Week 11)
 
 #### LIB_OLD_PORT_PLAN.md Reference:
 - **Phase 5.1**: Alerting Service (Pages 28-29)
@@ -285,10 +309,10 @@ This comprehensive plan merges the Jido integration roadmap (JIDO_PLAN.md) with 
 
 ---
 
-## 🎯 STAGE 5: Advanced Agent Patterns and Optimization (Weeks 11-12)
+## 🎯 STAGE 5: Advanced Agent Patterns and Optimization (Weeks 12-13)
 **Focus**: Advanced Jido patterns and production optimization
 
-### STAGE 5A: Advanced Agent Patterns (Week 11)
+### STAGE 5A: Advanced Agent Patterns (Week 12)
 
 #### JIDO_PLAN.md Reference:
 - **Phase 5.1**: Agent Sensors and Skills (Priority: MEDIUM)
@@ -306,7 +330,7 @@ This comprehensive plan merges the Jido integration roadmap (JIDO_PLAN.md) with 
 - **Implementation**: Dynamic agent configuration and state machine patterns
 - **Integration**: Configuration service integration for runtime updates
 
-### STAGE 5B: Performance and Production Optimization (Week 12)
+### STAGE 5B: Performance and Production Optimization (Week 13)
 
 #### JIDO_PLAN.md Reference:
 - **Phase 6.1**: Performance Optimization (Priority: LOW)
