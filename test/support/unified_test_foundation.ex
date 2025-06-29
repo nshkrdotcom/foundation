@@ -19,34 +19,34 @@ defmodule Foundation.UnifiedTestFoundation do
       # Basic registry isolation
       defmodule MyTest do
         use Foundation.UnifiedTestFoundation, :registry
-        
+
         test "my test", %{registry: registry} do
           # registry is isolated per test
         end
       end
-      
+
       # Full signal routing isolation
       defmodule SignalTest do
         use Foundation.UnifiedTestFoundation, :signal_routing
-        
+
         test "signals", %{test_context: ctx, signal_router: router} do
           # Fully isolated signal routing
         end
       end
-      
+
       # Contamination detection enabled
       defmodule RobustTest do
         use Foundation.UnifiedTestFoundation, :contamination_detection
-        
+
         test "robust test", %{test_context: ctx} do
           # All services isolated + contamination monitoring
         end
       end
-      
+
       # Service Integration Architecture testing
       defmodule ServiceIntegrationTest do
         use Foundation.UnifiedTestFoundation, :service_integration
-        
+
         test "service integration", %{sia_context: ctx} do
           # SIA components available for testing
         end

@@ -26,7 +26,7 @@ defmodule Foundation.TestFoundation do
       setup do
         isolated_foundation_setup()
       end
-      
+
       test "my test", %{test_context: context} do
         # Use context.signal_bus_name, context.registry_name, etc.
       end

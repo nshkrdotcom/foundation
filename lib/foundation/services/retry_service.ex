@@ -26,13 +26,13 @@ defmodule Foundation.Services.RetryService do
 
       # Basic retry with default policy
       RetryService.retry_operation(fn -> risky_operation() end)
-      
+
       # Retry with specific policy
       RetryService.retry_operation(
-        fn -> risky_operation() end, 
+        fn -> risky_operation() end,
         policy: :exponential_backoff
       )
-      
+
       # Retry with circuit breaker integration
       RetryService.retry_with_circuit_breaker(
         :external_service,
@@ -91,7 +91,7 @@ defmodule Foundation.Services.RetryService do
       {:ok, result} = RetryService.retry_operation(fn ->
         risky_external_call()
       end)
-      
+
       # Fixed delay retry
       {:ok, result} = RetryService.retry_operation(
         fn -> database_operation() end,

@@ -165,7 +165,7 @@ defmodule MABEAM.DiscoveryContractTest do
         def find_agents_with_resources(min_memory, min_cpu, impl \\ nil)
 
         def find_agents_with_resources(_min_memory, _min_cpu, _impl) do
-          # This is wrong - should return {:ok, [...]} not raw list  
+          # This is wrong - should return {:ok, [...]} not raw list
           []
         end
 

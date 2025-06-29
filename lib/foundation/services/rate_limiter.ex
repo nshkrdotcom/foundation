@@ -108,11 +108,11 @@ defmodule Foundation.Services.RateLimiter do
   ## Examples
 
       case RateLimiter.check_rate_limit(:api_limiter, "user_123") do
-        {:ok, :allowed} -> 
+        {:ok, :allowed} ->
           # Process the request
           handle_request()
-          
-        {:ok, :denied} -> 
+
+        {:ok, :denied} ->
           # Return rate limit exceeded error
           {:error, :rate_limit_exceeded}
       end

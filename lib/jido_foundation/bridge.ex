@@ -486,7 +486,7 @@ defmodule JidoFoundation.Bridge do
 
   ## Examples
 
-      # Subscribe to exact signal type  
+      # Subscribe to exact signal type
       {:ok, subscription_id} = Bridge.subscribe_to_signals("agent.task.completed", handler_pid)
 
       # Subscribe to all task signals
@@ -503,7 +503,7 @@ defmodule JidoFoundation.Bridge do
   def subscribe_to_signals(signal_path, handler_pid, opts \\ []) do
     bus_name = Keyword.get(opts, :bus, :foundation_signal_bus)
 
-    # Configure dispatch to the handler process  
+    # Configure dispatch to the handler process
     dispatch_opts = [
       dispatch: {:pid, [target: handler_pid, delivery_mode: :async]}
     ]
@@ -568,7 +568,7 @@ defmodule JidoFoundation.Bridge do
       }
       {:ok, [signal]} = Bridge.emit_signal(signal)
 
-      # Emit using map format (will be converted to Jido.Signal)  
+      # Emit using map format (will be converted to Jido.Signal)
       signal_map = %{
         type: "agent.error.occurred",
         source: "/agent/worker",

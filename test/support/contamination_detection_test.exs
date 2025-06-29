@@ -41,7 +41,7 @@ defmodule Foundation.ContaminationDetectionTest do
       assert true
     end
 
-    # This test intentionally creates ETS contamination for testing detection  
+    # This test intentionally creates ETS contamination for testing detection
     # Skip by default to avoid false positives in normal test runs
     @tag :skip
     test "test with ETS contamination should be detected", %{test_context: ctx} do

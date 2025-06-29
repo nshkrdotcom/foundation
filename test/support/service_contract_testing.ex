@@ -138,7 +138,7 @@ defmodule Foundation.Support.ServiceContractTesting do
   - `{:error, reason}` for error cases
 
   Common violations:
-  - Returning raw lists instead of `{:ok, list}` 
+  - Returning raw lists instead of `{:ok, list}`
   - Returning `nil` instead of `{:error, reason}`
   - Malformed agent tuples
   """
@@ -238,7 +238,7 @@ defmodule Foundation.Support.ServiceContractTesting do
           result1 = unquote(discovery_module).find_capable_and_healthy(capability, nil)
           assert Foundation.Support.ServiceContractTesting.validate_discovery_result(result1) == :ok
 
-          # Test find_agents_with_resources  
+          # Test find_agents_with_resources
           result2 = unquote(discovery_module).find_agents_with_resources(memory, cpu, nil)
           assert Foundation.Support.ServiceContractTesting.validate_discovery_result(result2) == :ok
 

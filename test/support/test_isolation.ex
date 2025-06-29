@@ -1,6 +1,6 @@
 defmodule Foundation.TestIsolation do
   @moduledoc """
-  Provides proper test isolation for Foundation tests by creating 
+  Provides proper test isolation for Foundation tests by creating
   test-scoped supervision trees and avoiding global state contamination.
 
   This is the standard pattern for avoiding test contamination in OTP systems.
@@ -11,7 +11,7 @@ defmodule Foundation.TestIsolation do
 
   This ensures each test gets its own instances of:
   - Signal Bus
-  - Telemetry handlers  
+  - Telemetry handlers
   - Registry processes
   - Other stateful services
 

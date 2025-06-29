@@ -517,7 +517,7 @@ defmodule JidoFoundation.SignalRoutingTest do
       # Wait for all 3 signals to be routed
       # error.validation should go to 2 handlers (wildcard + specific)
       assert_receive {^routing_ref, :routing_complete, "error.validation", 2}, 1000
-      # error.timeout should go to 1 handler (wildcard only)  
+      # error.timeout should go to 1 handler (wildcard only)
       assert_receive {^routing_ref, :routing_complete, "error.timeout", 1}, 1000
       # info.status should go to 0 handlers (no matches)
       assert_receive {^routing_ref, :routing_complete, "info.status", 0}, 1000

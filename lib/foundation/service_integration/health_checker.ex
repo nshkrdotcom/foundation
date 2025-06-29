@@ -110,7 +110,7 @@ defmodule Foundation.ServiceIntegration.HealthChecker do
   ## Options
 
   - `:interval` - Check interval in ms (default: 60_000)
-  - `:timeout` - Health check timeout in ms (default: 5_000) 
+  - `:timeout` - Health check timeout in ms (default: 5_000)
   - `:circuit_breaker` - Enable circuit breaker (default: true)
   - `:metadata` - Additional metadata to include
   """
@@ -234,7 +234,7 @@ defmodule Foundation.ServiceIntegration.HealthChecker do
         else
           error ->
             Logger.warning("System health check encountered error", error: inspect(error))
-            handle_health_check_error(error)
+            {:error, error}
         end
       rescue
         exception ->
@@ -490,9 +490,8 @@ defmodule Foundation.ServiceIntegration.HealthChecker do
   defp check_registered_services(state) do
     results =
       Enum.map(state.registered_health_checks, fn {service, _config} ->
-        case perform_service_health_check(service, state) do
-          {:ok, result} -> result
-        end
+        {:ok, result} = perform_service_health_check(service, state)
+        result
       end)
 
     {:ok, results}
@@ -568,9 +567,8 @@ defmodule Foundation.ServiceIntegration.HealthChecker do
     # Perform health checks for all registered services
     results =
       Enum.map(state.registered_health_checks, fn {service, _config} ->
-        case perform_service_health_check(service, state) do
-          {:ok, result} -> result
-        end
+        {:ok, result} = perform_service_health_check(service, state)
+        result
       end)
 
     # Update last results and circuit breaker states
@@ -624,22 +622,5 @@ defmodule Foundation.ServiceIntegration.HealthChecker do
   defp count_services(state) do
     # Foundation (6) + Signal (1) + Registered
     6 + 1 + map_size(state.registered_health_checks)
-  end
-
-  defp handle_health_check_error(error) do
-    case error do
-      {:error, :signal_system_error} ->
-        {:ok,
-         %{
-           foundation_services: [],
-           signal_system: %{status: :unhealthy, error: :signal_system_error},
-           registered_services: [],
-           overall_status: :degraded,
-           summary: %{error: :partial_health_check}
-         }}
-
-      other ->
-        {:error, other}
-    end
   end
 end

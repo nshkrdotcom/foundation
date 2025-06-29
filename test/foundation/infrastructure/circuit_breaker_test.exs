@@ -1,5 +1,5 @@
 defmodule Foundation.Infrastructure.CircuitBreakerTest do
-  # Using registry isolation mode for Foundation Infrastructure CircuitBreaker tests  
+  # Using registry isolation mode for Foundation Infrastructure CircuitBreaker tests
   use Foundation.UnifiedTestFoundation, :registry
   alias Foundation.CircuitBreaker
 

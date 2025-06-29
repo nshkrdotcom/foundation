@@ -155,7 +155,7 @@ defmodule Foundation.Services.Supervisor do
         sia_children
       end
 
-    # Add HealthChecker if available  
+    # Add HealthChecker if available
     sia_children =
       if Code.ensure_loaded?(Foundation.ServiceIntegration.HealthChecker) do
         opts =

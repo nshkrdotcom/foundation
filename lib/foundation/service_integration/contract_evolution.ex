@@ -24,7 +24,7 @@ defmodule Foundation.ServiceIntegration.ContractEvolution do
   # Evolved: find_capable_and_healthy(capability, impl \\\\ nil)
   ```
 
-  ### 2. Return Format Evolution  
+  ### 2. Return Format Evolution
   Return values become more structured:
   ```elixir
   # Legacy: [agents]
@@ -48,9 +48,9 @@ defmodule Foundation.ServiceIntegration.ContractEvolution do
 
       # Check specific function evolution
       evolution_status = ContractEvolution.check_function_evolution(
-        MABEAM.Discovery, 
-        :find_capable_and_healthy, 
-        legacy_arity: 1, 
+        MABEAM.Discovery,
+        :find_capable_and_healthy,
+        legacy_arity: 1,
         evolved_arity: 2
       )
   """
@@ -69,7 +69,7 @@ defmodule Foundation.ServiceIntegration.ContractEvolution do
   ## Discovery Function Evolution
 
   - `find_capable_and_healthy`: 1 → 2 (added `impl` parameter)
-  - `find_agents_with_resources`: 2 → 3 (added `impl` parameter)  
+  - `find_agents_with_resources`: 2 → 3 (added `impl` parameter)
   - `find_least_loaded_agents`: 1 → 3 (added `count` and `impl` parameters)
 
   ## Returns
@@ -114,7 +114,7 @@ defmodule Foundation.ServiceIntegration.ContractEvolution do
   ## Returns
 
   - `:legacy_only` - Only legacy arity is supported
-  - `:evolved_only` - Only evolved arity is supported  
+  - `:evolved_only` - Only evolved arity is supported
   - `:both_supported` - Both arities are supported
   - `:neither_supported` - Neither arity is supported
   """
@@ -137,7 +137,7 @@ defmodule Foundation.ServiceIntegration.ContractEvolution do
   @doc """
   Analyzes the complete evolution status of a module's functions.
 
-  Returns detailed information about which functions support legacy, evolved, 
+  Returns detailed information about which functions support legacy, evolved,
   or both signature formats.
 
   ## Example
@@ -147,7 +147,7 @@ defmodule Foundation.ServiceIntegration.ContractEvolution do
         {:find_agents_with_resources, legacy_arity: 2, evolved_arity: 3},
         {:find_least_loaded_agents, legacy_arity: 1, evolved_arity: 3}
       ])
-      
+
       # Returns:
       # %{
       #   find_capable_and_healthy: :evolved_only,
@@ -218,7 +218,7 @@ defmodule Foundation.ServiceIntegration.ContractEvolution do
 
       # For find_capable_and_healthy(capability, impl \\\\ nil)
       # Create wrapper: find_capable_and_healthy(capability)
-      
+
       wrapper_code = ContractEvolution.create_compatibility_wrapper(
         :find_capable_and_healthy,
         legacy_params: [:capability],

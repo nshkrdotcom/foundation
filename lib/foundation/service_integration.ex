@@ -10,7 +10,7 @@ defmodule Foundation.ServiceIntegration do
   ## Key Components
 
   - `Foundation.ServiceIntegration.ContractValidator` - Service contract validation
-  - `Foundation.ServiceIntegration.DependencyManager` - Service dependency management  
+  - `Foundation.ServiceIntegration.DependencyManager` - Service dependency management
   - `Foundation.ServiceIntegration.HealthChecker` - Unified health checking
   - `Foundation.ServiceIntegration.ContractEvolution` - Contract evolution utilities
 
@@ -249,7 +249,14 @@ defmodule Foundation.ServiceIntegration do
   @doc """
   Development utility to check service integration component status.
   """
-  @spec component_status() :: map()
+  @spec component_status() :: %{
+          contract_validator: :not_running | %{pid: pid(), status: :running},
+          contract_evolution: :available | :not_available,
+          dependency_manager: :not_running | %{pid: pid(), status: :running},
+          health_checker: :not_running | %{pid: pid(), status: :running},
+          signal_coordinator: :not_running | %{pid: pid(), status: :running},
+          timestamp: DateTime.t()
+        }
   def component_status do
     %{
       contract_validator: process_status(Foundation.ServiceIntegration.ContractValidator),
@@ -312,17 +319,13 @@ defmodule Foundation.ServiceIntegration do
         :dependency_manager_not_running
 
       _pid ->
-        case Foundation.ServiceIntegration.DependencyManager.get_all_dependencies() do
-          dependencies when is_map(dependencies) ->
-            %{
-              registered_services: Map.keys(dependencies),
-              dependency_count: map_size(dependencies),
-              status: :operational
-            }
+        dependencies = Foundation.ServiceIntegration.DependencyManager.get_all_dependencies()
 
-          {:error, reason} ->
-            {:error, reason}
-        end
+        %{
+          registered_services: Map.keys(dependencies),
+          dependency_count: map_size(dependencies),
+          status: :operational
+        }
     end
   end
 

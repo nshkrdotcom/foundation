@@ -53,7 +53,7 @@ defmodule Foundation.Services.SignalBus do
   Returns `:healthy` if the bus is running and operational,
   `:degraded` if there are issues, or `:unhealthy` if the bus is down.
   """
-  @spec health_check(atom()) :: :healthy | :degraded | :unhealthy
+  @spec health_check(atom()) :: :healthy | :unhealthy
   def health_check(name \\ __MODULE__) do
     case GenServer.call(name, :health_check, 1000) do
       :healthy -> :healthy

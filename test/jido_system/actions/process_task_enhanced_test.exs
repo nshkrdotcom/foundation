@@ -27,7 +27,7 @@ defmodule JidoSystem.Actions.ProcessTaskEnhancedTest do
     end
 
     test "retries task with exponential backoff on failure" do
-      # Create a task that will fail initially but succeed on retry  
+      # Create a task that will fail initially but succeed on retry
       task_params = %{
         task_id: "retry_test_task",
         # Use supported task type

@@ -14,7 +14,7 @@ defmodule Foundation.ServiceIntegration.ContractValidator do
   ## Features
 
   - Runtime contract violation detection
-  - Contract migration assistance  
+  - Contract migration assistance
   - Integration with ServiceContractTesting framework
   - Standard Foundation service contract validation
   - Contract evolution detection and handling
@@ -29,8 +29,8 @@ defmodule Foundation.ServiceIntegration.ContractValidator do
 
       # Register a custom contract
       :ok = Foundation.ServiceIntegration.ContractValidator.register_contract(
-        MyService, 
-        &MyService.contract_validator/1, 
+        MyService,
+        &MyService.contract_validator/1,
         [:service_specific_options]
       )
   """
@@ -265,10 +265,7 @@ defmodule Foundation.ServiceIntegration.ContractValidator do
             {:error, reason} -> {:error, reason}
           end
 
-        jido_contracts =
-          case validate_jido_contracts() do
-            {:ok, result} -> result
-          end
+        jido_contracts = validate_jido_contracts()
 
         mabeam_contracts =
           case validate_mabeam_contracts_with_evolution() do
@@ -354,7 +351,7 @@ defmodule Foundation.ServiceIntegration.ContractValidator do
   defp validate_jido_contracts do
     # Validate Jido service boundaries
     # This is a placeholder - extend based on specific Jido contract requirements
-    {:ok, :jido_contracts_placeholder}
+    :jido_contracts_placeholder
   end
 
   defp validate_mabeam_contracts_with_evolution do

@@ -11,7 +11,7 @@ defmodule Foundation.ServiceIntegration.DependencyManager do
   The DependencyManager handles:
   - Service dependency registration and validation
   - Circular dependency detection
-  - Service startup/shutdown orchestration  
+  - Service startup/shutdown orchestration
   - Dependency-aware service ordering
 
   ## Features
@@ -29,7 +29,7 @@ defmodule Foundation.ServiceIntegration.DependencyManager do
 
       # Register a service with its dependencies
       :ok = Foundation.ServiceIntegration.DependencyManager.register_service(
-        MyService, 
+        MyService,
         [Foundation.Services.RetryService, Foundation.Services.SignalBus]
       )
 
@@ -195,13 +195,13 @@ defmodule Foundation.ServiceIntegration.DependencyManager do
          dependency_graph: %{}
        }}
     rescue
-      reason ->
+      exception ->
         Logger.error("Failed to create DependencyManager ETS table",
           table_name: table_name,
-          reason: reason
+          exception: inspect(exception)
         )
 
-        {:stop, {:ets_creation_failed, reason}}
+        {:stop, {:ets_creation_failed, exception}}
     end
   end
 

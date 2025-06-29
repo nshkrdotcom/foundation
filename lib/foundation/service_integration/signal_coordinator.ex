@@ -21,8 +21,8 @@ defmodule Foundation.ServiceIntegration.SignalCoordinator do
 
       # Emit signal synchronously and wait for routing completion
       {:ok, result} = Foundation.ServiceIntegration.SignalCoordinator.emit_signal_sync(
-        agent, 
-        signal, 
+        agent,
+        signal,
         timeout: 5000
       )
 
@@ -304,7 +304,7 @@ defmodule Foundation.ServiceIntegration.SignalCoordinator do
   ## Parameters
 
   - `agent` - The agent emitting the signal
-  - `signal` - The signal to emit  
+  - `signal` - The signal to emit
   - `expectations` - What to expect (handler count, etc.)
   - `opts` - Additional options
 
@@ -316,7 +316,6 @@ defmodule Foundation.ServiceIntegration.SignalCoordinator do
   @spec emit_signal_with_expectations(pid(), map(), map(), keyword()) ::
           {:ok, coordination_result()} | {:error, term()}
   def emit_signal_with_expectations(agent, signal, expectations, opts \\ []) do
-    _timeout = Keyword.get(opts, :timeout, 5000)
     expected_handlers = Map.get(expectations, :handler_count, 0)
 
     case emit_signal_sync(agent, signal, opts) do
@@ -344,7 +343,13 @@ defmodule Foundation.ServiceIntegration.SignalCoordinator do
 
   Returns information about signal routing performance and any detected issues.
   """
-  @spec coordination_health_check() :: map()
+  @spec coordination_health_check() :: %{
+          telemetry_system: :healthy | {:unhealthy, term()},
+          signal_bus: {:healthy | :degraded | :unavailable, term()},
+          coordination_issues: [term()],
+          health_check_duration_ms: non_neg_integer(),
+          timestamp: DateTime.t()
+        }
   def coordination_health_check do
     start_time = System.monotonic_time()
 

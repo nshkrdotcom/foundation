@@ -165,7 +165,7 @@ defmodule JidoSystem.Agents.TaskAgent do
               %{updated_agent.state | current_task: nil}
 
             %{status: :idle} ->
-              # Handle ResumeProcessing result - directive handles status, just clear current_task  
+              # Handle ResumeProcessing result - directive handles status, just clear current_task
               %{updated_agent.state | current_task: nil}
 
             %{} ->

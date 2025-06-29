@@ -18,7 +18,7 @@ defmodule Foundation.ContaminationDetector do
 
       # Automatic contamination detection (via UnifiedTestFoundation)
       use Foundation.UnifiedTestFoundation, :contamination_detection
-      
+
       # Manual contamination detection
       setup do
         contamination_monitor = ContaminationDetector.start_monitoring()
