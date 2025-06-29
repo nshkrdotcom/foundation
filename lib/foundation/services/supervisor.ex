@@ -12,6 +12,8 @@ defmodule Foundation.Services.Supervisor do
   ```
   Foundation.Services.Supervisor
   ├── Foundation.Services.RetryService
+  ├── Foundation.Services.ConnectionManager
+  ├── Foundation.Services.RateLimiter
   ├── Foundation.Services.ConfigService (future)
   ├── Foundation.Services.ServiceDiscovery (future)
   ├── Foundation.Services.TelemetryService (future)
@@ -64,12 +66,20 @@ defmodule Foundation.Services.Supervisor do
 
         [
           # Core service: Retry service for resilient operations with unique name
-          {Foundation.Services.RetryService, [name: :"#{supervisor_id}_retry_service"]}
+          {Foundation.Services.RetryService, [name: :"#{supervisor_id}_retry_service"]},
+          # Infrastructure service: HTTP connection manager with unique name
+          {Foundation.Services.ConnectionManager, [name: :"#{supervisor_id}_connection_manager"]},
+          # Infrastructure service: Rate limiter with unique name
+          {Foundation.Services.RateLimiter, [name: :"#{supervisor_id}_rate_limiter"]}
         ]
       else
         [
           # Core service: Retry service for resilient operations
-          {Foundation.Services.RetryService, []}
+          {Foundation.Services.RetryService, []},
+          # Infrastructure service: HTTP connection manager
+          {Foundation.Services.ConnectionManager, []},
+          # Infrastructure service: Rate limiter
+          {Foundation.Services.RateLimiter, []}
         ]
       end
 

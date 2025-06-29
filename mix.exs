@@ -178,6 +178,9 @@ defmodule Foundation.MixProject do
       {:hammer, "~>7.0.1"},
       {:fuse, "~>2.5.0"},
       {:retry, "~> 0.18"},
+      # Enhanced infrastructure services
+      {:finch, "~> 0.18"},
+      {:nimble_pool, "~> 1.0"},
 
       # Optional integrations
       {:gemini_ex, "~>0.0.2", optional: true},
