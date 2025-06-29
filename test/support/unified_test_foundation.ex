@@ -266,8 +266,8 @@ defmodule Foundation.UnifiedTestFoundation do
   Starts a test-scoped signal router.
   """
   def start_test_signal_router(router_name) do
-    # Use the actual SignalRouter from the signal routing test
-    JidoFoundation.SignalRoutingTest.SignalRouter.start_link(name: router_name)
+    # Use the actual SignalRouter (not test-only module)
+    JidoFoundation.SignalRouter.start_link(name: router_name)
   end
   
   @doc """
