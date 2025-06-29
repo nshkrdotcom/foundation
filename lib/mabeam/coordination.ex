@@ -241,24 +241,28 @@ defmodule MABEAM.Coordination do
           {:error, {:insufficient_source_agents, length(source_agents), transition_count}}
         else
           # Select least loaded agents for transition
-          transition_candidates =
-            MABEAM.Discovery.find_least_loaded_agents(source_capability, transition_count, impl)
+          case MABEAM.Discovery.find_least_loaded_agents(source_capability, transition_count, impl) do
+            {:ok, transition_candidates} ->
+              participant_ids = Enum.map(transition_candidates, fn {id, _pid, _metadata} -> id end)
 
-          participant_ids = Enum.map(transition_candidates, fn {id, _pid, _metadata} -> id end)
+              proposal = %{
+                type: :capability_transition,
+                source_capability: source_capability,
+                target_capability: target_capability,
+                transition_agents: participant_ids,
+                transition_count: transition_count
+              }
 
-          proposal = %{
-            type: :capability_transition,
-            source_capability: source_capability,
-            target_capability: target_capability,
-            transition_agents: participant_ids,
-            transition_count: transition_count
-          }
+              Logger.info(
+                "Starting capability transition coordination: #{source_capability} -> #{target_capability} for #{length(participant_ids)} agents"
+              )
 
-          Logger.info(
-            "Starting capability transition coordination: #{source_capability} -> #{target_capability} for #{length(participant_ids)} agents"
-          )
+              Foundation.start_consensus(participant_ids, proposal, 60_000, impl)
 
-          Foundation.start_consensus(participant_ids, proposal, 60_000, impl)
+            {:error, reason} ->
+              Logger.warning("Failed to find least loaded agents for capability transition: #{inspect(reason)}")
+              {:error, reason}
+          end
         end
 
       {:error, reason} ->

@@ -550,6 +550,12 @@ defmodule JidoFoundation.Bridge do
     # Agent parameter is used in telemetry metadata
     bus_name = Keyword.get(opts, :bus, :foundation_signal_bus)
     
+    # Preserve original signal ID for telemetry
+    original_signal_id = case signal do
+      %{id: id} -> id
+      _ -> nil
+    end
+    
     # Ensure signal is in the proper format
     normalized_signal = case signal do
       %Jido.Signal{} = sig -> 
@@ -566,12 +572,21 @@ defmodule JidoFoundation.Bridge do
                
         data = Map.get(signal_map, :data, %{})
         
-        case Jido.Signal.new(%{
+        # Preserve original ID if present
+        signal_attrs = %{
           type: type,
           source: source,
           data: data,
           time: DateTime.utc_now() |> DateTime.to_iso8601()
-        }) do
+        }
+        
+        # Add ID if it exists in the original signal (convert to string for Jido.Signal)
+        signal_attrs = case Map.get(signal_map, :id) do
+          nil -> signal_attrs
+          id -> Map.put(signal_attrs, "id", to_string(id))
+        end
+        
+        case Jido.Signal.new(signal_attrs) do
           {:ok, signal} -> signal
           {:error, _} ->
             # Fallback with minimal fields
@@ -599,16 +614,28 @@ defmodule JidoFoundation.Bridge do
         {:error, :invalid_signal_format}
         
       signal ->
-        case Jido.Signal.Bus.publish(bus_name, [signal]) do
+        # Get the bus name from Foundation Signal Bus service
+        actual_bus_name = case Foundation.Services.SignalBus.get_bus_name() do
+          bus when is_atom(bus) -> bus
+          {:error, :not_started} -> bus_name  # fallback to provided bus_name
+        end
+        
+        case Jido.Signal.Bus.publish(actual_bus_name, [signal]) do
           {:ok, [published_signal]} = result ->
+            # Extract signal data from RecordedSignal structure
+            signal_data = published_signal.signal
+            
             # Also emit traditional telemetry for backward compatibility
+            # Use original signal ID if available, otherwise use the Jido.Signal ID
+            telemetry_signal_id = original_signal_id || signal_data.id
+            
             :telemetry.execute(
               [:jido, :signal, :emitted],
-              %{signal_id: published_signal.id},
+              %{signal_id: telemetry_signal_id},
               %{
                 agent_id: agent,
-                signal_type: published_signal.type,
-                signal_source: published_signal.source,
+                signal_type: signal_data.type,
+                signal_source: signal_data.source,
                 framework: :jido,
                 timestamp: System.system_time(:microsecond)
               }
@@ -684,6 +711,7 @@ defmodule JidoFoundation.Bridge do
   """
   def emit_signal_protected(agent_pid, signal) do
     emit_signal(agent_pid, signal)
+    :ok
   catch
     kind, reason ->
       Logger.warning("Signal emission failed: #{kind} #{inspect(reason)}")

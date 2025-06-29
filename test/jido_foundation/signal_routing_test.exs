@@ -356,7 +356,7 @@ defmodule JidoFoundation.SignalRoutingTest do
 
       # Emit signal - should not crash the router
       result =
-        Bridge.emit_signal(agent, %{
+        Bridge.emit_signal_protected(agent, %{
           id: 1,
           type: "error.test",
           source: "agent://#{inspect(agent)}",

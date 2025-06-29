@@ -105,7 +105,7 @@ defmodule MABEAM.CoordinationTest do
 
     def find_least_loaded_agents(capability, count, _impl) do
       {:ok, agents} = find_capable_and_healthy(capability, nil)
-      agents
+      result = agents
       |> Enum.sort_by(fn {_id, _pid, metadata} ->
         resources = metadata.resources
         memory_usage = Map.get(resources, :memory_usage, 1.0)
@@ -113,6 +113,7 @@ defmodule MABEAM.CoordinationTest do
         memory_usage + cpu_usage
       end)
       |> Enum.take(count)
+      {:ok, result}
     end
   end
 
@@ -191,7 +192,7 @@ defmodule MABEAM.CoordinationTest do
       :meck.new(MABEAM.Discovery, [:passthrough])
 
       :meck.expect(MABEAM.Discovery, :find_capable_and_healthy, fn :non_existent, _impl ->
-        []
+        {:ok, []}
       end)
 
       proposal = %{action: :test}
@@ -255,7 +256,7 @@ defmodule MABEAM.CoordinationTest do
 
       :meck.expect(MABEAM.Discovery, :find_agents_with_resources, fn _min_mem, _min_cpu, _impl ->
         # No agents meet requirements
-        []
+        {:ok, []}
       end)
 
       # Impossible requirements
@@ -276,7 +277,7 @@ defmodule MABEAM.CoordinationTest do
 
       :meck.expect(MABEAM.Discovery, :find_capable_and_healthy, fn :inference, _impl ->
         # Return agents with different load levels
-        [
+        {:ok, [
           {"low_load", :pid1,
            %{
              capability: :inference,
@@ -289,7 +290,7 @@ defmodule MABEAM.CoordinationTest do
              health_status: :healthy,
              resources: %{memory_usage: 0.9, cpu_usage: 0.8}
            }}
-        ]
+        ]}
       end)
 
       :meck.new(Foundation, [:passthrough])
@@ -320,7 +321,7 @@ defmodule MABEAM.CoordinationTest do
 
       :meck.expect(MABEAM.Discovery, :find_capable_and_healthy, fn :inference, _impl ->
         # Return agents with similar balanced loads
-        [
+        {:ok, [
           {"balanced1", :pid1,
            %{
              capability: :inference,
@@ -333,7 +334,7 @@ defmodule MABEAM.CoordinationTest do
              health_status: :healthy,
              resources: %{memory_usage: 0.4, cpu_usage: 0.5}
            }}
-        ]
+        ]}
       end)
 
       {:error, :no_rebalancing_needed} =
@@ -347,14 +348,14 @@ defmodule MABEAM.CoordinationTest do
 
       :meck.expect(MABEAM.Discovery, :find_capable_and_healthy, fn :inference, _impl ->
         # Return only one agent (insufficient for load balancing)
-        [
+        {:ok, [
           {"single_agent", :pid1,
            %{
              capability: :inference,
              health_status: :healthy,
              resources: %{memory_usage: 0.9, cpu_usage: 0.8}
            }}
-        ]
+        ]}
       end)
 
       {:error, :insufficient_agents} =
@@ -406,7 +407,7 @@ defmodule MABEAM.CoordinationTest do
       :meck.new(MABEAM.Discovery, [:passthrough])
 
       :meck.expect(MABEAM.Discovery, :find_capable_and_healthy, fn :rare_capability, _impl ->
-        [{"single_agent", :pid1, %{capability: :rare_capability, health_status: :healthy}}]
+        {:ok, [{"single_agent", :pid1, %{capability: :rare_capability, health_status: :healthy}}]}
       end)
 
       # Try to transition 5 agents when only 1 exists
@@ -455,10 +456,10 @@ defmodule MABEAM.CoordinationTest do
       :meck.new(MABEAM.Discovery, [:passthrough])
       # Mock the Discovery.find_capable_and_healthy function to return test agents
       :meck.expect(MABEAM.Discovery, :find_capable_and_healthy, fn :inference, _impl ->
-        [
+        {:ok, [
           {"agent1", self(), %{capability: :inference, health_status: :healthy, node: :node1}},
           {"agent2", self(), %{capability: :inference, health_status: :healthy, node: :node2}}
-        ]
+        ]}
       end)
 
       :meck.new(Foundation, [:passthrough])
@@ -485,7 +486,7 @@ defmodule MABEAM.CoordinationTest do
       :meck.new(MABEAM.Discovery, [:passthrough])
 
       :meck.expect(MABEAM.Discovery, :find_capable_and_healthy, fn :non_existent, _impl ->
-        []
+        {:ok, []}
       end)
 
       {:error, :no_eligible_participants} =
@@ -503,11 +504,11 @@ defmodule MABEAM.CoordinationTest do
       :meck.new(MABEAM.Discovery, [:passthrough])
 
       :meck.expect(MABEAM.Discovery, :find_agents_with_resources, fn _min_mem, _min_cpu, _impl ->
-        [
+        {:ok, [
           {"high_resource", :pid1, %{resources: %{memory_available: 0.9, cpu_available: 0.8}}},
           {"med_resource", :pid2, %{resources: %{memory_available: 0.6, cpu_available: 0.5}}},
           {"low_resource", :pid3, %{resources: %{memory_available: 0.3, cpu_available: 0.2}}}
-        ]
+        ]}
       end)
 
       :meck.new(Foundation, [:passthrough])
@@ -584,7 +585,7 @@ defmodule MABEAM.CoordinationTest do
       :meck.new(MABEAM.Discovery, [:passthrough])
 
       :meck.expect(MABEAM.Discovery, :find_capable_and_healthy, fn :inference, _impl ->
-        [{"test_agent", :pid1, %{capability: :inference, health_status: :healthy}}]
+        {:ok, [{"test_agent", :pid1, %{capability: :inference, health_status: :healthy}}]}
       end)
 
       :meck.new(Foundation, [:passthrough])
@@ -648,7 +649,7 @@ defmodule MABEAM.CoordinationTest do
       :meck.new(MABEAM.Discovery, [:passthrough])
 
       :meck.expect(MABEAM.Discovery, :find_capable_and_healthy, fn :non_existent, _impl ->
-        []
+        {:ok, []}
       end)
 
       log_output =

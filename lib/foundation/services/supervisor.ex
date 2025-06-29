@@ -14,6 +14,7 @@ defmodule Foundation.Services.Supervisor do
   ├── Foundation.Services.RetryService
   ├── Foundation.Services.ConnectionManager
   ├── Foundation.Services.RateLimiter
+  ├── Foundation.Services.SignalBus
   ├── Foundation.Services.ConfigService (future)
   ├── Foundation.Services.ServiceDiscovery (future)
   ├── Foundation.Services.TelemetryService (future)
@@ -70,7 +71,9 @@ defmodule Foundation.Services.Supervisor do
           # Infrastructure service: HTTP connection manager with unique name
           {Foundation.Services.ConnectionManager, [name: :"#{supervisor_id}_connection_manager"]},
           # Infrastructure service: Rate limiter with unique name
-          {Foundation.Services.RateLimiter, [name: :"#{supervisor_id}_rate_limiter"]}
+          {Foundation.Services.RateLimiter, [name: :"#{supervisor_id}_rate_limiter"]},
+          # Signal service: Jido Signal Bus for event routing
+          {Foundation.Services.SignalBus, [name: :"#{supervisor_id}_signal_bus"]}
         ]
       else
         [
@@ -79,7 +82,9 @@ defmodule Foundation.Services.Supervisor do
           # Infrastructure service: HTTP connection manager
           {Foundation.Services.ConnectionManager, []},
           # Infrastructure service: Rate limiter
-          {Foundation.Services.RateLimiter, []}
+          {Foundation.Services.RateLimiter, []},
+          # Signal service: Jido Signal Bus for event routing
+          {Foundation.Services.SignalBus, []}
         ]
       end
 
