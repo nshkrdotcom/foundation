@@ -201,18 +201,42 @@ defmodule JidoSystem.Actions.ProcessTask do
   end
 
   defp process_with_circuit_breaker(params, context) do
-    # TODO: Implement circuit breaker when Foundation.CircuitBreaker is available
-    # circuit_breaker_name = "task_processor_#{params.task_type}"
-    # CircuitBreaker.call(circuit_breaker_name, fn ->
-    #   process_with_retry(params, context, params.retry_attempts)
-    # end, [
-    #   failure_threshold: 5,
-    #   recovery_timeout: 60_000,
-    #   timeout: params.timeout
-    # ])
+    # Use Foundation.Services.RetryService with circuit breaker integration
+    circuit_breaker_id = :"task_processor_#{params.task_type}"
+    retry_policy = get_retry_policy_for_task_type(params.task_type)
+    
+    telemetry_metadata = %{
+      task_id: params.task_id,
+      task_type: params.task_type,
+      agent_id: Map.get(context, :agent_id),
+      circuit_breaker_id: circuit_breaker_id
+    }
 
-    # For now, just call directly
-    process_with_retry(params, context, params.retry_attempts)
+    case Foundation.Services.RetryService.retry_with_circuit_breaker(
+      circuit_breaker_id,
+      fn -> execute_task_logic(params, context) end,
+      policy: retry_policy,
+      max_retries: params.retry_attempts,
+      telemetry_metadata: telemetry_metadata
+    ) do
+      {:ok, result} ->
+        {:ok, result}
+
+      {:error, :circuit_open} ->
+        Logger.warning("Circuit breaker open, rejecting task",
+          task_id: params.task_id,
+          circuit_breaker_id: circuit_breaker_id
+        )
+        {:error, :circuit_breaker_open}
+
+      {:error, reason} ->
+        Logger.error("Task failed with circuit breaker protection",
+          task_id: params.task_id,
+          reason: inspect(reason),
+          circuit_breaker_id: circuit_breaker_id
+        )
+        {:error, reason}
+    end
   end
 
   defp process_task_direct(params, context) do
@@ -220,25 +244,30 @@ defmodule JidoSystem.Actions.ProcessTask do
   end
 
   defp process_with_retry(params, context, attempts_remaining) when attempts_remaining > 0 do
-    case execute_task_logic(params, context) do
+    # Use Foundation.Services.RetryService for production-grade retry logic
+    retry_policy = get_retry_policy_for_task_type(params.task_type)
+    
+    telemetry_metadata = %{
+      task_id: params.task_id,
+      task_type: params.task_type,
+      agent_id: Map.get(context, :agent_id),
+      retry_attempts: attempts_remaining
+    }
+
+    case Foundation.Services.RetryService.retry_operation(
+      fn -> execute_task_logic(params, context) end,
+      policy: retry_policy,
+      max_retries: attempts_remaining,
+      telemetry_metadata: telemetry_metadata
+    ) do
       {:ok, result} ->
         {:ok, result}
 
-      {:error, reason} when attempts_remaining > 1 ->
-        Logger.warning("Task attempt failed, retrying",
-          task_id: params.task_id,
-          attempts_remaining: attempts_remaining - 1,
-          reason: inspect(reason)
-        )
-
-        # For now, just retry immediately without sleep
-        # TODO: Implement proper async retry mechanism
-        process_with_retry(params, context, attempts_remaining - 1)
-
       {:error, reason} ->
-        Logger.error("Task failed after all retries",
+        Logger.error("Task failed after all retries with RetryService",
           task_id: params.task_id,
-          final_reason: inspect(reason)
+          final_reason: inspect(reason),
+          retry_policy: retry_policy
         )
 
         {:error, {:retries_exhausted, reason}}
@@ -247,6 +276,27 @@ defmodule JidoSystem.Actions.ProcessTask do
 
   defp process_with_retry(_params, _context, 0) do
     {:error, :no_attempts_remaining}
+  end
+
+  # Enhanced retry policy selection based on task type
+  defp get_retry_policy_for_task_type(task_type) do
+    case task_type do
+      # Network-related tasks benefit from exponential backoff
+      type when type in [:api_call, :external_service, :http_request, :network_task] ->
+        :exponential_backoff
+
+      # Quick tasks can retry immediately
+      type when type in [:validation, :simple_computation, :quick_task] ->
+        :immediate
+
+      # Batch/processing tasks benefit from linear backoff
+      type when type in [:data_processing, :file_processing, :batch_task] ->
+        :linear_backoff
+
+      # Default to exponential backoff for unknown task types
+      _ ->
+        :exponential_backoff
+    end
   end
 
   defp execute_task_logic(params, context) do

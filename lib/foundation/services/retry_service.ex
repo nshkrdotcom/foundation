@@ -139,7 +139,7 @@ defmodule Foundation.Services.RetryService do
   @spec retry_with_circuit_breaker(atom(), (-> term()), keyword()) :: retry_result()
   def retry_with_circuit_breaker(circuit_breaker_id, operation, opts \\ []) do
     # Check circuit breaker status before retrying
-    case Foundation.Infrastructure.CircuitBreaker.get_status(circuit_breaker_id) do
+    case try_circuit_breaker_status(circuit_breaker_id) do
       {:ok, :closed} ->
         # Circuit is closed, proceed with retry
         wrapped_operation = fn ->
@@ -147,6 +147,11 @@ defmodule Foundation.Services.RetryService do
         end
 
         retry_operation(wrapped_operation, opts)
+
+      {:error, :circuit_breaker_unavailable} ->
+        # Circuit breaker not available, fallback to direct retry
+        Logger.debug("Circuit breaker #{circuit_breaker_id} not available, using direct retry")
+        retry_operation(operation, opts)
 
       {:ok, :open} ->
         # Circuit is open, don't retry
@@ -284,5 +289,18 @@ defmodule Foundation.Services.RetryService do
     )
   rescue
     _ -> :ok
+  end
+
+  # Safely try to access circuit breaker status
+  defp try_circuit_breaker_status(circuit_breaker_id) do
+    try do
+      Foundation.Infrastructure.CircuitBreaker.get_status(circuit_breaker_id)
+    catch
+      :exit, {:noproc, _} ->
+        {:error, :circuit_breaker_unavailable}
+      :exit, reason ->
+        Logger.warning("Circuit breaker access failed: #{inspect(reason)}")
+        {:error, :circuit_breaker_unavailable}
+    end
   end
 end

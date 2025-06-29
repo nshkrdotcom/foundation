@@ -394,4 +394,112 @@ Proceeding with commit since:
 - **Integration**: Seamless JidoSystem agent compatibility ✅
 - **Performance**: Efficient resource utilization ✅
 
-**Status**: ✅ STAGE 1B ENHANCED INFRASTRUCTURE COMPLETE - Ready for commit and STAGE 2
+**Status**: ✅ STAGE 1B ENHANCED INFRASTRUCTURE COMMITTED - Proceeding to STAGE 2
+
+---
+
+## 2025-06-29 - STAGE 2 START: Jido Agent Infrastructure Integration  
+
+### STAGE 2 Implementation Focus
+**Time**: 17:25  
+**Phase**: Jido Agent Infrastructure Integration  
+**Status**: IN PROGRESS
+
+#### STAGE 2 OBJECTIVES:
+1. **Agent Service Integration** - JidoSystem agents use enhanced infrastructure services
+2. **Agent-Aware Circuit Breaker** - Circuit breaker patterns for agent operations
+3. **Agent Rate Limiting** - Rate limiting integration for agent task processing
+4. **Agent HTTP Communication** - ConnectionManager integration for external services
+5. **Enhanced Agent Telemetry** - Leverage service layer telemetry for agent monitoring
+
+#### STAGE 2 STRATEGY:
+- **Agent-First Design**: JidoSystem agents consume infrastructure services
+- **Backward Compatibility**: Existing agent functionality preserved
+- **Incremental Enhancement**: Add service integration without breaking changes
+- **Test-Driven Integration**: Comprehensive testing of agent-service interactions
+
+### STAGE 2.1: Agent Service Consumption Analysis ✅ COMPLETED
+**Time**: 17:30-17:35  
+**Task**: Analyze JidoSystem agents to identify service integration opportunities
+
+#### ANALYSIS RESULTS:
+✅ **TaskAgent**: High-priority RetryService integration opportunity for `process_with_retry` (lines 222-245)
+✅ **MonitorAgent**: ConnectionManager integration for external monitoring endpoints (line 442)  
+✅ **CoordinatorAgent**: RetryService integration for task distribution reliability (line 285)
+✅ **FoundationAgent**: RetryService integration for agent registration (line 78)
+✅ **ProcessTask Action**: RetryService + ConnectionManager integration opportunities identified
+✅ **ValidateTask Action**: ConnectionManager integration for external validation services
+
+#### HIGH-PRIORITY INTEGRATIONS IDENTIFIED:
+1. **TaskAgent RetryService** - Replace primitive retry with production-grade exponential backoff
+2. **CoordinatorAgent RetryService** - Enhance task distribution reliability
+3. **FoundationAgent RetryService** - Improve agent registration reliability
+4. **ValidateTask ConnectionManager** - Replace mock external calls with real HTTP integration
+
+### STAGE 2.2: TaskAgent RetryService Integration ✅ COMPLETED
+**Time**: 17:40-18:15  
+**Task**: Implement RetryService integration in TaskAgent for resilient task processing
+
+#### IMPLEMENTATION ACHIEVEMENTS:
+✅ **ProcessTask Action Enhanced** - Fully integrated with Foundation.Services.RetryService
+✅ **Circuit Breaker Graceful Fallback** - Handles circuit breaker unavailability gracefully
+✅ **Comprehensive Test Suite** - 10 tests covering all RetryService integration scenarios
+✅ **Zero Warnings** - Clean compilation and test execution
+✅ **Production-Ready Retry Logic** - Exponential backoff, configurable policies, telemetry
+
+#### KEY FEATURES IMPLEMENTED:
+- **RetryService Integration** - process_with_retry function now uses Foundation.Services.RetryService
+- **Circuit Breaker Protection** - process_with_circuit_breaker integrates RetryService with circuit breaker
+- **Retry Policy Selection** - Task-type based retry policy selection (exponential, linear, immediate)
+- **Graceful Fallback** - Circuit breaker unavailability handled gracefully with direct retry
+- **Telemetry Integration** - Full observability for retry operations and circuit breaker events
+- **Comprehensive Testing** - Tests for success, failure, retry scenarios, and telemetry
+
+#### TECHNICAL IMPLEMENTATION:
+- **RetryService API Usage** - retry_operation() and retry_with_circuit_breaker() properly integrated
+- **Task Type Policy Mapping** - Network tasks use exponential backoff, validation uses immediate, etc.
+- **Safe Circuit Breaker Access** - try_circuit_breaker_status() handles unavailable circuit breaker
+- **Test Schema Compliance** - All test parameters match ProcessTask action schema requirements
+- **Error Handling** - Proper error propagation and formatting for retry exhaustion scenarios
+
+#### QUALITY METRICS:
+- **Tests**: 10/10 passing ✅
+- **Warnings**: 0 ✅  
+- **Architecture**: Sound RetryService integration ✅
+- **Performance**: Production-grade retry logic with exponential backoff ✅
+
+### STAGE 2.3: FoundationAgent RetryService Integration ✅ COMPLETED
+**Time**: 18:20-18:45  
+**Task**: Implement RetryService integration in FoundationAgent for agent registration reliability
+
+#### IMPLEMENTATION ACHIEVEMENTS:
+✅ **FoundationAgent Enhanced** - Agent registration now uses Foundation.Services.RetryService
+✅ **Exponential Backoff Registration** - Reliable agent registration with 3 retry attempts
+✅ **Comprehensive Error Handling** - Proper error propagation and logging for registration failures
+✅ **All Tests Passing** - 13/13 FoundationAgent tests pass with RetryService integration
+✅ **Production-Ready Registration** - Telemetry and logging for agent registration operations
+
+#### KEY FEATURES IMPLEMENTED:
+- **RetryService Integration** - Bridge.register_agent wrapped with retry_operation()
+- **Exponential Backoff Policy** - Network-style retry policy for registration attempts
+- **Enhanced Logging** - Clear distinction between retry attempts and final success/failure
+- **Error Propagation** - Proper error handling for registration failures after retries
+- **Telemetry Integration** - Agent registration telemetry includes retry metadata
+- **Graceful Fallback** - Handles unexpected return values from Bridge registration
+
+#### TECHNICAL IMPLEMENTATION:
+- **RetryService API Usage** - retry_operation() with exponential_backoff policy and 3 max_retries
+- **Pattern Matching** - Correct handling of `{:ok, :ok}` from RetryService wrapping Bridge.register_agent
+- **Error Handling** - Comprehensive error cases for registration failures and unexpected results
+- **Telemetry Metadata** - Agent registration operations include operation type and capabilities
+- **Logging Enhancement** - "registered via RetryService" messaging for successful operations
+
+#### QUALITY METRICS:
+- **Tests**: 13/13 passing ✅
+- **Warnings**: Minor unused variable warnings only ✅  
+- **Architecture**: Sound RetryService integration with FoundationAgent ✅
+- **Performance**: Reliable agent registration with exponential backoff ✅
+
+### STAGE 2.4: CoordinatorAgent RetryService Integration
+**Time**: 18:50  
+**Task**: Implement RetryService integration in CoordinatorAgent for task distribution reliability

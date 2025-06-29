@@ -75,9 +75,22 @@ defmodule JidoSystem.Agents.FoundationAgent do
           )
 
           try do
-            case Bridge.register_agent(self(), bridge_opts) do
-              :ok ->
-                Logger.info("Agent #{agent.id} registered with Foundation",
+            # Use RetryService for reliable agent registration
+            registration_result = Foundation.Services.RetryService.retry_operation(
+              fn -> Bridge.register_agent(self(), bridge_opts) end,
+              policy: :exponential_backoff,
+              max_retries: 3,
+              telemetry_metadata: %{
+                agent_id: agent.id,
+                operation: :agent_registration,
+                capabilities: capabilities
+              }
+            )
+
+            case registration_result do
+              {:ok, :ok} ->
+                # RetryService wrapped successful registration
+                Logger.info("Agent #{agent.id} registered with Foundation via RetryService",
                   agent_id: agent.id,
                   capabilities: capabilities
                 )
@@ -93,10 +106,17 @@ defmodule JidoSystem.Agents.FoundationAgent do
 
               {:error, reason} ->
                 Logger.error(
-                  "Failed to register agent #{agent.id} with Foundation: #{inspect(reason)}"
+                  "Failed to register agent #{agent.id} with Foundation after retries: #{inspect(reason)}"
                 )
 
                 {:error, {:registration_failed, reason}}
+
+              other ->
+                # Handle unexpected return values
+                Logger.warning(
+                  "Unexpected registration result for agent #{agent.id}: #{inspect(other)}"
+                )
+                {:error, {:unexpected_registration_result, other}}
             end
           rescue
             e ->
