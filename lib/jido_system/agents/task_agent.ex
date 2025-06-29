@@ -252,7 +252,7 @@ defmodule JidoSystem.Agents.TaskAgent do
       start_time = System.monotonic_time(:microsecond)
 
       # Create validate task instruction
-      validate_instruction = Jido.Instruction.new!(%{
+      _validate_instruction = Jido.Instruction.new!(%{
         action: ValidateTask,
         params: task_params
       })
@@ -261,7 +261,7 @@ defmodule JidoSystem.Agents.TaskAgent do
       case Jido.Exec.run(ValidateTask, task_params, %{}) do
         {:ok, validated_task} ->
           # Create process task instruction
-          process_instruction = Jido.Instruction.new!(%{
+          _process_instruction = Jido.Instruction.new!(%{
             action: ProcessTask,
             params: validated_task
           })

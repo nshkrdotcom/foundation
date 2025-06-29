@@ -85,24 +85,27 @@ defmodule MABEAM.CoordinationTest do
     ]
 
     def find_capable_and_healthy(capability, _impl) do
-      Enum.filter(@mock_agents, fn {_id, _pid, metadata} ->
+      agents = Enum.filter(@mock_agents, fn {_id, _pid, metadata} ->
         agent_capabilities = List.wrap(metadata.capability)
         capability in agent_capabilities and metadata.health_status == :healthy
       end)
+      {:ok, agents}
     end
 
     def find_agents_with_resources(min_memory, min_cpu, _impl) do
-      Enum.filter(@mock_agents, fn {_id, _pid, metadata} ->
+      agents = Enum.filter(@mock_agents, fn {_id, _pid, metadata} ->
         resources = metadata.resources
         memory_ok = Map.get(resources, :memory_available, 0.0) >= min_memory
         cpu_ok = Map.get(resources, :cpu_available, 0.0) >= min_cpu
         health_ok = metadata.health_status == :healthy
         memory_ok and cpu_ok and health_ok
       end)
+      {:ok, agents}
     end
 
     def find_least_loaded_agents(capability, count, _impl) do
-      find_capable_and_healthy(capability, nil)
+      {:ok, agents} = find_capable_and_healthy(capability, nil)
+      agents
       |> Enum.sort_by(fn {_id, _pid, metadata} ->
         resources = metadata.resources
         memory_usage = Map.get(resources, :memory_usage, 1.0)

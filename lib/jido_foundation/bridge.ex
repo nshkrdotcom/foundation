@@ -544,9 +544,10 @@ defmodule JidoFoundation.Bridge do
         source: "/agent/worker",
         data: %{error: "timeout", retry_count: 3}
       }
-      {:ok, [signal]} = Bridge.emit_signal(signal_map)
+      {:ok, [signal]} = Bridge.emit_signal(agent_pid, signal_map)
   """
-  def emit_signal(signal, opts \\ []) do
+  def emit_signal(agent, signal, opts \\ []) do
+    # Agent parameter is used in telemetry metadata
     bus_name = Keyword.get(opts, :bus, :foundation_signal_bus)
     
     # Ensure signal is in the proper format
@@ -605,6 +606,7 @@ defmodule JidoFoundation.Bridge do
               [:jido, :signal, :emitted],
               %{signal_id: published_signal.id},
               %{
+                agent_id: agent,
                 signal_type: published_signal.type,
                 signal_source: published_signal.source,
                 framework: :jido,
