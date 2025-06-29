@@ -186,9 +186,16 @@ defmodule Foundation.MixProject do
       # Optional integrations
       {:gemini_ex, "~>0.0.2", optional: true},
 
+
+      ###################################################################################################
       # Jido agent framework integration
-      {:jido, github: "agentjido/jido", optional: true},
-      {:jido_action, github: "agentjido/jido_action", optional: true},
+      {:jido, github: "nshkrdotcom/jido", branch: "fix/dialyzer-warnings"},
+
+      ## Note: this is only here until the PR's for jido and jido_signal are merged, bc its a dep in jido:
+      {:jido_signal, github: "nshkrdotcom/jido_signal", branch: "fix/dialyzer-warnings", override: true},
+
+      {:jido_action, github: "nshkrdotcom/jido_action", branch: "fix/dialyzer-warnings"},
+      ###################################################################################################
 
       # Development and testing
       {:mox, "~> 1.2", only: [:dev, :test]},
