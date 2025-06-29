@@ -67,9 +67,43 @@ defmodule Foundation.UnifiedTestFoundation do
   # Mode-specific setup functions
   
   @doc """
+  Ensures Foundation application and services are available for tests.
+  """
+  def ensure_foundation_services do
+    # Start Foundation application if not already started
+    case Application.ensure_all_started(:foundation) do
+      {:ok, _apps} -> :ok
+      {:error, _reason} -> :ok  # May already be started
+    end
+    
+    # Verify critical services are available
+    services_to_check = [
+      Foundation.ResourceManager,
+      Foundation.PerformanceMonitor
+    ]
+    
+    Enum.each(services_to_check, fn service ->
+      case Process.whereis(service) do
+        nil -> 
+          # Try to start the service if it's not running
+          case service.start_link() do
+            {:ok, _pid} -> :ok
+            {:error, {:already_started, _pid}} -> :ok
+            {:error, reason} -> 
+              raise "Failed to start #{service}: #{inspect(reason)}"
+          end
+        _pid -> :ok
+      end
+    end)
+    
+    :ok
+  end
+
+  @doc """
   Basic setup with minimal isolation.
   """
   def basic_setup(_context) do
+    ensure_foundation_services()
     test_id = :erlang.unique_integer([:positive])
     
     %{
@@ -82,6 +116,8 @@ defmodule Foundation.UnifiedTestFoundation do
   Registry isolation setup.
   """
   def registry_setup(context) do
+    ensure_foundation_services()
+    
     # Generate unique registry name using the proven pattern from Foundation.TestConfig
     test_name =
       Map.get(context, :test, "unknown")
@@ -163,6 +199,7 @@ defmodule Foundation.UnifiedTestFoundation do
   Full isolation setup with all services isolated.
   """
   def full_isolation_setup(_context) do
+    ensure_foundation_services()
     test_id = :erlang.unique_integer([:positive])
     
     # Create comprehensive test context
