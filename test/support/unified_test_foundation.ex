@@ -545,24 +545,22 @@ defmodule Foundation.UnifiedTestFoundation do
   end
   
   defp try_start_component(components, key, module, opts) do
-    case Code.ensure_loaded?(module) do
-      {:module, ^module} ->
-        try do
-          case module.start_link(opts) do
-            {:ok, pid} ->
-              Map.put(components, key, pid)
-            {:error, {:already_started, pid}} ->
-              Map.put(components, key, pid)
-            {:error, _reason} ->
-              Map.put(components, key, :failed_to_start)
-          end
-        rescue
-          _ ->
-            Map.put(components, key, :start_exception)
+    if Code.ensure_loaded?(module) do
+      try do
+        case module.start_link(opts) do
+          {:ok, pid} ->
+            Map.put(components, key, pid)
+          {:error, {:already_started, pid}} ->
+            Map.put(components, key, pid)
+          {:error, _reason} ->
+            Map.put(components, key, :failed_to_start)
         end
-        
-      {:error, _} ->
-        Map.put(components, key, :not_available)
+      rescue
+        _ ->
+          Map.put(components, key, :start_exception)
+      end
+    else
+      Map.put(components, key, :not_available)
     end
   end
   

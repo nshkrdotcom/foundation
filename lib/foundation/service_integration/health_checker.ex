@@ -476,14 +476,6 @@ defmodule Foundation.ServiceIntegration.HealthChecker do
     results = Enum.map(state.registered_health_checks, fn {service, _config} ->
       case perform_service_health_check(service, state) do
         {:ok, result} -> result
-        {:error, reason} -> 
-          %{
-            service: service,
-            status: :unhealthy,
-            response_time_ms: 0,
-            metadata: %{error: reason},
-            timestamp: DateTime.utc_now()
-          }
       end
     end)
     
@@ -559,14 +551,6 @@ defmodule Foundation.ServiceIntegration.HealthChecker do
     results = Enum.map(state.registered_health_checks, fn {service, _config} ->
       case perform_service_health_check(service, state) do
         {:ok, result} -> result
-        {:error, reason} ->
-          %{
-            service: service,
-            status: :unhealthy,
-            response_time_ms: 0,
-            metadata: %{error: reason},
-            timestamp: DateTime.utc_now()
-          }
       end
     end)
     

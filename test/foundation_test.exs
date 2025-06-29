@@ -37,6 +37,16 @@ defmodule FoundationTest do
       {:ok, [{:test_key, self(), %{capability: :test}}]}
     end
 
+    def count(_impl) do
+      send(self(), {:count_called})
+      {:ok, 1}
+    end
+
+    def select(_impl, criteria) do
+      send(self(), {:select_called, criteria})
+      {:ok, [{:test_key, self(), %{capability: :test}}]}
+    end
+
     def indexed_attributes(_impl) do
       send(self(), {:indexed_attributes_called})
       [:capability, :health_status]

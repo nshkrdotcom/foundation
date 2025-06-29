@@ -69,7 +69,7 @@ defmodule Foundation.TestFoundation do
   @doc """
   Helper to start a test-scoped signal router.
   """
-  def start_test_signal_router(test_context) do
+  def start_test_signal_router(_test_context) do
     # This would start your test signal router with test-scoped name
     # Implementation depends on your SignalRouter module
     {:ok, spawn(fn -> :timer.sleep(:infinity) end)}  # Placeholder

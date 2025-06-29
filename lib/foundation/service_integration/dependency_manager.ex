@@ -182,17 +182,17 @@ defmodule Foundation.ServiceIntegration.DependencyManager do
     table_name = Keyword.get(opts, :table_name, default_table_name)
     
     # Create ETS table following Foundation.ResourceManager patterns
-    case :ets.new(table_name, @table_opts) do
-      ^table_name ->
-        Logger.info("Foundation.ServiceIntegration.DependencyManager started",
-          table_name: table_name)
-        
-        {:ok, %__MODULE__{
-          table_name: table_name,
-          dependency_graph: %{}
-        }}
-        
-      {:error, reason} ->
+    try do
+      table = :ets.new(table_name, @table_opts)
+      Logger.info("Foundation.ServiceIntegration.DependencyManager started",
+        table_name: table_name)
+      
+      {:ok, %__MODULE__{
+        table_name: table,
+        dependency_graph: %{}
+      }}
+    rescue
+      reason ->
         Logger.error("Failed to create DependencyManager ETS table",
           table_name: table_name, reason: reason)
         {:stop, {:ets_creation_failed, reason}}

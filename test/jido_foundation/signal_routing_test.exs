@@ -163,7 +163,7 @@ defmodule JidoFoundation.SignalRoutingTest do
   end
 
   describe "Jido.Signal routing through Foundation.Telemetry" do
-    test "routes signals to subscribed handlers by type", %{registry: registry, signal_router: router, test_context: ctx} do
+    test "routes signals to subscribed handlers by type", %{registry: registry, signal_router: router, test_context: _ctx} do
       # Create signal handlers
       {:ok, handler1} = SignalHandler.start_link("handler1")
       {:ok, handler2} = SignalHandler.start_link("handler2")
@@ -277,7 +277,7 @@ defmodule JidoFoundation.SignalRoutingTest do
       assert hd(handler3_signals).type == "error.validation"
     end
 
-    test "supports dynamic subscription management", %{registry: registry, signal_router: router, test_context: ctx} do
+    test "supports dynamic subscription management", %{registry: registry, signal_router: router, test_context: _ctx} do
       {:ok, handler} = SignalHandler.start_link("dynamic_handler")
       {:ok, agent} = Task.start_link(fn -> :timer.sleep(:infinity) end)
 
@@ -352,7 +352,7 @@ defmodule JidoFoundation.SignalRoutingTest do
       assert length(signals) == 1
     end
 
-    test "emits routing telemetry events", %{registry: registry, signal_router: router, test_context: ctx} do
+    test "emits routing telemetry events", %{registry: registry, signal_router: router, test_context: _ctx} do
       test_pid = self()
 
       # Attach telemetry handler for routing events
@@ -395,7 +395,7 @@ defmodule JidoFoundation.SignalRoutingTest do
       assert metadata.handlers == [handler]
     end
 
-    test "handles signal routing errors gracefully", %{registry: registry, signal_router: router, test_context: ctx} do
+    test "handles signal routing errors gracefully", %{registry: registry, signal_router: router, test_context: _ctx} do
       # Create a dead handler process
       dead_handler = spawn(fn -> :ok end)
       ref = Process.monitor(dead_handler)
@@ -424,7 +424,7 @@ defmodule JidoFoundation.SignalRoutingTest do
       assert Process.alive?(router)
     end
 
-    test "supports wildcard signal subscriptions", %{registry: registry, signal_router: router, test_context: ctx} do
+    test "supports wildcard signal subscriptions", %{registry: registry, signal_router: router, test_context: _ctx} do
       {:ok, wildcard_handler} = SignalHandler.start_link("wildcard_handler")
       {:ok, specific_handler} = SignalHandler.start_link("specific_handler")
       {:ok, agent} = Task.start_link(fn -> :timer.sleep(:infinity) end)

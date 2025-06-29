@@ -258,7 +258,6 @@ defmodule Foundation.ServiceIntegration.ContractValidator do
       
       jido_contracts = case validate_jido_contracts() do
         {:ok, result} -> result
-        {:error, reason} -> {:error, reason}
       end
       
       mabeam_contracts = case validate_mabeam_contracts_with_evolution() do
