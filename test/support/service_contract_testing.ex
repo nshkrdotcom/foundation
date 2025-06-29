@@ -56,27 +56,27 @@ defmodule Foundation.Support.ServiceContractTesting do
   def validate_discovery_contract(discovery_module) do
     violations = []
 
-    # Test find_capable_and_healthy contract (arity 1 and 2)
+    # Test find_capable_and_healthy contract (current arity 2: capability, impl)
     violations = violations ++ validate_function_contract(
       discovery_module,
       :find_capable_and_healthy,
-      [:test_capability],
+      [:test_capability, nil],
       &validate_discovery_result/1
     )
 
-    # Test find_agents_with_resources contract (arity 2 and 3)
+    # Test find_agents_with_resources contract (current arity 3: memory, cpu, impl)
     violations = violations ++ validate_function_contract(
       discovery_module,
       :find_agents_with_resources,
-      [0.5, 0.5],
+      [0.5, 0.5, nil],
       &validate_discovery_result/1
     )
 
-    # Test find_least_loaded_agents contract (arity 1, 2, and 3)
+    # Test find_least_loaded_agents contract (current arity 3: capability, count, impl)
     violations = violations ++ validate_function_contract(
       discovery_module,
       :find_least_loaded_agents,
-      [:test_capability],
+      [:test_capability, 5, nil],
       &validate_discovery_result/1
     )
 
@@ -101,14 +101,21 @@ defmodule Foundation.Support.ServiceContractTesting do
   @spec validate_function_contract(module(), atom(), [term()], function()) :: [term()]
   def validate_function_contract(module, function, args, validator) do
     try do
-      if function_exported?(module, function, length(args)) do
-        result = apply(module, function, args)
-        case validator.(result) do
-          :ok -> []
-          {:error, reason} -> [{:contract_violation, module, function, reason}]
-        end
-      else
-        [{:function_not_exported, module, function, length(args)}]
+      # Ensure module is properly compiled and loaded
+      case Code.ensure_compiled(module) do
+        {:module, ^module} ->
+          if function_exported?(module, function, length(args)) do
+            result = apply(module, function, args)
+            case validator.(result) do
+              :ok -> []
+              {:error, reason} -> [{:contract_violation, module, function, reason}]
+            end
+          else
+            [{:function_not_exported, module, function, length(args)}]
+          end
+        
+        {:error, reason} ->
+          [{:module_compilation_error, module, reason}]
       end
     catch
       kind, error ->

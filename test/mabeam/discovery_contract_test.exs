@@ -33,6 +33,7 @@ defmodule MABEAM.DiscoveryContractTest do
                 ]),
                 max_runs: 30 do
 
+        # Use evolved arity 2 signature (capability, impl)
         result = Discovery.find_capable_and_healthy(capability, nil)
         
         case validate_discovery_result(result) do
@@ -48,6 +49,7 @@ defmodule MABEAM.DiscoveryContractTest do
                 cpu <- float(min: 0.0, max: 1.0),
                 max_runs: 20 do
 
+        # Use evolved arity 3 signature (memory, cpu, impl)
         result = Discovery.find_agents_with_resources(memory, cpu, nil)
         
         case validate_discovery_result(result) do
@@ -67,6 +69,7 @@ defmodule MABEAM.DiscoveryContractTest do
                 count <- integer(1..10),
                 max_runs: 20 do
 
+        # Use evolved arity 3 signature (capability, count, impl)
         result = Discovery.find_least_loaded_agents(capability, count, nil)
         
         case validate_discovery_result(result) do
