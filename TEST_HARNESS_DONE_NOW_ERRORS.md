@@ -125,6 +125,8 @@ assert_receive {:routing_complete, "signal1", 2}, 1000  # expects async result d
 ### 🔴 CATEGORY 3: Service Contract Violations (Error 9)
 **Architectural Problem**: Discovery service contract implementation mismatch
 
+**📋 CONSOLIDATED STRATEGY**: See `CONSOLIDATED_SERVICE_INTEGRATION_STRATEGY.md` for comprehensive solution addressing this issue alongside related service boundary problems identified in `SERVICE_INTEGRATION_BUILDOUT.md` and `DIALYZER_AUDIT_PRE_SERVICE_INTEGRATION_BUILDOUT.md`.
+
 #### Error Details:
 ```
 {:error, [{:function_not_exported, MABEAM.Discovery, :find_capable_and_healthy, 1}, 
@@ -136,6 +138,7 @@ assert_receive {:routing_complete, "signal1", 2}, 1000  # expects async result d
 1. **Arity Mismatch**: Contract validation expects functions with specific arities, but implementation uses different signatures
 2. **API Evolution**: Discovery functions evolved to include `impl` parameter, changing expected arities
 3. **Contract Testing Gap**: Validation logic assumes arity 1/2 functions, but implementation provides arity 2/3
+4. **Service Integration Gap**: Lost `Foundation.ServiceIntegration.ContractValidator` (~409 lines) would have prevented this
 
 **Contract Expectations vs Reality:**
 ```elixir
@@ -150,10 +153,15 @@ find_agents_with_resources(memory, cpu, impl)  # arity 3
 find_least_loaded_agents(capability, count, impl) # arity 3
 ```
 
+**Convergent Analysis**: This Category 3 issue is part of a larger pattern identified across three documents:
+- **This Document**: Runtime contract validation failures
+- **SERVICE_INTEGRATION_BUILDOUT.md**: Lost ContractValidator that would have prevented this
+- **DIALYZER_AUDIT**: Type system contract violations in service boundaries
+
 **Files Affected:**
 - `test/mabeam/discovery_contract_test.exs:21` - Contract validation failure
 
-**Architectural Severity**: HIGH - Indicates API contract evolution without test adaptation
+**Architectural Severity**: HIGH - Indicates API contract evolution without systematic validation framework
 
 ## Architectural Assessment
 
