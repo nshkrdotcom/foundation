@@ -3,8 +3,7 @@ defmodule JidoSystem.Agents.TaskAgentTest do
   use Foundation.TestConfig, :registry
 
   alias JidoSystem.Agents.TaskAgent
-  alias JidoSystem.Actions.{ProcessTask, ValidateTask, QueueTask}
-  alias Foundation.{Registry, Telemetry}
+  alias JidoSystem.Actions.{ProcessTask, QueueTask}
 
   setup do
     # Ensure clean state - detach any existing handlers
@@ -19,7 +18,7 @@ defmodule JidoSystem.Agents.TaskAgentTest do
   end
 
   describe "task agent initialization" do
-    test "successfully initializes with correct capabilities", %{registry: registry} do
+    test "successfully initializes with correct capabilities", %{registry: _registry} do
       {:ok, pid} = start_supervised({TaskAgent, [id: "task_agent_init"]})
 
       assert Process.alive?(pid)
@@ -102,7 +101,7 @@ defmodule JidoSystem.Agents.TaskAgentTest do
       Jido.Agent.Server.cast(agent, instruction)
 
       # Should receive completion telemetry
-      assert_receive {^ref, :task_completed, measurements, metadata}, 5000
+      assert_receive {^ref, :task_completed, _measurements, metadata}, 5000
       assert metadata.task_id == "test_task_1"
       assert metadata.result == :success
 

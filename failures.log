@@ -1,0 +1,256 @@
+[info] Unified streaming manager started with max_streams: 100
+[info] Starting Foundation Protocol Platform v2.1
+[info] Foundation.PerformanceMonitor started
+[info] Foundation.ResourceManager started with limits: %{max_memory_mb: 1024, max_ets_entries: 1000000, cleanup_interval: 60000, alert_threshold: 0.9, max_registry_size: 100000}
+[info] Foundation Services Supervisor initialized with 3 services
+[info] Foundation.Services.RetryService started with config: %{max_retries: 3, retry_budget: 10, backoff_factor: 2, initial_delay: 500, jitter: true, max_delay: 10000}
+[info] Foundation.Services.ConnectionManager started with Finch: finch_-576460752303423485
+[info] Foundation.Services.RateLimiter started
+[info] Foundation Protocol Platform started successfully
+[warning] No coordination implementation configured. Foundation.Coordination functions will raise errors.
+[warning] No infrastructure implementation configured. Foundation.Infrastructure functions will raise errors.
+[info] Foundation configuration validation passed
+[info] MABEAM.AgentRegistry (test) started with anonymous ETS tables (process-managed)
+Running ExUnit with seed: 992509, max_cases: 1
+
+
+JidoFoundation.SignalIntegrationTest [test/jido_foundation/signal_integration_test.exs]
+  * test Jido.Signal Foundation integration emits signals through Foundation telemetry [L#114][info] MABEAM.AgentRegistry (default) started with anonymous ETS tables (process-managed)
+[info] Registered Jido agent #PID<0.370.0> with Foundation
+[info] The function passed as a handler with ID "test-signal-events" is a local function.
+This means that it is either an anonymous function or a capture of a function without a module specified. That may cause a performance penalty when calling that handler. For more details see the note in `telemetry:attach/4` documentation.
+
+https://hexdocs.pm/telemetry/telemetry.html#attach/4
+  * test Jido.Signal Foundation integration emits signals through Foundation telemetry (135.4ms) [L#114]
+[info] MABEAM.AgentRegistry (default) started with anonymous ETS tables (process-managed)
+[info] Registered Jido agent #PID<0.375.0> with Foundation
+[info] MABEAM.AgentRegistry (default) started with anonymous ETS tables (process-managed)
+[info] The function passed as a handler with ID "jido-signal-router" is a local function.
+This means that it is either an anonymous function or a capture of a function without a module specified. That may cause a performance penalty when calling that handler. For more details see the note in `telemetry:attach/4` documentation.
+
+https://hexdocs.pm/telemetry/telemetry.html#attach/4
+[info] Registered Jido agent #PID<0.385.0> with Foundation
+
+  1) test Jido.Signal Foundation integration emits signals through Foundation telemetry (JidoFoundation.SignalIntegrationTest)
+     test/jido_foundation/signal_integration_test.exs:114
+     Assertion failed, no matching message after 100ms
+     The process mailbox is empty.
+     code: assert_receive {:telemetry, [:jido, :signal, :emitted], measurements, metadata}
+     stacktrace:
+       test/jido_foundation/signal_integration_test.exs:156: (test)
+
+  * test Jido.Signal error handling handles signal emission failures gracefully [L#362]  * test Jido.Signal error handling handles signal emission failures gracefully (0.7ms) [L#362]
+
+  2) test Jido.Signal error handling handles signal emission failures gracefully (JidoFoundation.SignalIntegrationTest)
+     test/jido_foundation/signal_integration_test.exs:362
+     Assertion with == failed
+     code:  assert result == :ok
+     left:  {:error, :not_found}
+     right: :ok
+     stacktrace:
+       test/jido_foundation/signal_integration_test.exs:397: (test)
+
+
+JidoFoundation.SignalRoutingTest [test/jido_foundation/signal_routing_test.exs]
+  * test Jido.Signal routing through Foundation.Telemetry routes signals to subscribed handlers by type [L#165]Unexpected handler2_signals: []
+  * test Jido.Signal routing through Foundation.Telemetry routes signals to subscribed handlers by type (51.8ms) [L#165]
+
+  3) test Jido.Signal routing through Foundation.Telemetry routes signals to subscribed handlers by type (JidoFoundation.SignalRoutingTest)
+     test/jido_foundation/signal_routing_test.exs:165
+     Assertion with == failed
+     code:  assert length(handler1_signals) == 1
+     left:  0
+     right: 1
+     stacktrace:
+       test/jido_foundation/signal_routing_test.exs:236: (test)
+
+  * test Jido.Signal routing through Foundation.Telemetry supports wildcard signal subscriptions [L#372][info] MABEAM.AgentRegistry (default) started with anonymous ETS tables (process-managed)
+[info] The function passed as a handler with ID "jido-signal-router" is a local function.
+This means that it is either an anonymous function or a capture of a function without a module specified. That may cause a performance penalty when calling that handler. For more details see the note in `telemetry:attach/4` documentation.
+
+https://hexdocs.pm/telemetry/telemetry.html#attach/4
+[info] Registered Jido agent #PID<0.393.0> with Foundation
+  * test Jido.Signal routing through Foundation.Telemetry supports wildcard signal subscriptions (52.2ms) [L#372]
+
+  4) test Jido.Signal routing through Foundation.Telemetry supports wildcard signal subscriptions (JidoFoundation.SignalRoutingTest)
+     test/jido_foundation/signal_routing_test.exs:372
+     Assertion with == failed
+     code:  assert length(wildcard_signals) == 2
+     left:  0
+     right: 2
+     stacktrace:
+       test/jido_foundation/signal_routing_test.exs:418: (test)
+
+  * test Jido.Signal routing through Foundation.Telemetry supports dynamic subscription management [L#248][info] MABEAM.AgentRegistry (default) started with anonymous ETS tables (process-managed)
+[info] The function passed as a handler with ID "jido-signal-router" is a local function.
+This means that it is either an anonymous function or a capture of a function without a module specified. That may cause a performance penalty when calling that handler. For more details see the note in `telemetry:attach/4` documentation.
+
+https://hexdocs.pm/telemetry/telemetry.html#attach/4
+[info] Registered Jido agent #PID<0.400.0> with Foundation
+  * test Jido.Signal routing through Foundation.Telemetry supports dynamic subscription management (51.4ms) [L#248]
+
+  5) test Jido.Signal routing through Foundation.Telemetry supports dynamic subscription management (JidoFoundation.SignalRoutingTest)
+     test/jido_foundation/signal_routing_test.exs:248
+     Assertion with == failed
+     code:  assert length(signals) == 1
+     left:  0
+     right: 1
+     stacktrace:
+       test/jido_foundation/signal_routing_test.exs:278: (test)
+
+  * test Jido.Signal routing through Foundation.Telemetry handles signal routing errors gracefully [L#343][info] MABEAM.AgentRegistry (default) started with anonymous ETS tables (process-managed)
+[info] The function passed as a handler with ID "jido-signal-router" is a local function.
+This means that it is either an anonymous function or a capture of a function without a module specified. That may cause a performance penalty when calling that handler. For more details see the note in `telemetry:attach/4` documentation.
+
+https://hexdocs.pm/telemetry/telemetry.html#attach/4
+[info] Registered Jido agent #PID<0.407.0> with Foundation
+  * test Jido.Signal routing through Foundation.Telemetry handles signal routing errors gracefully (0.9ms) [L#343]
+
+  6) test Jido.Signal routing through Foundation.Telemetry handles signal routing errors gracefully (JidoFoundation.SignalRoutingTest)
+     test/jido_foundation/signal_routing_test.exs:343
+     Assertion with == failed
+     code:  assert result == :ok
+     left:  {:error, :not_found}
+     right: :ok
+     stacktrace:
+       test/jido_foundation/signal_routing_test.exs:366: (test)
+
+  * test Jido.Signal routing through Foundation.Telemetry emits routing telemetry events [L#300][info] MABEAM.AgentRegistry (default) started with anonymous ETS tables (process-managed)
+[info] The function passed as a handler with ID "jido-signal-router" is a local function.
+This means that it is either an anonymous function or a capture of a function without a module specified. That may cause a performance penalty when calling that handler. For more details see the note in `telemetry:attach/4` documentation.
+
+https://hexdocs.pm/telemetry/telemetry.html#attach/4
+[info] The function passed as a handler with ID "test-routing-events" is a local function.
+This means that it is either an anonymous function or a capture of a function without a module specified. That may cause a performance penalty when calling that handler. For more details see the note in `telemetry:attach/4` documentation.
+
+https://hexdocs.pm/telemetry/telemetry.html#attach/4
+[info] Registered Jido agent #PID<0.414.0> with Foundation
+  * test Jido.Signal routing through Foundation.Telemetry emits routing telemetry events (100.8ms) [L#300]
+
+  7) test Jido.Signal routing through Foundation.Telemetry emits routing telemetry events (JidoFoundation.SignalRoutingTest)
+     test/jido_foundation/signal_routing_test.exs:300
+     Assertion failed, no matching message after 100ms
+     The process mailbox is empty.
+     code: assert_receive {:telemetry, [:jido, :signal, :routed], measurements, metadata}
+     stacktrace:
+       test/jido_foundation/signal_routing_test.exs:337: (test)
+
+
+MABEAM.CoordinationTest [test/mabeam/coordination_test.exs]
+  * test load balancing coordination coordinate_load_balancing analyzes load and starts rebalancing [L#274]  * test load balancing coordination coordinate_load_balancing analyzes load and starts rebalancing (93.2ms) [L#274]
+
+  8) test load balancing coordination coordinate_load_balancing analyzes load and starts rebalancing (MABEAM.CoordinationTest)
+     test/mabeam/coordination_test.exs:274
+     ** (CaseClauseError) no case clause matching: [{"low_load", :pid1, %{resources: %{memory_usage: 0.1, cpu_usage: 0.1}, capability: :inference, health_status: :healthy}}, {"high_load", :pid2, %{resources: %{memory_usage: 0.9, cpu_usage: 0.8}, capability: :inference, health_status: :healthy}}]
+     code: {:ok, ref} = MABEAM.Coordination.coordinate_load_balancing(:inference, 0.5, 0.2)
+     stacktrace:
+       (foundation 0.1.5) lib/mabeam/coordination.ex:176: MABEAM.Coordination.coordinate_load_balancing/4
+       test/mabeam/coordination_test.exs:302: (test)
+
+  * test capability-based barrier creation create_capability_barrier with additional filters [L#454]  * test capability-based barrier creation create_capability_barrier with additional filters (83.7ms) [L#454]
+
+  9) test capability-based barrier creation create_capability_barrier with additional filters (MABEAM.CoordinationTest)
+     test/mabeam/coordination_test.exs:454
+     ** (CaseClauseError) no case clause matching: [{"agent1", #PID<0.425.0>, %{node: :node1, capability: :inference, health_status: :healthy}}, {"agent2", #PID<0.425.0>, %{node: :node2, capability: :inference, health_status: :healthy}}]
+     code: MABEAM.Coordination.create_capability_barrier(:inference, :node1_sync, additional_filters)
+     stacktrace:
+       (foundation 0.1.5) lib/mabeam/coordination.ex:461: MABEAM.Coordination.apply_additional_filters/3
+       (foundation 0.1.5) lib/mabeam/coordination.ex:295: MABEAM.Coordination.create_capability_barrier/4
+       test/mabeam/coordination_test.exs:475: (test)
+
+  * test capability transition coordination coordinate_capability_transition handles insufficient source agents [L#405]  * test capability transition coordination coordinate_capability_transition handles insufficient source agents (31.0ms) [L#405]
+
+ 10) test capability transition coordination coordinate_capability_transition handles insufficient source agents (MABEAM.CoordinationTest)
+     test/mabeam/coordination_test.exs:405
+     ** (CaseClauseError) no case clause matching: [{"single_agent", :pid1, %{capability: :rare_capability, health_status: :healthy}}]
+     code: MABEAM.Coordination.coordinate_capability_transition(
+     stacktrace:
+       (foundation 0.1.5) lib/mabeam/coordination.ex:238: MABEAM.Coordination.coordinate_capability_transition/4
+       test/mabeam/coordination_test.exs:414: (test)
+
+  * test resource-based coordination coordinate_resource_allocation handles insufficient resources [L#253]  * test resource-based coordination coordinate_resource_allocation handles insufficient resources (36.5ms) [L#253]
+
+ 11) test resource-based coordination coordinate_resource_allocation handles insufficient resources (MABEAM.CoordinationTest)
+     test/mabeam/coordination_test.exs:253
+     ** (CaseClauseError) no case clause matching: []
+     code: MABEAM.Coordination.coordinate_resource_allocation(required_resources, :balanced)
+     stacktrace:
+       (foundation 0.1.5) lib/mabeam/coordination.ex:122: MABEAM.Coordination.coordinate_resource_allocation/3
+       test/mabeam/coordination_test.exs:265: (test)
+
+  * test error handling and edge cases handles malformed proposals gracefully [L#580]  * test error handling and edge cases handles malformed proposals gracefully (80.3ms) [L#580]
+
+ 12) test error handling and edge cases handles malformed proposals gracefully (MABEAM.CoordinationTest)
+     test/mabeam/coordination_test.exs:580
+     ** (CaseClauseError) no case clause matching: [{"test_agent", :pid1, %{capability: :inference, health_status: :healthy}}]
+     code: MABEAM.Coordination.coordinate_capable_agents(:inference, :consensus, weird_proposal)
+     stacktrace:
+       (foundation 0.1.5) lib/mabeam/coordination.ex:64: MABEAM.Coordination.coordinate_capable_agents/4
+       test/mabeam/coordination_test.exs:600: (test)
+
+  * test load balancing coordination coordinate_load_balancing handles already balanced system [L#318]  * test load balancing coordination coordinate_load_balancing handles already balanced system (33.1ms) [L#318]
+
+ 13) test load balancing coordination coordinate_load_balancing handles already balanced system (MABEAM.CoordinationTest)
+     test/mabeam/coordination_test.exs:318
+     ** (CaseClauseError) no case clause matching: [{"balanced1", :pid1, %{resources: %{memory_usage: 0.5, cpu_usage: 0.5}, capability: :inference, health_status: :healthy}}, {"balanced2", :pid2, %{resources: %{memory_usage: 0.4, cpu_usage: 0.5}, capability: :inference, health_status: :healthy}}]
+     code: MABEAM.Coordination.coordinate_load_balancing(:inference, 0.5, 0.2)
+     stacktrace:
+       (foundation 0.1.5) lib/mabeam/coordination.ex:176: MABEAM.Coordination.coordinate_load_balancing/4
+       test/mabeam/coordination_test.exs:340: (test)
+
+  * test load balancing coordination coordinate_load_balancing handles insufficient agents [L#345]  * test load balancing coordination coordinate_load_balancing handles insufficient agents (35.4ms) [L#345]
+
+ 14) test load balancing coordination coordinate_load_balancing handles insufficient agents (MABEAM.CoordinationTest)
+     test/mabeam/coordination_test.exs:345
+     ** (CaseClauseError) no case clause matching: [{"single_agent", :pid1, %{resources: %{memory_usage: 0.9, cpu_usage: 0.8}, capability: :inference, health_status: :healthy}}]
+     code: MABEAM.Coordination.coordinate_load_balancing(:inference, 0.5, 0.2)
+     stacktrace:
+       (foundation 0.1.5) lib/mabeam/coordination.ex:176: MABEAM.Coordination.coordinate_load_balancing/4
+       test/mabeam/coordination_test.exs:361: (test)
+
+  * test allocation strategy implementation greedy strategy selects agents with most available resources [L#501]  * test allocation strategy implementation greedy strategy selects agents with most available resources (82.7ms) [L#501]
+
+ 15) test allocation strategy implementation greedy strategy selects agents with most available resources (MABEAM.CoordinationTest)
+     test/mabeam/coordination_test.exs:501
+     ** (CaseClauseError) no case clause matching: [{"high_resource", :pid1, %{resources: %{memory_available: 0.9, cpu_available: 0.8}}}, {"med_resource", :pid2, %{resources: %{memory_available: 0.6, cpu_available: 0.5}}}, {"low_resource", :pid3, %{resources: %{memory_available: 0.3, cpu_available: 0.2}}}]
+     code: {:ok, _ref} = MABEAM.Coordination.coordinate_resource_allocation(required_resources, :greedy)
+     stacktrace:
+       (foundation 0.1.5) lib/mabeam/coordination.ex:122: MABEAM.Coordination.coordinate_resource_allocation/3
+       test/mabeam/coordination_test.exs:521: (test)
+
+  * test capability-based barrier creation create_capability_barrier handles no eligible participants [L#484]  * test capability-based barrier creation create_capability_barrier handles no eligible participants (30.4ms) [L#484]
+
+ 16) test capability-based barrier creation create_capability_barrier handles no eligible participants (MABEAM.CoordinationTest)
+     test/mabeam/coordination_test.exs:484
+     ** (CaseClauseError) no case clause matching: []
+     code: MABEAM.Coordination.create_capability_barrier(:non_existent, :empty_barrier)
+     stacktrace:
+       (foundation 0.1.5) lib/mabeam/coordination.ex:300: MABEAM.Coordination.create_capability_barrier/4
+       test/mabeam/coordination_test.exs:492: (test)
+
+  * test capability-based coordination coordinate_capable_agents handles no capable agents [L#190]  * test capability-based coordination coordinate_capable_agents handles no capable agents (34.6ms) [L#190]
+
+ 17) test capability-based coordination coordinate_capable_agents handles no capable agents (MABEAM.CoordinationTest)
+     test/mabeam/coordination_test.exs:190
+     ** (CaseClauseError) no case clause matching: []
+     code: MABEAM.Coordination.coordinate_capable_agents(:non_existent, :consensus, proposal)
+     stacktrace:
+       (foundation 0.1.5) lib/mabeam/coordination.ex:64: MABEAM.Coordination.coordinate_capable_agents/4
+       test/mabeam/coordination_test.exs:200: (test)
+
+  * test logging and observability logs warnings for problematic coordination attempts [L#645]  * test logging and observability logs warnings for problematic coordination attempts (36.8ms) [L#645]
+
+ 18) test logging and observability logs warnings for problematic coordination attempts (MABEAM.CoordinationTest)
+     test/mabeam/coordination_test.exs:645
+     ** (CaseClauseError) no case clause matching: []
+     code: capture_log(fn ->
+     stacktrace:
+       (foundation 0.1.5) lib/mabeam/coordination.ex:64: MABEAM.Coordination.coordinate_capable_agents/4
+       test/mabeam/coordination_test.exs:659: anonymous fn/0 in MABEAM.CoordinationTest."test logging and observability logs warnings for problematic coordination attempts"/1
+       (ex_unit 1.18.3) lib/ex_unit/capture_log.ex:113: ExUnit.CaptureLog.with_log/2
+       (ex_unit 1.18.3) lib/ex_unit/capture_log.ex:75: ExUnit.CaptureLog.capture_log/2
+       test/mabeam/coordination_test.exs:655: (test)
+
+
+Finished in 1.2 seconds (0.3s async, 0.9s sync)
+18 tests, 18 failures

@@ -2,7 +2,6 @@ defmodule JidoSystem.Actions.ProcessTaskTest do
   use ExUnit.Case, async: false
 
   alias JidoSystem.Actions.ProcessTask
-  alias Foundation.{Telemetry, CircuitBreaker}
 
   setup do
     # Ensure clean telemetry state - detach any existing handlers

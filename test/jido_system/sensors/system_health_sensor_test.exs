@@ -2,7 +2,6 @@ defmodule JidoSystem.Sensors.SystemHealthSensorTest do
   use ExUnit.Case, async: false
 
   alias JidoSystem.Sensors.SystemHealthSensor
-  alias Foundation.{Registry, Telemetry}
   alias Jido.Signal
 
   setup do

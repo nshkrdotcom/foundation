@@ -3,8 +3,6 @@ defmodule JidoSystem.Agents.FoundationAgentTest do
   use Foundation.TestConfig, :registry
 
   alias JidoSystem.Agents.FoundationAgent
-  alias Foundation.{Registry, Telemetry}
-  alias JidoFoundation.Bridge
 
   defmodule TestAgent do
     use FoundationAgent,
@@ -46,7 +44,7 @@ defmodule JidoSystem.Agents.FoundationAgentTest do
   end
 
   describe "agent initialization" do
-    test "successfully initializes and registers with Foundation", %{registry: registry} do
+    test "successfully initializes and registers with Foundation", %{registry: _registry} do
       {:ok, pid} = TestAgent.start_link(id: "test_agent_1")
 
       # Verify agent is alive
@@ -95,7 +93,7 @@ defmodule JidoSystem.Agents.FoundationAgentTest do
         %{}
       )
 
-      {:ok, pid} = TestAgent.start_link(id: "test_agent_telemetry")
+      {:ok, _pid} = TestAgent.start_link(id: "test_agent_telemetry")
 
       # Verify telemetry was emitted
       assert_receive {^ref, :telemetry, %{count: 1}, metadata}
@@ -190,7 +188,7 @@ defmodule JidoSystem.Agents.FoundationAgentTest do
   end
 
   describe "agent termination" do
-    test "deregisters from Foundation on termination", %{registry: registry} do
+    test "deregisters from Foundation on termination", %{registry: _registry} do
       {:ok, pid} = TestAgent.start_link(id: "test_agent_terminate")
 
       # The agent registers with the globally configured registry from setup
@@ -239,7 +237,7 @@ defmodule JidoSystem.Agents.FoundationAgentTest do
       %{agent: pid, agent_state: state.agent}
     end
 
-    test "emit_event helper works correctly", %{agent: agent, agent_state: agent_state} do
+    test "emit_event helper works correctly", %{agent: _agent, agent_state: agent_state} do
       test_pid = self()
       ref = make_ref()
 
@@ -266,7 +264,7 @@ defmodule JidoSystem.Agents.FoundationAgentTest do
     end
 
     test "coordinate_with_agents helper initiates coordination", %{
-      agent: agent,
+      agent: _agent,
       agent_state: agent_state
     } do
       # Test coordination functionality
@@ -302,7 +300,7 @@ defmodule JidoSystem.Agents.FoundationAgentTest do
   end
 
   describe "Foundation integration" do
-    test "agent properly integrates with Foundation Registry", %{registry: registry} do
+    test "agent properly integrates with Foundation Registry", %{registry: _registry} do
       {:ok, pid} = TestAgent.start_link(id: "foundation_integration_test")
 
       # The agent registers with the globally configured registry from setup
@@ -321,7 +319,7 @@ defmodule JidoSystem.Agents.FoundationAgentTest do
       end
     end
 
-    test "multiple agents can be registered simultaneously", %{registry: registry} do
+    test "multiple agents can be registered simultaneously", %{registry: _registry} do
       agents =
         for i <- 1..5 do
           {:ok, pid} = TestAgent.start_link(id: "multi_agent_#{i}")
