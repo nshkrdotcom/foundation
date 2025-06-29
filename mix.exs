@@ -192,7 +192,7 @@ defmodule Foundation.MixProject do
 
       # Development and testing
       {:mox, "~> 1.2", only: [:dev, :test]},
-      {:meck, "~> 0.9", only: [:dev, :test]},
+      {:meck, "~> 1.0", only: [:dev, :test]},
       {:stream_data, "~> 1.1", only: [:dev, :test]},
       {:ex_doc, "~> 0.30", only: :dev, runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
@@ -209,7 +209,7 @@ defmodule Foundation.MixProject do
       {:benchee, "~> 1.2", only: [:dev, :test], runtime: false},
       {:benchee_html, "~> 1.0", only: [:dev, :test], runtime: false},
       {:ex_unit_notifier, "~> 1.3", only: [:dev, :test], runtime: false},
-      {:mix_test_interactive, "~> 2.0", only: [:dev, :test], runtime: false},
+      {:mix_test_interactive, "~> 5.0", only: [:dev, :test], runtime: false},
 
       # Tidewave MCP integration for development
       {:tidewave, "~> 0.1", only: :dev},
