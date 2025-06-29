@@ -140,7 +140,8 @@ defmodule Foundation.Services.Supervisor do
     sia_children = 
       if Code.ensure_loaded?(Foundation.ServiceIntegration.DependencyManager) do
         opts = if is_test_supervisor do
-          [name: :"#{supervisor_id}_dependency_manager"]
+          [name: :"#{supervisor_id}_dependency_manager", 
+           table_name: :"#{supervisor_id}_dependency_table"]
         else
           []
         end

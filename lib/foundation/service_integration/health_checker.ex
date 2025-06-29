@@ -351,6 +351,18 @@ defmodule Foundation.ServiceIntegration.HealthChecker do
 
   ## Private Functions
 
+  defp service_supports_health_check?(service) do
+    # List of Foundation services that have health check implementations
+    health_check_supported = [
+      Foundation.Services.RetryService,
+      Foundation.Services.ConnectionManager,
+      Foundation.Services.RateLimiter,
+      Foundation.Services.SignalBus
+    ]
+    
+    service in health_check_supported
+  end
+
   defp schedule_health_checks(state) do
     # Cancel existing timer
     if state.timer_ref do
@@ -388,19 +400,24 @@ defmodule Foundation.ServiceIntegration.HealthChecker do
         {:unavailable, %{error: :process_not_found}}
       
       pid ->
-        try do
-          # Check if service responds to basic health check
-          case GenServer.call(service, :health_check, 1000) do
-            :healthy -> {:healthy, %{pid: pid}}
-            :unhealthy -> {:unhealthy, %{pid: pid, reason: :service_reported_unhealthy}}
-            :degraded -> {:degraded, %{pid: pid, reason: :service_reported_degraded}}
-            {:error, reason} -> {:unhealthy, %{pid: pid, error: reason}}
-            _other -> {:healthy, %{pid: pid, note: :non_standard_response}}
+        # Check if service supports health checks before calling
+        if service_supports_health_check?(service) do
+          try do
+            case GenServer.call(service, :health_check, 1000) do
+              :healthy -> {:healthy, %{pid: pid}}
+              :unhealthy -> {:unhealthy, %{pid: pid, reason: :service_reported_unhealthy}}
+              :degraded -> {:degraded, %{pid: pid, reason: :service_reported_degraded}}
+              {:error, reason} -> {:unhealthy, %{pid: pid, error: reason}}
+              _other -> {:healthy, %{pid: pid, note: :non_standard_response}}
+            end
+          catch
+            :exit, {:timeout, _} -> {:degraded, %{pid: pid, error: :health_check_timeout}}
+            :exit, {:noproc, _} -> {:unavailable, %{error: :process_died_during_check}}
+            _kind, _reason -> {:healthy, %{pid: pid, note: :health_check_not_supported}}
           end
-        catch
-          :exit, {:timeout, _} -> {:degraded, %{pid: pid, error: :health_check_timeout}}
-          :exit, {:noproc, _} -> {:unavailable, %{error: :process_died_during_check}}
-          _kind, _reason -> {:healthy, %{pid: pid, note: :health_check_not_supported}}
+        else
+          # Service doesn't support health checks - assume healthy if running
+          {:healthy, %{pid: pid, note: :health_check_not_supported}}
         end
     end
     

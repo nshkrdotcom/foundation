@@ -250,50 +250,50 @@ defmodule Foundation.ServiceIntegration.ContractValidator do
     start_time = System.monotonic_time()
     
     result = try do
-      with {:ok, foundation_contracts} <- validate_foundation_contracts(),
-           {:ok, jido_contracts} <- validate_jido_contracts(),
-           {:ok, mabeam_contracts} <- validate_mabeam_contracts_with_evolution(),
-           {:ok, custom_contracts} <- validate_custom_contracts(state.custom_contracts) do
-        
-        status = determine_overall_status([
-          foundation_contracts, 
-          jido_contracts, 
-          mabeam_contracts, 
-          custom_contracts
-        ])
-        
-        validation_result = %{
-          foundation: foundation_contracts,
-          jido: jido_contracts,
-          mabeam: mabeam_contracts,
-          custom: custom_contracts,
-          status: status,
-          timestamp: DateTime.utc_now(),
-          validation_time_ms: System.convert_time_unit(
-            System.monotonic_time() - start_time, 
-            :native, 
-            :millisecond
-          )
-        }
-        
-        {:ok, validation_result}
-        
-      else
-        {:error, :contract_evolution_detected} = error ->
-          # Use Foundation.ErrorHandler for graceful contract evolution handling
-          # Graceful handling of contract evolution
-          Logger.warning("Contract evolution detected, falling back to legacy validation")
-          {:ok, %{
-            foundation: :evolution_detected,
-            jido: :evolution_detected,
-            mabeam: :evolution_detected,
-            custom: :evolution_detected,
-            status: :evolution_detected,
-            timestamp: DateTime.utc_now()
-          }}
-          
-        error -> error
+      # Get all validation results, handling errors gracefully
+      foundation_contracts = case validate_foundation_contracts() do
+        {:ok, result} -> result
+        {:error, reason} -> {:error, reason}
       end
+      
+      jido_contracts = case validate_jido_contracts() do
+        {:ok, result} -> result
+        {:error, reason} -> {:error, reason}
+      end
+      
+      mabeam_contracts = case validate_mabeam_contracts_with_evolution() do
+        {:ok, result} -> result
+        {:error, reason} -> {:error, reason}
+      end
+      
+      custom_contracts = case validate_custom_contracts(state.custom_contracts) do
+        {:ok, result} -> result
+        {:error, reason} -> {:error, reason}
+      end
+      
+      # Determine overall status from all results
+      status = determine_overall_status([
+        foundation_contracts, 
+        jido_contracts, 
+        mabeam_contracts, 
+        custom_contracts
+      ])
+      
+      validation_result = %{
+        foundation: foundation_contracts,
+        jido: jido_contracts,
+        mabeam: mabeam_contracts,
+        custom: custom_contracts,
+        status: status,
+        timestamp: DateTime.utc_now(),
+        validation_time_ms: System.convert_time_unit(
+          System.monotonic_time() - start_time, 
+          :native, 
+          :millisecond
+        )
+      }
+      
+      {:ok, validation_result}
     rescue
       exception ->
         Logger.error("Exception during contract validation", 

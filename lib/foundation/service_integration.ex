@@ -55,9 +55,9 @@ defmodule Foundation.ServiceIntegration do
         service_health: service_health,
         dependency_management: dependency_status,
         integration_components: %{
-          contract_validator: :compilation_fix_mode,
-          # dependency_manager: process_status(DependencyManager),
-          # health_checker: process_status(HealthChecker)
+          contract_validator: process_status(Foundation.ServiceIntegration.ContractValidator),
+          dependency_manager: process_status(Foundation.ServiceIntegration.DependencyManager),
+          health_checker: process_status(Foundation.ServiceIntegration.HealthChecker)
         }
       }
       
@@ -88,14 +88,17 @@ defmodule Foundation.ServiceIntegration do
   @spec validate_service_integration() :: {:ok, map()} | {:error, term()}
   def validate_service_integration do
     try do
-      # Temporarily disabled to fix compilation issues
-      contract_result = {:ok, %{
-        foundation: :not_implemented,
-        jido: :not_implemented,
-        mabeam: :not_implemented,
-        custom: :not_implemented,
-        status: :compilation_fix_mode
-      }}
+      # Use the working ContractValidator
+      contract_result = case Process.whereis(Foundation.ServiceIntegration.ContractValidator) do
+        nil -> 
+          Logger.warning("ContractValidator not running, starting temporarily")
+          {:ok, _pid} = Foundation.ServiceIntegration.ContractValidator.start_link(name: :temp_validator)
+          result = GenServer.call(:temp_validator, :validate_all_contracts)
+          GenServer.stop(:temp_validator)
+          result
+        _pid -> 
+          GenServer.call(Foundation.ServiceIntegration.ContractValidator, :validate_all_contracts)
+      end
       
       case contract_result do
         {:ok, validation_result} ->
@@ -127,8 +130,20 @@ defmodule Foundation.ServiceIntegration do
   def start_services_in_order(services) when is_list(services) do
     Logger.info("Starting services in dependency order", services: services)
     
-    # For now, start services in the order provided
-    # TODO: Integrate with DependencyManager when implemented
+    # Use DependencyManager for proper ordering
+    case ensure_dependency_manager_running() do
+      {:ok, _pid} ->
+        case Foundation.ServiceIntegration.DependencyManager.start_services_in_dependency_order(services) do
+          :ok -> :ok
+          {:error, reason} -> {:error, reason}
+        end
+      {:error, reason} ->
+        Logger.warning("DependencyManager unavailable, starting in provided order", reason: reason)
+        start_services_simple(services)
+    end
+  end
+  
+  defp start_services_simple(services) do
     results = Enum.map(services, fn service ->
       try do
         case service.start_link() do
@@ -202,8 +217,13 @@ defmodule Foundation.ServiceIntegration do
   """
   @spec validate_discovery_evolution() :: boolean()
   def validate_discovery_evolution do
-    # Temporarily disabled for compilation fix
-    false
+    try do
+      Foundation.ServiceIntegration.ContractEvolution.validate_discovery_functions(MABEAM.Discovery)
+    rescue
+      _exception -> 
+        # If MABEAM.Discovery is not available, return false
+        false
+    end
   end
 
   @doc """
@@ -212,9 +232,11 @@ defmodule Foundation.ServiceIntegration do
   @spec component_status() :: map()
   def component_status do
     %{
-      contract_validator: process_status(ContractValidator),
-      contract_evolution: module_status(ContractEvolution),
-      # Add other components as they're implemented
+      contract_validator: process_status(Foundation.ServiceIntegration.ContractValidator),
+      contract_evolution: module_status(Foundation.ServiceIntegration.ContractEvolution),
+      dependency_manager: process_status(Foundation.ServiceIntegration.DependencyManager),
+      health_checker: process_status(Foundation.ServiceIntegration.HealthChecker),
+      signal_coordinator: process_status(Foundation.ServiceIntegration.SignalCoordinator),
       timestamp: DateTime.utc_now()
     }
   end
@@ -222,32 +244,58 @@ defmodule Foundation.ServiceIntegration do
   ## Private Functions
 
   defp get_contract_status do
-    # Temporarily disabled for compilation fix
-    :compilation_fix_mode
+    case Process.whereis(Foundation.ServiceIntegration.ContractValidator) do
+      nil -> :validator_not_running
+      _pid -> 
+        case GenServer.call(Foundation.ServiceIntegration.ContractValidator, :get_validation_status) do
+          {:ok, status} -> status
+          {:error, :not_validated} -> :not_yet_validated
+          {:error, reason} -> {:error, reason}
+        end
+    end
   end
 
   defp get_service_health do
-    # Placeholder for HealthChecker integration
-    foundation_services = [
-      Foundation.Services.RetryService,
-      Foundation.Services.ConnectionManager,
-      Foundation.Services.RateLimiter,
-      Foundation.Services.SignalBus
-    ]
-    
-    health_status = Enum.map(foundation_services, fn service ->
-      case Process.whereis(service) do
-        nil -> {service, :unavailable}
-        _pid -> {service, :available}
-      end
-    end)
-    
-    %{foundation_services: health_status}
+    case Process.whereis(Foundation.ServiceIntegration.HealthChecker) do
+      nil -> 
+        # Fallback to simple process checking
+        foundation_services = [
+          Foundation.Services.RetryService,
+          Foundation.Services.ConnectionManager,
+          Foundation.Services.RateLimiter,
+          Foundation.Services.SignalBus
+        ]
+        
+        health_status = Enum.map(foundation_services, fn service ->
+          case Process.whereis(service) do
+            nil -> {service, :unavailable}
+            _pid -> {service, :available}
+          end
+        end)
+        
+        %{foundation_services: health_status, health_checker: :not_running}
+      _pid ->
+        case GenServer.call(Foundation.ServiceIntegration.HealthChecker, :system_health_summary) do
+          {:ok, summary} -> summary
+          {:error, reason} -> {:error, reason}
+        end
+    end
   end
 
   defp get_dependency_status do
-    # Placeholder for DependencyManager integration
-    :dependency_manager_not_implemented
+    case Process.whereis(Foundation.ServiceIntegration.DependencyManager) do
+      nil -> :dependency_manager_not_running
+      _pid ->
+        case Foundation.ServiceIntegration.DependencyManager.get_all_dependencies() do
+          dependencies when is_map(dependencies) ->
+            %{
+              registered_services: Map.keys(dependencies),
+              dependency_count: map_size(dependencies),
+              status: :operational
+            }
+          {:error, reason} -> {:error, reason}
+        end
+    end
   end
 
   defp process_status(module) do
@@ -270,6 +318,16 @@ defmodule Foundation.ServiceIntegration do
       :evolution_detected -> :contract_evolution_handled
       :some_violations -> :validation_issues_detected
       other -> other
+    end
+  end
+  
+  defp ensure_dependency_manager_running do
+    case Process.whereis(Foundation.ServiceIntegration.DependencyManager) do
+      nil ->
+        Logger.info("Starting temporary DependencyManager for service ordering")
+        Foundation.ServiceIntegration.DependencyManager.start_link(name: :temp_dependency_manager)
+      pid ->
+        {:ok, pid}
     end
   end
 end

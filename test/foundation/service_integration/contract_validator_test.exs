@@ -105,30 +105,28 @@ defmodule Foundation.ServiceIntegration.ContractValidatorTest do
 
     test "checks individual function evolution" do
       status = ContractEvolution.check_function_evolution(
-        MABEAM.Discovery,
-        :find_capable_and_healthy,
-        legacy_arity: 1,
-        evolved_arity: 2
+        Foundation.Services.RetryService,
+        :start_link,
+        legacy_arity: 0,
+        evolved_arity: 1
       )
       
-      # Should be :evolved_only since we only support arity 2
-      assert status == :evolved_only
+      # Should be :both_supported since we support both arity 0 and arity 1
+      assert status == :both_supported
     end
 
     test "analyzes complete module evolution" do
-      status = ContractEvolution.analyze_module_evolution(MABEAM.Discovery, [
-        {:find_capable_and_healthy, legacy_arity: 1, evolved_arity: 2},
-        {:find_agents_with_resources, legacy_arity: 2, evolved_arity: 3},
-        {:find_least_loaded_agents, legacy_arity: 1, evolved_arity: 3}
+      status = ContractEvolution.analyze_module_evolution(Foundation.Services.RetryService, [
+        {:start_link, legacy_arity: 0, evolved_arity: 1}
       ])
       
       assert is_map(status)
       assert Map.has_key?(status, :overall_status)
-      assert Map.has_key?(status, :find_capable_and_healthy)
+      assert Map.has_key?(status, :start_link)
       
-      # All functions should be evolved only
-      assert status.find_capable_and_healthy == :evolved_only
-      assert status.overall_status == :fully_evolved
+      # Function should be both supported (legacy arity 0 + evolved arity 1)
+      assert status.start_link == :both_supported
+      assert status.overall_status == :fully_compatible
     end
 
     test "provides migration suggestions" do

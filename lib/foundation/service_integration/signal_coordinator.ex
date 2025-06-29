@@ -302,7 +302,7 @@ defmodule Foundation.ServiceIntegration.SignalCoordinator do
   @spec emit_signal_with_expectations(pid(), map(), map(), keyword()) :: 
     {:ok, coordination_result()} | {:error, term()}
   def emit_signal_with_expectations(agent, signal, expectations, opts \\ []) do
-    timeout = Keyword.get(opts, :timeout, 5000)
+    _timeout = Keyword.get(opts, :timeout, 5000)
     expected_handlers = Map.get(expectations, :handler_count, 0)
     
     case emit_signal_sync(agent, signal, opts) do

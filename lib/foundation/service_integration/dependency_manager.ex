@@ -176,7 +176,10 @@ defmodule Foundation.ServiceIntegration.DependencyManager do
 
   @impl GenServer
   def init(opts) do
-    table_name = Keyword.get(opts, :table_name, @table_name)
+    # Generate unique table name based on process name to avoid conflicts
+    process_name = Keyword.get(opts, :name, __MODULE__)
+    default_table_name = :"#{@table_name}_#{:erlang.phash2(process_name)}"
+    table_name = Keyword.get(opts, :table_name, default_table_name)
     
     # Create ETS table following Foundation.ResourceManager patterns
     case :ets.new(table_name, @table_opts) do
@@ -325,18 +328,10 @@ defmodule Foundation.ServiceIntegration.DependencyManager do
 
   ## Private Functions
 
-  defp validate_service_dependencies(service_module, dependencies) do
-    # Handle agent type system confusion from Dialyzer audit
-    Enum.filter(dependencies, fn dep ->
-      cond do
-        # Foundation services - always valid
-        String.starts_with?(to_string(dep), "Elixir.Foundation") -> true
-        # Jido agents - use defensive validation due to type system issues
-        String.contains?(to_string(dep), "Agent") -> validate_jido_agent_safely(dep)
-        # Other services - standard validation
-        true -> Code.ensure_loaded?(dep)
-      end
-    end)
+  defp validate_service_dependencies(_service_module, dependencies) do
+    # Store dependencies as-is for later validation
+    # Don't filter them here - let validation detect missing services
+    dependencies
   end
 
   defp validate_jido_agent_safely(agent_module) do
@@ -401,9 +396,28 @@ defmodule Foundation.ServiceIntegration.DependencyManager do
                     |> List.flatten()
                     |> MapSet.new()
     
-    all_referenced
-    |> MapSet.difference(all_registered)
-    |> MapSet.to_list()
+    # Find dependencies that are neither registered nor exist as modules
+    missing_from_registry = MapSet.difference(all_referenced, all_registered)
+    
+    # Check if missing dependencies are actual modules that exist
+    missing_from_registry
+    |> Enum.filter(fn dep ->
+      not dependency_exists?(dep)
+    end)
+  end
+  
+  defp dependency_exists?(dep) do
+    cond do
+      # Foundation services - always valid
+      String.starts_with?(to_string(dep), "Elixir.Foundation") -> 
+        Code.ensure_loaded?(dep)
+      # Jido agents - use defensive validation due to type system issues
+      String.contains?(to_string(dep), "Agent") -> 
+        validate_jido_agent_safely(dep)
+      # Other services - standard validation
+      true -> 
+        Code.ensure_loaded?(dep)
+    end
   end
 
   defp build_subgraph(dependency_graph, services) do
@@ -452,9 +466,9 @@ defmodule Foundation.ServiceIntegration.DependencyManager do
     end)
   end
 
-  defp topological_sort_kahn(graph, in_degrees, [], result) do
+  defp topological_sort_kahn(graph, _in_degrees, [], result) do
     if length(result) == map_size(graph) do
-      {:ok, Enum.reverse(result)}
+      {:ok, result}  # Don't reverse - Kahn's algorithm builds in correct dependency order
     else
       {:error, :circular_dependency_detected}
     end

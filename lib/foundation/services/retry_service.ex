@@ -209,6 +209,13 @@ defmodule Foundation.Services.RetryService do
   end
 
   @impl true
+  def handle_call(:health_check, _from, state) do
+    # Return health status based on retry budget and service state
+    health_status = if state.retry_budget > 0, do: :healthy, else: :degraded
+    {:reply, health_status, state}
+  end
+
+  @impl true
   def handle_call(:get_stats, _from, state) do
     stats = %{
       retry_budget: state.retry_budget,

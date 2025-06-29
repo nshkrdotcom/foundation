@@ -325,6 +325,13 @@ defmodule Foundation.Services.RateLimiter do
   end
 
   @impl true
+  def handle_call(:health_check, _from, state) do
+    # Return health status based on service state
+    health_status = if map_size(state.limiters) < 1000, do: :healthy, else: :degraded
+    {:reply, health_status, state}
+  end
+
+  @impl true
   def handle_call(:get_stats, _from, state) do
     stats = %{
       limiters:

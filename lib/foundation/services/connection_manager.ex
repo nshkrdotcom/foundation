@@ -251,6 +251,13 @@ defmodule Foundation.Services.ConnectionManager do
   end
 
   @impl true
+  def handle_call(:health_check, _from, state) do
+    # Return health status based on connection pools
+    health_status = if map_size(state.pools) < 100, do: :healthy, else: :degraded
+    {:reply, health_status, state}
+  end
+
+  @impl true
   def handle_call(:get_stats, _from, state) do
     stats = %{
       pools: Map.keys(state.pools) |> Enum.into(%{}, &{&1, get_pool_stats(&1, state.pools[&1])}),
