@@ -628,21 +628,110 @@ Proceeding with commit since:
 ✅ **Instruction Pattern** - Consistent Jido.Instruction usage throughout (Phase 2.3a.3)
 ✅ **Signal Bus Integration** - Production-grade Jido.Signal.Bus with CloudEvents (Phase 2.3a.4)
 
-#### QUALITY METRICS ACHIEVED:
-- **Tests**: 1730+ tests passing, 0 failures ✅
-- **Warnings**: Minor unused variable warnings only ✅
-- **Architecture**: Proper Jido framework integration throughout ✅  
-- **Performance**: Production-grade retry, directives, and signal routing ✅
-- **Standards Compliance**: CloudEvents v1.0.2 signal format ✅
+---
 
-#### TECHNICAL EXCELLENCE:
-- **Framework Consistency** - All code follows Jido framework patterns
-- **Error Handling** - Proper error propagation through Jido.Error format
-- **State Management** - Directive-based state changes replace custom logic
-- **Signal Architecture** - Production-grade signal bus with persistence and replay
-- **Backward Compatibility** - Legacy APIs maintained while upgrading internals
+## 2025-06-29 - STAGE 2.3b: Service Integration Architecture Reinstatement
+
+### Phase 2.3b.1: Rebuilding the Lost Service Integration Architecture (SIA)
+**Time**: Full Day Session  
+**Phase**: Service Integration Architecture (SIA) Reinstatement  
+**Status**: COMPLETE
+
+#### Mission Overview:
+This commit represents a major architectural enhancement, reinstating and significantly improving the **Service Integration Architecture (SIA)**. This functionality was accidentally lost during the `P23aTranscend.md` issue resolution. The new SIA provides a robust, unified framework for service dependency management, health checking, and contract validation, addressing several critical categories of systemic bugs.
+
+#### 🎯 KEY ACHIEVEMENTS:
+- ✅ **Unified Service Management**: Introduced a cohesive architecture for managing service dependencies, health, and contracts.
+- ✅ **Systemic Bug Fixes**: Addressed critical race conditions, contract evolution issues, and type system inconsistencies.
+  - **Category 2 (Signal Pipeline)**: Fixed race conditions with deterministic signal routing and coordination.
+  - **Category 3 (Contract Evolution)**: Addressed API arity mismatches with a dedicated contract evolution module.
+  - **Dialyzer Issues**: Resolved agent type system confusion with defensive validation patterns.
+- ✅ **Production-Grade Infrastructure**: Implemented resilient health monitoring, dependency orchestration, and contract validation.
+- ✅ **Enhanced Observability**: Added deep telemetry and health check capabilities to all core Foundation services.
+
+---
+
+### Phase 2.3b.2: SIA Core Components Implementation
+
+#### #### Foundation.ServiceIntegration
+- **Purpose**: The main facade and integration interface for the entire SIA.
+- **Features**: Provides a single entry point for checking integration status, validating contracts, and managing service lifecycles (`start_services_in_order`, `shutdown_services_gracefully`).
+
+#### #### Foundation.ServiceIntegration.HealthChecker
+- **Purpose**: Provides unified, resilient health checking across all service boundaries. Addresses critical signal pipeline flaws (Category 2).
+- **Features**:
+  - **Circuit Breaker Integration**: Uses circuit breakers for resilient checking to prevent cascading failures.
+  - **Aggregated Reporting**: `system_health_summary/0` provides a comprehensive, real-time view of the entire system's health.
+  - **Signal System Validation**: Includes specific, robust checks for the signal system, with fallback strategies.
+  - **Extensible**: Allows custom services to register their own health checks.
+
+#### #### Foundation.ServiceIntegration.DependencyManager
+- **Purpose**: Manages service dependencies to ensure correct startup/shutdown order and prevent integration failures. Addresses Dialyzer agent type system issues.
+- **Features**:
+  - **Topological Sorting**: Automatically calculates the correct service startup order.
+  - **Circular Dependency Detection**: Prevents system deadlocks by identifying dependency cycles.
+  - **Resilient Storage**: Uses ETS for dependency registration, following `Foundation.ResourceManager` patterns.
+  - **Defensive Validation**: Implements safe validation patterns to handle potential type system issues with Jido agents.
+
+#### #### Foundation.ServiceIntegration.ContractValidator & ContractEvolution
+- **Purpose**: Addresses contract violations, especially those arising from API evolution (Category 3).
+- **Features**:
+  - **Runtime Validation**: Detects contract violations at runtime.
+  - **Evolution Handling**: The `ContractEvolution` module specifically handles API changes, such as added parameters (`impl` parameter in `MABEAM.Discovery`).
+  - **MABEAM Discovery Fix**: `validate_discovery_functions/1` checks for legacy or evolved function signatures, ensuring backward or forward compatibility.
+  - **Extensible**: Supports registration of custom contract validators for any service.
+
+#### #### Foundation.ServiceIntegration.SignalCoordinator
+- **Purpose**: Provides deterministic signal routing coordination, primarily for reliable testing. Addresses signal pipeline race conditions (Category 2).
+- **Features**:
+  - **Synchronous Emission**: `emit_signal_sync/3` blocks until a signal has been fully routed, eliminating race conditions in tests.
+  - **Batch Coordination**: `wait_for_signal_processing/2` allows waiting for multiple signals to complete.
+  - **Telemetry-Based**: Uses temporary, unique telemetry handlers to coordinate without creating recursive loops.
+
+---
+
+### Phase 2.3b.3: Core System & Jido-Foundation Bridge Hardening
+
+#### #### Foundation.Services.Supervisor Integration
+- **Enhancement**: The main service supervisor now starts and manages key SIA components (`DependencyManager`, `HealthChecker`) and the new `SignalBus` service.
+- **Resilience**: Gracefully handles cases where SIA modules may not be loaded (e.g., in specific test environments) by using `Code.ensure_loaded?`.
+
+#### #### Foundation.Services.SignalBus
+- **New Service**: A proper `GenServer` wrapper for `Jido.Signal.Bus`.
+- **Purpose**: Manages the signal bus as a first-class, supervised Foundation service, handling its lifecycle, health checks, and graceful shutdown.
+
+#### #### Health Check Integration
+- **Enhancement**: Core Foundation services (`ConnectionManager`, `RateLimiter`, `RetryService`, `SignalBus`) now implement a `:health_check` callback.
+- **Impact**: Allows the new `HealthChecker` to poll them for their operational status, providing a detailed, system-wide health overview.
+
+#### #### JidoFoundation.SignalRouter Hardening
+- **Enhancement**: The `handle_cast` for routing signals was changed to a synchronous `handle_call`.
+- **Impact**: This critical change ensures telemetry events are processed sequentially, making signal routing deterministic and fixing a major source of race conditions (Category 2). It also uses unique telemetry handler IDs to prevent leaks.
+
+#### #### JidoFoundation.Bridge Robustness
+- **Enhancement**: The `emit_signal` function was significantly hardened. It now correctly normalizes different signal formats into the `Jido.Signal` struct, preserves original signal IDs for telemetry, and integrates with the new `Foundation.Services.SignalBus`.
+- **Impact**: Improves the reliability and traceability of signals emitted through the bridge.
+
+#### #### MABEAM Contract Evolution
+- **Enhancement**: `MABEAM.Discovery.find_least_loaded_agents/3` now returns `{:ok, result} | {:error, reason}` instead of a bare list.
+- **Impact**: This contract change is handled by the new `ContractEvolution` module and consuming modules like `MABEAM.Coordination` have been updated, demonstrating the SIA in action.
+
+---
+
+### STAGE 2.3b COMPLETE: Summary and Results
+
+#### 📊 QUALITY METRICS:
+- **Systemic Bugs Resolved**: 3 major categories of bugs (Race Conditions, Contract Evolution, Type-Safety) ✅
+- **Architecture**: Robust, resilient, and observable Service Integration Architecture established ✅
+- **Code Quality**: Clean implementation with extensive moduledocs and telemetry ✅
+- **Testability**: Enhanced via `SignalCoordinator` and deterministic routing ✅
+- **Zero Regressions**: All existing system tests continue to pass ✅
+
+**Assessment**: The reinstatement of the Service Integration Architecture marks a significant step forward in the system's stability, reliability, and maintainability. The framework not only fixes existing, critical issues but also provides the necessary tools to prevent future integration problems.
+
+**Status**: ✅ STAGE 2.3b COMMITTED - Ready for final agent integration and STAGE 3.
 
 #### READY FOR STAGE 2.4:
-With Phase 2.3a complete, the Foundation-Jido integration is now robust and follows proper framework patterns. All infrastructure is ready for STAGE 2.4: Complete Jido Agent Infrastructure Integration.
+With Phase 2.3b complete, the Foundation-Jido integration is now robust and follows proper framework patterns. All infrastructure is ready for STAGE 2.4: Complete Jido Agent Infrastructure Integration.
 
 ---
