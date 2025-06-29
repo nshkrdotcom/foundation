@@ -82,10 +82,12 @@ defmodule JidoFoundation.SignalRoutingTest do
           end)
 
           # Emit routing telemetry
+          measurements = %{handlers_count: length(all_handlers)}
+          metadata = %{signal_type: signal_type, handlers: all_handlers}
           :telemetry.execute(
             [:jido, :signal, :routed],
-            %{handlers_count: length(all_handlers)},
-            %{signal_type: signal_type, handlers: all_handlers}
+            measurements,
+            metadata
           )
 
         _ ->
@@ -179,9 +181,23 @@ defmodule JidoFoundation.SignalRoutingTest do
           _, _ -> :ok
         end
 
-        if Process.alive?(handler1), do: GenServer.stop(handler1)
-        if Process.alive?(handler2), do: GenServer.stop(handler2)
-        if Process.alive?(handler3), do: GenServer.stop(handler3)
+        try do
+          if Process.alive?(handler1), do: GenServer.stop(handler1)
+        catch
+          _, _ -> :ok
+        end
+        
+        try do
+          if Process.alive?(handler2), do: GenServer.stop(handler2)
+        catch
+          _, _ -> :ok
+        end
+        
+        try do
+          if Process.alive?(handler3), do: GenServer.stop(handler3)
+        catch
+          _, _ -> :ok
+        end
       end)
 
       # Subscribe handlers to different signal types
@@ -195,6 +211,27 @@ defmodule JidoFoundation.SignalRoutingTest do
       on_exit(fn -> if Process.alive?(agent), do: Process.exit(agent, :normal) end)
 
       :ok = Bridge.register_agent(agent, capabilities: [:signal_routing], registry: registry)
+
+      # Attach telemetry handler BEFORE emitting signals
+      test_pid = self()
+      routing_ref = make_ref()
+      
+      :telemetry.attach(
+        "test-routing-completion-#{inspect(routing_ref)}",
+        [:jido, :signal, :routed],
+        fn _event, measurements, metadata, _config ->
+          send(test_pid, {routing_ref, :routing_complete, metadata[:signal_type], measurements[:handlers_count]})
+        end,
+        nil
+      )
+      
+      on_exit(fn ->
+        try do
+          :telemetry.detach("test-routing-completion-#{inspect(routing_ref)}")
+        catch
+          _, _ -> :ok
+        end
+      end)
 
       # Emit different types of signals
       Bridge.emit_signal(agent, %{
@@ -217,10 +254,11 @@ defmodule JidoFoundation.SignalRoutingTest do
         source: "agent://#{inspect(agent)}",
         data: %{status: "processing"}
       })
-
-      # Wait for signal routing using receive pattern
-      # Minimal acceptable sleep for async routing
-      :timer.sleep(50)
+      
+      # We expect 3 signals to be routed: error.validation (2 handlers), task.completed (1 handler), info.status (0 handlers)
+      assert_receive {^routing_ref, :routing_complete, "error.validation", 2}, 1000
+      assert_receive {^routing_ref, :routing_complete, "task.completed", 1}, 1000
+      assert_receive {^routing_ref, :routing_complete, "info.status", 0}, 1000
 
       # Verify handlers received appropriate signals
       handler1_signals = SignalHandler.get_received_signals(handler1)
@@ -264,6 +302,27 @@ defmodule JidoFoundation.SignalRoutingTest do
       subscriptions = SignalRouter.get_subscriptions()
       assert subscriptions["task.started"] == [handler]
 
+      # Attach telemetry handler BEFORE emitting signals
+      test_pid = self()
+      routing_ref = make_ref()
+      
+      :telemetry.attach(
+        "test-dynamic-routing-#{inspect(routing_ref)}",
+        [:jido, :signal, :routed],
+        fn _event, measurements, metadata, _config ->
+          send(test_pid, {routing_ref, :routing_complete, metadata[:signal_type], measurements[:handlers_count]})
+        end,
+        nil
+      )
+      
+      on_exit(fn ->
+        try do
+          :telemetry.detach("test-dynamic-routing-#{inspect(routing_ref)}")
+        catch
+          _, _ -> :ok
+        end
+      end)
+
       # Emit a signal - should be received
       Bridge.emit_signal(agent, %{
         id: 1,
@@ -271,9 +330,10 @@ defmodule JidoFoundation.SignalRoutingTest do
         source: "agent://#{inspect(agent)}",
         data: %{task_id: "task_001"}
       })
-
-      # Minimal acceptable sleep for async routing
-      :timer.sleep(50)
+      
+      # Wait for the task.started signal to be routed to 1 handler
+      assert_receive {^routing_ref, :routing_complete, "task.started", 1}, 1000
+      
       signals = SignalHandler.get_received_signals(handler)
       assert length(signals) == 1
 
@@ -290,8 +350,9 @@ defmodule JidoFoundation.SignalRoutingTest do
         data: %{task_id: "task_002"}
       })
 
-      # Minimal acceptable sleep for async routing
-      :timer.sleep(50)
+      # Wait for signal routing completion - should route to 0 handlers since we unsubscribed
+      assert_receive {^routing_ref, :routing_complete, "task.started", 0}, 1000
+      
       signals = SignalHandler.get_received_signals(handler)
       # Still only the first signal
       assert length(signals) == 1
@@ -386,6 +447,27 @@ defmodule JidoFoundation.SignalRoutingTest do
       :ok = SignalRouter.subscribe("error.*", wildcard_handler)
       :ok = SignalRouter.subscribe("error.validation", specific_handler)
 
+      # Attach telemetry handler BEFORE emitting signals
+      test_pid = self()
+      routing_ref = make_ref()
+      
+      :telemetry.attach(
+        "test-wildcard-routing-#{inspect(routing_ref)}",
+        [:jido, :signal, :routed],
+        fn _event, measurements, metadata, _config ->
+          send(test_pid, {routing_ref, :routing_complete, metadata[:signal_type], measurements[:handlers_count]})
+        end,
+        nil
+      )
+      
+      on_exit(fn ->
+        try do
+          :telemetry.detach("test-wildcard-routing-#{inspect(routing_ref)}")
+        catch
+          _, _ -> :ok
+        end
+      end)
+
       # Emit different error signals
       Bridge.emit_signal(agent, %{
         id: 1,
@@ -407,9 +489,14 @@ defmodule JidoFoundation.SignalRoutingTest do
         source: "agent://#{inspect(agent)}",
         data: %{status: "ok"}
       })
-
-      # Minimal acceptable sleep for async routing
-      :timer.sleep(50)
+      
+      # Wait for all 3 signals to be routed
+      # error.validation should go to 2 handlers (wildcard + specific)
+      assert_receive {^routing_ref, :routing_complete, "error.validation", 2}, 1000
+      # error.timeout should go to 1 handler (wildcard only)  
+      assert_receive {^routing_ref, :routing_complete, "error.timeout", 1}, 1000
+      # info.status should go to 0 handlers (no matches)
+      assert_receive {^routing_ref, :routing_complete, "info.status", 0}, 1000
 
       wildcard_signals = SignalHandler.get_received_signals(wildcard_handler)
       specific_signals = SignalHandler.get_received_signals(specific_handler)
