@@ -1,0 +1,63 @@
+defmodule Foundation.Telemetry do
+  @moduledoc """
+  Mock implementation of Foundation.Telemetry for testing.
+  """
+  
+  def emit(event, measurements, metadata) do
+    # Simple mock - just emit to actual telemetry
+    :telemetry.execute(event, measurements, metadata)
+  end
+  
+  def attach(handler_id, event, function, config) do
+    :telemetry.attach(handler_id, event, function, config)
+  end
+  
+  def attach_many(handler_id, events, function, config) do
+    :telemetry.attach_many(handler_id, events, function, config)
+  end
+  
+  def detach(handler_id) do
+    :telemetry.detach(handler_id)
+  end
+end
+
+defmodule Foundation.CircuitBreaker do
+  @moduledoc """
+  Mock implementation of Foundation.CircuitBreaker for testing.
+  """
+  
+  def call(_name, function, _opts \\ []) do
+    # Simple mock - just execute the function
+    function.()
+  end
+end
+
+defmodule Foundation.Cache do
+  @moduledoc """
+  Mock implementation of Foundation.Cache for testing.
+  """
+  
+  def get(key, default \\ nil) do
+    # Simple mock using process dictionary
+    Process.get({:cache, key}, default)
+  end
+  
+  def put(key, value, _opts \\ []) do
+    Process.put({:cache, key}, value)
+    :ok
+  end
+  
+  def delete(key) do
+    Process.delete({:cache, key})
+    :ok
+  end
+end
+
+# JidoFoundation.Bridge is defined in lib/jido_foundation/bridge.ex
+# No mock needed - using the real implementation
+
+# Foundation module is defined in lib/foundation.ex
+# No mock needed - using the real implementation
+
+# Note: Foundation.Registry protocol is already defined in lib/foundation/protocols/registry.ex
+# PID implementation is in test/support/agent_registry_pid_impl.ex
