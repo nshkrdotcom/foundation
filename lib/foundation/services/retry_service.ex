@@ -298,6 +298,7 @@ defmodule Foundation.Services.RetryService do
     catch
       :exit, {:noproc, _} ->
         {:error, :circuit_breaker_unavailable}
+
       :exit, reason ->
         Logger.warning("Circuit breaker access failed: #{inspect(reason)}")
         {:error, :circuit_breaker_unavailable}

@@ -8,12 +8,15 @@ defmodule JidoSystem.Actions.ProcessTaskEnhancedTest do
     test "successfully processes task on first attempt" do
       task_params = %{
         task_id: "test_task_1",
-        task_type: :data_processing,  # Use supported task type
+        # Use supported task type
+        task_type: :data_processing,
         retry_attempts: 3,
         input_data: %{value: 42},
         timeout: 30_000,
-        circuit_breaker: false,  # Disable circuit breaker for testing
-        options: %{}  # Required options parameter
+        # Disable circuit breaker for testing
+        circuit_breaker: false,
+        # Required options parameter
+        options: %{}
       }
 
       context = %{agent_id: "test_agent"}
@@ -27,12 +30,16 @@ defmodule JidoSystem.Actions.ProcessTaskEnhancedTest do
       # Create a task that will fail initially but succeed on retry  
       task_params = %{
         task_id: "retry_test_task",
-        task_type: :validation,  # Use supported task type
+        # Use supported task type
+        task_type: :validation,
         retry_attempts: 3,
-        input_data: %{},  # Empty data will pass validation
+        # Empty data will pass validation
+        input_data: %{},
         timeout: 30_000,
-        circuit_breaker: false,  # Disable circuit breaker for testing
-        options: %{}  # Required options parameter
+        # Disable circuit breaker for testing
+        circuit_breaker: false,
+        # Required options parameter
+        options: %{}
       }
 
       context = %{agent_id: "test_agent"}
@@ -45,11 +52,13 @@ defmodule JidoSystem.Actions.ProcessTaskEnhancedTest do
     test "fails after all retry attempts are exhausted" do
       task_params = %{
         task_id: "fail_task",
-        task_type: :unsupported_task_type,  # Use unsupported task type to trigger failure
+        # Use unsupported task type to trigger failure
+        task_type: :unsupported_task_type,
         retry_attempts: 2,
         input_data: %{always_fail: true},
         timeout: 30_000,
-        circuit_breaker: false  # Disable circuit breaker for testing
+        # Disable circuit breaker for testing
+        circuit_breaker: false
       }
 
       context = %{agent_id: "test_agent"}
@@ -64,19 +73,23 @@ defmodule JidoSystem.Actions.ProcessTaskEnhancedTest do
 
       # Test that RetryService can be called directly
       operation = fn -> {:ok, "test_result"} end
-      
-      assert {:ok, "test_result"} = RetryService.retry_operation(operation, policy: :immediate, max_retries: 1)
+
+      assert {:ok, "test_result"} =
+               RetryService.retry_operation(operation, policy: :immediate, max_retries: 1)
     end
 
     test "integrates retry telemetry with task processing" do
       task_params = %{
         task_id: "telemetry_test_task",
-        task_type: :analysis,  # Use supported task type
+        # Use supported task type
+        task_type: :analysis,
         retry_attempts: 1,
         input_data: %{value: 100},
         timeout: 30_000,
-        circuit_breaker: false,  # Disable circuit breaker for testing
-        options: %{analysis_type: :basic}  # Required options parameter for analysis
+        # Disable circuit breaker for testing
+        circuit_breaker: false,
+        # Required options parameter for analysis
+        options: %{analysis_type: :basic}
       }
 
       context = %{agent_id: "test_agent"}
@@ -90,12 +103,15 @@ defmodule JidoSystem.Actions.ProcessTaskEnhancedTest do
       # Verify that circuit breaker integration works
       task_params = %{
         task_id: "circuit_breaker_test",
-        task_type: :transformation,  # Use supported task type
+        # Use supported task type
+        task_type: :transformation,
         retry_attempts: 3,
         input_data: %{circuit_breaker: :external_service},
         timeout: 30_000,
-        circuit_breaker: true,  # Enable circuit breaker for this specific test
-        options: %{transformations: [:add_timestamp]}  # Required for transformation task
+        # Enable circuit breaker for this specific test
+        circuit_breaker: true,
+        # Required for transformation task
+        options: %{transformations: [:add_timestamp]}
       }
 
       context = %{agent_id: "test_agent"}
@@ -109,12 +125,16 @@ defmodule JidoSystem.Actions.ProcessTaskEnhancedTest do
       # Test with invalid retry configuration
       task_params = %{
         task_id: "invalid_retry_test",
-        task_type: :data_processing,  # Use supported task type
-        retry_attempts: -1,  # Invalid
+        # Use supported task type
+        task_type: :data_processing,
+        # Invalid
+        retry_attempts: -1,
         input_data: %{value: 42},
         timeout: 30_000,
-        circuit_breaker: false,  # Disable circuit breaker for testing
-        options: %{}  # Required options parameter
+        # Disable circuit breaker for testing
+        circuit_breaker: false,
+        # Required options parameter
+        options: %{}
       }
 
       context = %{agent_id: "test_agent"}
@@ -128,12 +148,15 @@ defmodule JidoSystem.Actions.ProcessTaskEnhancedTest do
       # Test that existing functionality still works
       task_params = %{
         task_id: "backward_compat_test",
-        task_type: :notification,  # Use supported task type
+        # Use supported task type
+        task_type: :notification,
         input_data: %{value: 42},
         timeout: 30_000,
-        circuit_breaker: false,  # Disable circuit breaker for testing
+        # Disable circuit breaker for testing
+        circuit_breaker: false,
         retry_attempts: 3,
-        options: %{recipients: ["test@example.com"], message: "Test notification"}  # Required for notification task
+        # Required for notification task
+        options: %{recipients: ["test@example.com"], message: "Test notification"}
       }
 
       context = %{agent_id: "test_agent"}
@@ -149,12 +172,13 @@ defmodule JidoSystem.Actions.ProcessTaskEnhancedTest do
 
       Enum.each(policies, fn policy ->
         operation = fn -> {:ok, "success"} end
-        
-        assert {:ok, "success"} = RetryService.retry_operation(
-          operation, 
-          policy: policy, 
-          max_retries: 1
-        )
+
+        assert {:ok, "success"} =
+                 RetryService.retry_operation(
+                   operation,
+                   policy: policy,
+                   max_retries: 1
+                 )
       end)
     end
 

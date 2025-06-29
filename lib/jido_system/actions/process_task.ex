@@ -204,7 +204,7 @@ defmodule JidoSystem.Actions.ProcessTask do
     # Use Foundation.Services.RetryService with circuit breaker integration
     circuit_breaker_id = :"task_processor_#{params.task_type}"
     retry_policy = get_retry_policy_for_task_type(params.task_type)
-    
+
     telemetry_metadata = %{
       task_id: params.task_id,
       task_type: params.task_type,
@@ -213,12 +213,12 @@ defmodule JidoSystem.Actions.ProcessTask do
     }
 
     case Foundation.Services.RetryService.retry_with_circuit_breaker(
-      circuit_breaker_id,
-      fn -> execute_task_logic(params, context) end,
-      policy: retry_policy,
-      max_retries: params.retry_attempts,
-      telemetry_metadata: telemetry_metadata
-    ) do
+           circuit_breaker_id,
+           fn -> execute_task_logic(params, context) end,
+           policy: retry_policy,
+           max_retries: params.retry_attempts,
+           telemetry_metadata: telemetry_metadata
+         ) do
       {:ok, result} ->
         {:ok, result}
 
@@ -227,6 +227,7 @@ defmodule JidoSystem.Actions.ProcessTask do
           task_id: params.task_id,
           circuit_breaker_id: circuit_breaker_id
         )
+
         {:error, :circuit_breaker_open}
 
       {:error, reason} ->
@@ -235,6 +236,7 @@ defmodule JidoSystem.Actions.ProcessTask do
           reason: inspect(reason),
           circuit_breaker_id: circuit_breaker_id
         )
+
         {:error, reason}
     end
   end
@@ -246,7 +248,7 @@ defmodule JidoSystem.Actions.ProcessTask do
   defp process_with_retry(params, context, attempts_remaining) when attempts_remaining > 0 do
     # Use Foundation.Services.RetryService for production-grade retry logic
     retry_policy = get_retry_policy_for_task_type(params.task_type)
-    
+
     telemetry_metadata = %{
       task_id: params.task_id,
       task_type: params.task_type,
@@ -255,11 +257,11 @@ defmodule JidoSystem.Actions.ProcessTask do
     }
 
     case Foundation.Services.RetryService.retry_operation(
-      fn -> execute_task_logic(params, context) end,
-      policy: retry_policy,
-      max_retries: attempts_remaining,
-      telemetry_metadata: telemetry_metadata
-    ) do
+           fn -> execute_task_logic(params, context) end,
+           policy: retry_policy,
+           max_retries: attempts_remaining,
+           telemetry_metadata: telemetry_metadata
+         ) do
       {:ok, result} ->
         {:ok, result}
 

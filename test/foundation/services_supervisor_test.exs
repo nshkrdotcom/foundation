@@ -14,8 +14,8 @@ defmodule Foundation.Services.SupervisorTest do
       children = Supervisor.which_children(pid)
       assert is_list(children)
 
-      # Should have RetryService as child
-      assert length(children) == 1
+      # Should have 3 services: RetryService, ConnectionManager, RateLimiter
+      assert length(children) == 3
 
       # Clean up
       Supervisor.stop(pid)
@@ -27,7 +27,7 @@ defmodule Foundation.Services.SupervisorTest do
 
       # Check that supervisor is properly configured
       children = Supervisor.which_children(pid)
-      assert length(children) == 1
+      assert length(children) == 3
 
       # The supervisor should be ready to accept child specifications
       assert Process.alive?(pid)
@@ -40,9 +40,9 @@ defmodule Foundation.Services.SupervisorTest do
       {:ok, supervisor_pid} = ServicesSupervisor.start_link(name: unique_name)
 
       # This test validates the supervision tree structure
-      # Should have one child service (RetryService)
+      # Should have 3 child services (RetryService, ConnectionManager, RateLimiter)
       children = Supervisor.which_children(supervisor_pid)
-      assert length(children) == 1
+      assert length(children) == 3
 
       Supervisor.stop(supervisor_pid)
     end
@@ -79,11 +79,16 @@ defmodule Foundation.Services.SupervisorTest do
       services = ServicesSupervisor.which_services()
       assert is_list(services)
       assert Foundation.Services.RetryService in services
+      assert Foundation.Services.ConnectionManager in services
+      assert Foundation.Services.RateLimiter in services
+      assert length(services) == 3
     end
 
     test "validates service_running? checks service status" do
       # Test using the existing Foundation.Services.Supervisor
       assert ServicesSupervisor.service_running?(Foundation.Services.RetryService)
+      assert ServicesSupervisor.service_running?(Foundation.Services.ConnectionManager)
+      assert ServicesSupervisor.service_running?(Foundation.Services.RateLimiter)
       refute ServicesSupervisor.service_running?(SomeNonExistentService)
     end
   end
