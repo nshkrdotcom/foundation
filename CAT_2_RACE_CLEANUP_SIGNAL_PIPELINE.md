@@ -208,15 +208,129 @@ end
 - Consider standardizing on one approach for consistency
 - Assess whether SignalRouter provides value over SignalBus alone
 
+## MAJOR DISCOVERY: Real Race Conditions Revealed
+
+### **PLOT TWIST: User Was Right - Race Conditions DO Exist**
+
+When I fixed the test infrastructure warning by changing:
+```elixir
+# BEFORE (using test mock):
+JidoFoundation.SignalRoutingTest.SignalRouter.start_link(name: router_name)
+
+# AFTER (using real router):  
+JidoFoundation.SignalRouter.start_link(name: router_name)
+```
+
+**The tests immediately started failing consistently:**
+```
+Assertion failed, no matching message after 1000ms
+The process mailbox is empty.
+code: assert_receive {^routing_ref, :routing_complete, "error.validation", 2}
+```
+
+### **What This Reveals:**
+
+1. **Tests were passing with MOCKS but failing with REAL implementation**
+2. **Test infrastructure was masking the actual race conditions**
+3. **SignalRouter telemetry coordination has real timing issues**
+4. **Production signal routing may have non-deterministic behavior**
+
+### **Root Cause of False Analysis:**
+- I investigated the wrong SignalRouter (the test mock vs real implementation)
+- Test mocks were designed to work deterministically
+- Real SignalRouter has actual race conditions in telemetry delivery
+
+## Actual Race Condition Analysis
+
+### **REAL Issue: SignalRouter Telemetry Race**
+
+```elixir
+# In JidoFoundation.SignalRouter.route_signal_to_handlers/4:
+:telemetry.execute(
+  [:jido, :signal, :routed], 
+  %{handlers_count: length(matching_handlers)},
+  %{signal_type: signal_type, handlers: matching_handlers}
+)
+```
+
+**Problem**: This telemetry event emission happens AFTER async message sending:
+1. `send(handler_pid, {:routed_signal, ...})` → **ASYNC**
+2. `:telemetry.execute([:jido, :signal, :routed], ...)` → **SYNC** 
+3. Test expects telemetry event → **RACE CONDITION**
+
+The telemetry event is emitted immediately, but there's no guarantee the routing GenServer.cast has been processed yet.
+
+## Proper Fix Strategy
+
+### **1. Synchronous Routing Option**
+```elixir
+def route_signal_sync(signal_type, measurements, metadata, subscriptions) do
+  # Use GenServer.call instead of cast for deterministic routing
+  matching_handlers = find_matching_handlers(signal_type, subscriptions)
+  
+  # Send messages synchronously 
+  Enum.each(matching_handlers, fn handler_pid ->
+    send(handler_pid, {:routed_signal, signal_type, measurements, metadata})
+  end)
+  
+  # Emit telemetry after confirmed delivery
+  :telemetry.execute([:jido, :signal, :routed], 
+    %{handlers_count: length(matching_handlers)}, metadata)
+end
+```
+
+### **2. Test Coordination Fix**
+```elixir
+# Wait for actual signal delivery, not just routing initiation
+test "signal routing coordination" do
+  # Subscribe handler
+  SignalRouter.subscribe(router, "test.signal", handler_pid)
+  
+  # Emit signal
+  Bridge.emit_signal(agent, signal)
+  
+  # Wait for ACTUAL delivery to handler
+  assert_receive {:routed_signal, "test.signal", _, _}, 1000
+  
+  # THEN verify routing telemetry
+  assert_receive {:telemetry, [:jido, :signal, :routed], _, _}, 100
+end
+```
+
+### **3. Router Architecture Improvement**
+```elixir
+defmodule JidoFoundation.SignalRouter do
+  def handle_cast({:route_signal, event, measurements, metadata}, state) do
+    case event do
+      [:jido, :signal, :emitted] ->
+        signal_type = metadata[:signal_type]
+        
+        # Route synchronously within the GenServer
+        {successful_deliveries, total_handlers} = 
+          route_signal_to_handlers_sync(signal_type, measurements, metadata, state.subscriptions)
+        
+        # Emit telemetry AFTER confirmed routing
+        :telemetry.execute([:jido, :signal, :routed],
+          %{handlers_count: total_handlers, successful_deliveries: successful_deliveries},
+          %{signal_type: signal_type})
+          
+      _ -> :ok
+    end
+    
+    {:noreply, state}
+  end
+end
+```
+
 ## Conclusion
 
-### **Category 2 Status: NO RACE CONDITIONS EXIST**
+### **Category 2 Status: CONFIRMED RACE CONDITIONS**
 
-**VERDICT**: Category 2 was a **false positive** based on incorrect analysis. The signal pipeline:
-- ✅ **Works correctly** with proper coordination
-- ✅ **Has no race conditions** in current implementation  
-- ✅ **Tests are well-designed** and consistently pass
-- ✅ **Is production-ready** with good error handling
+**VERDICT**: User was **absolutely correct** - race conditions DO exist. My investigation was flawed because:
+- ✅ **Tests were using mocks** that hid the real issues
+- ✅ **Real SignalRouter has race conditions** in telemetry coordination  
+- ✅ **Production reliability at risk** from non-deterministic signal routing
+- ✅ **Architectural fix required** for proper signal coordination
 
 ### **Updated Test Harness Reliability**
 - **Category 1**: ✅ RESOLVED (3 failures → 0 failures)
