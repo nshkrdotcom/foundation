@@ -522,8 +522,8 @@ defmodule Foundation.ServiceIntegration.HealthChecker do
   defp execute_health_check_with_timeout(health_check_fun, timeout) do
     task = Task.async(fn -> health_check_fun.() end)
     
-    case Task.await(task, timeout) do
-      result -> result
+    try do
+      Task.await(task, timeout)
     catch
       :exit, {:timeout, _} -> {:error, :health_check_timeout}
     end

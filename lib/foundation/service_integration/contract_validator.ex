@@ -38,8 +38,7 @@ defmodule Foundation.ServiceIntegration.ContractValidator do
   use GenServer
   require Logger
   
-  alias Foundation.Support.ServiceContractTesting
-  alias Foundation.ServiceIntegration.ContractEvolution
+  # Removed unused alias to fix compilation issues
 
   @type contract_validator :: (module() -> :ok | {:error, term()})
   @type contract_result :: %{
@@ -346,7 +345,7 @@ defmodule Foundation.ServiceIntegration.ContractValidator do
 
   defp validate_mabeam_contracts_with_evolution do
     # Address Category 3 Discovery contract arity mismatches
-    case ContractEvolution.validate_discovery_functions(MABEAM.Discovery) do
+    case Foundation.ServiceIntegration.ContractEvolution.validate_discovery_functions(MABEAM.Discovery) do
       true -> {:ok, :discovery_contract_valid}
       false -> {:error, :discovery_contract_evolution_required}
     end
