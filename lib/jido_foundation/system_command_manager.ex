@@ -99,12 +99,14 @@ defmodule JidoFoundation.SystemCommandManager do
     case execute_command("uptime", [], cache_ttl: 30_000) do
       {:ok, {uptime, 0}} when is_binary(uptime) ->
         case Regex.run(~r/load average: ([\d.]+)/, uptime) do
-          [_, load] -> 
+          [_, load] ->
             case Float.parse(load) do
               {parsed_load, _} -> {:ok, parsed_load}
               :error -> {:ok, 0.0}
             end
-          _ -> {:ok, 0.0}
+
+          _ ->
+            {:ok, 0.0}
         end
 
       {:ok, {_, _exit_code}} ->
@@ -118,7 +120,8 @@ defmodule JidoFoundation.SystemCommandManager do
   @doc """
   Gets system memory information with caching.
   """
-  @spec get_memory_info() :: {:ok, %{total: integer(), available: integer(), used: integer()}} | {:error, term()}
+  @spec get_memory_info() ::
+          {:ok, %{total: integer(), available: integer(), used: integer()}} | {:error, term()}
   def get_memory_info do
     case execute_command("free", ["-b"], cache_ttl: 30_000) do
       {:ok, {output, 0}} ->
@@ -163,7 +166,7 @@ defmodule JidoFoundation.SystemCommandManager do
   def init(opts) do
     Process.flag(:trap_exit, true)
 
-    config = 
+    config =
       @default_config
       |> Map.merge(Map.new(Keyword.get(opts, :config, [])))
 
@@ -180,7 +183,10 @@ defmodule JidoFoundation.SystemCommandManager do
       }
     }
 
-    Logger.info("SystemCommandManager started with #{length(config.allowed_commands)} allowed commands")
+    Logger.info(
+      "SystemCommandManager started with #{length(config.allowed_commands)} allowed commands"
+    )
+
     {:ok, state}
   end
 
@@ -217,17 +223,18 @@ defmodule JidoFoundation.SystemCommandManager do
   def handle_call({:update_allowed_commands, commands}, _from, state) do
     new_config = %{state.config | allowed_commands: commands}
     new_state = %{state | config: new_config}
-    
+
     Logger.info("Updated allowed commands: #{inspect(commands)}")
     {:reply, :ok, new_state}
   end
 
   def handle_call(:get_stats, _from, state) do
-    enhanced_stats = Map.merge(state.stats, %{
-      cache_size: map_size(state.cache),
-      active_commands: map_size(state.active_commands),
-      allowed_commands: length(state.config.allowed_commands)
-    })
+    enhanced_stats =
+      Map.merge(state.stats, %{
+        cache_size: map_size(state.cache),
+        active_commands: map_size(state.active_commands),
+        allowed_commands: length(state.config.allowed_commands)
+      })
 
     {:reply, enhanced_stats, state}
   end
@@ -251,7 +258,7 @@ defmodule JidoFoundation.SystemCommandManager do
         GenServer.reply(from, result)
 
         # Update cache if successful
-        new_cache = 
+        new_cache =
           case result do
             {:ok, command_output} ->
               cache_entry = %{
@@ -259,6 +266,7 @@ defmodule JidoFoundation.SystemCommandManager do
                 timestamp: System.monotonic_time(:millisecond),
                 ttl: cache_ttl
               }
+
               Map.put(state.cache, cache_key, cache_entry)
 
             {:error, _} ->
@@ -266,7 +274,7 @@ defmodule JidoFoundation.SystemCommandManager do
           end
 
         # Update stats
-        new_stats = 
+        new_stats =
           case result do
             {:ok, _} -> Map.update!(state.stats, :commands_executed, &(&1 + 1))
             {:error, _} -> Map.update!(state.stats, :commands_failed, &(&1 + 1))
@@ -276,8 +284,8 @@ defmodule JidoFoundation.SystemCommandManager do
         new_active_commands = Map.delete(state.active_commands, command_ref)
 
         new_state = %{
-          state 
-          | cache: new_cache, 
+          state
+          | cache: new_cache,
             active_commands: new_active_commands,
             stats: new_stats
         }
@@ -305,7 +313,7 @@ defmodule JidoFoundation.SystemCommandManager do
         new_active_commands = Map.delete(state.active_commands, command_ref)
 
         new_state = %{
-          state 
+          state
           | active_commands: new_active_commands,
             stats: new_stats
         }
@@ -317,7 +325,7 @@ defmodule JidoFoundation.SystemCommandManager do
 
   def handle_info({:DOWN, _ref, :process, pid, reason}, state) do
     # Handle command process exit
-    command_ref = 
+    command_ref =
       Enum.find_value(state.active_commands, fn {ref, %{pid: cmd_pid}} ->
         if cmd_pid == pid, do: ref, else: nil
       end)
@@ -335,7 +343,7 @@ defmodule JidoFoundation.SystemCommandManager do
       new_stats = Map.update!(state.stats, :commands_failed, &(&1 + 1))
 
       new_state = %{
-        state 
+        state
         | active_commands: new_active_commands,
           stats: new_stats
       }
@@ -353,7 +361,7 @@ defmodule JidoFoundation.SystemCommandManager do
   @impl true
   def terminate(reason, state) do
     Logger.info("SystemCommandManager terminating: #{inspect(reason)}")
-    
+
     # Kill all active command processes
     Enum.each(state.active_commands, fn {_ref, %{pid: pid}} ->
       try do
@@ -374,19 +382,20 @@ defmodule JidoFoundation.SystemCommandManager do
       {:reply, {:error, :too_many_concurrent_commands}, state}
     else
       command_ref = make_ref()
-      
-      # Spawn supervised command execution
-      cmd_pid = spawn_link(fn ->
-        result = 
-          try do
-            System.cmd(command, args, stderr_to_stdout: true)
-          catch
-            kind, reason ->
-              {:error, {kind, reason}}
-          end
 
-        send(self(), {:command_result, command_ref, {:ok, result}, cache_key, cache_ttl})
-      end)
+      # Spawn supervised command execution
+      cmd_pid =
+        spawn_link(fn ->
+          result =
+            try do
+              System.cmd(command, args, stderr_to_stdout: true)
+            catch
+              kind, reason ->
+                {:error, {kind, reason}}
+            end
+
+          send(self(), {:command_result, command_ref, {:ok, result}, cache_key, cache_ttl})
+        end)
 
       # Monitor the command process
       Process.monitor(cmd_pid)
@@ -418,6 +427,7 @@ defmodule JidoFoundation.SystemCommandManager do
 
       %{result: result, timestamp: timestamp, ttl: ttl} ->
         current_time = System.monotonic_time(:millisecond)
+
         if current_time - timestamp <= ttl do
           {:ok, result}
         else
@@ -430,14 +440,15 @@ defmodule JidoFoundation.SystemCommandManager do
     # Parse free command output
     # This is a simplified parser - could be made more robust
     lines = String.split(output, "\n")
-    
+
     case Enum.find(lines, &String.starts_with?(&1, "Mem:")) do
       nil ->
         %{total: 0, available: 0, used: 0}
 
       mem_line ->
-        parts = String.split(mem_line) |> Enum.drop(1)  # Remove "Mem:" prefix
-        
+        # Remove "Mem:" prefix
+        parts = String.split(mem_line) |> Enum.drop(1)
+
         case parts do
           [total, used, _free, _shared, _buff_cache, available | _] ->
             %{

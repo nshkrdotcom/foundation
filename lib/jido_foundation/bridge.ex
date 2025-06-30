@@ -898,13 +898,13 @@ defmodule JidoFoundation.Bridge do
 
       # Use supervised task pool instead of Task.async_stream
       case JidoFoundation.TaskPoolManager.execute_batch(
-        :agent_operations,
-        agent_pids,
-        operation_fun,
-        max_concurrency: max_concurrency,
-        timeout: timeout,
-        on_timeout: :kill_task
-      ) do
+             :agent_operations,
+             agent_pids,
+             operation_fun,
+             max_concurrency: max_concurrency,
+             timeout: timeout,
+             on_timeout: :kill_task
+           ) do
         {:ok, stream} ->
           results =
             stream

@@ -95,7 +95,8 @@ defmodule JidoFoundation.TaskPoolManager do
   Stream of results similar to `Task.async_stream` but supervised.
   """
   @spec execute_batch(pool_name(), Enumerable.t(), (term() -> term()), keyword()) :: Enumerable.t()
-  def execute_batch(pool_name, enumerable, fun, opts \\ []) when is_atom(pool_name) and is_function(fun, 1) do
+  def execute_batch(pool_name, enumerable, fun, opts \\ [])
+      when is_atom(pool_name) and is_function(fun, 1) do
     GenServer.call(__MODULE__, {:execute_batch, pool_name, enumerable, fun, opts}, :infinity)
   end
 
@@ -167,7 +168,7 @@ defmodule JidoFoundation.TaskPoolManager do
     pools_config = Keyword.get(opts, :pools, @default_pools)
 
     # Initialize pools
-    pools = 
+    pools =
       Enum.reduce(pools_config, %{}, fn {pool_name, config}, acc ->
         case start_pool_supervisor(pool_name, config) do
           {:ok, supervisor_pid} ->
@@ -183,6 +184,7 @@ defmodule JidoFoundation.TaskPoolManager do
                 total_execution_time: 0
               }
             }
+
             Map.put(acc, pool_name, pool_info)
 
           {:error, reason} ->
@@ -218,15 +220,16 @@ defmodule JidoFoundation.TaskPoolManager do
         ordered = Keyword.get(opts, :ordered, true)
 
         # Create supervised async stream
-        stream = Task.Supervisor.async_stream(
-          pool_info.supervisor_pid,
-          enumerable,
-          fun,
-          max_concurrency: max_concurrency,
-          timeout: timeout,
-          on_timeout: on_timeout,
-          ordered: ordered
-        )
+        stream =
+          Task.Supervisor.async_stream(
+            pool_info.supervisor_pid,
+            enumerable,
+            fun,
+            max_concurrency: max_concurrency,
+            timeout: timeout,
+            on_timeout: on_timeout,
+            ordered: ordered
+          )
 
         # Update stats
         task_count = Enum.count(enumerable)
@@ -262,22 +265,26 @@ defmodule JidoFoundation.TaskPoolManager do
         {:reply, {:error, :pool_not_found}, state}
 
       pool_info ->
-        stats = Map.merge(pool_info.stats, %{
-          active_tasks: pool_info.active_tasks,
-          max_concurrency: pool_info.config.max_concurrency,
-          timeout: pool_info.config.timeout
-        })
+        stats =
+          Map.merge(pool_info.stats, %{
+            active_tasks: pool_info.active_tasks,
+            max_concurrency: pool_info.config.max_concurrency,
+            timeout: pool_info.config.timeout
+          })
+
         {:reply, {:ok, stats}, state}
     end
   end
 
   def handle_call(:get_all_stats, _from, state) do
-    all_stats = 
+    all_stats =
       Enum.reduce(state.pools, %{}, fn {pool_name, pool_info}, acc ->
-        pool_stats = Map.merge(pool_info.stats, %{
-          active_tasks: pool_info.active_tasks,
-          max_concurrency: pool_info.config.max_concurrency
-        })
+        pool_stats =
+          Map.merge(pool_info.stats, %{
+            active_tasks: pool_info.active_tasks,
+            max_concurrency: pool_info.config.max_concurrency
+          })
+
         Map.put(acc, pool_name, pool_stats)
       end)
 
@@ -341,11 +348,15 @@ defmodule JidoFoundation.TaskPoolManager do
       pool_info ->
         # Terminate all tasks in the pool
         children = Task.Supervisor.children(pool_info.supervisor_pid)
+
         Enum.each(children, fn child_pid ->
           Process.exit(child_pid, :shutdown)
         end)
 
-        Logger.warning("Emergency shutdown of task pool: #{pool_name} (#{length(children)} tasks killed)")
+        Logger.warning(
+          "Emergency shutdown of task pool: #{pool_name} (#{length(children)} tasks killed)"
+        )
+
         {:reply, :ok, state}
     end
   end
@@ -363,13 +374,13 @@ defmodule JidoFoundation.TaskPoolManager do
   @impl true
   def terminate(reason, state) do
     Logger.info("TaskPoolManager terminating: #{inspect(reason)}")
-    
+
     # Terminate all pool supervisors
     Enum.each(state.pools, fn {pool_name, pool_info} ->
       try do
         DynamicSupervisor.stop(pool_info.supervisor_pid, :shutdown)
       catch
-        _, _ -> 
+        _, _ ->
           Logger.warning("Failed to stop task pool supervisor: #{pool_name}")
       end
     end)
@@ -381,28 +392,27 @@ defmodule JidoFoundation.TaskPoolManager do
 
   defp start_pool_supervisor(pool_name, _config) do
     supervisor_name = :"TaskPool_#{pool_name}_Supervisor"
-    
+
     DynamicSupervisor.start_link(
-      [
-        strategy: :one_for_one,
-        name: supervisor_name
-      ]
+      strategy: :one_for_one,
+      name: supervisor_name
     )
     |> case do
       {:ok, supervisor_pid} ->
         # Start the actual Task.Supervisor under the DynamicSupervisor
         task_supervisor_name = :"TaskSupervisor_#{pool_name}"
-        
+
         child_spec = {Task.Supervisor, name: task_supervisor_name}
-        
+
         case DynamicSupervisor.start_child(supervisor_pid, child_spec) do
           {:ok, task_supervisor_pid} ->
             {:ok, task_supervisor_pid}
+
           error ->
             DynamicSupervisor.stop(supervisor_pid)
             error
         end
-      
+
       error ->
         error
     end
