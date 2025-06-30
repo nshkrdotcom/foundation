@@ -41,21 +41,29 @@ defmodule JidoSystem.Agents.FoundationAgent do
       require Logger
 
       # Override specs for Foundation-specific behavior modifications
-      # These specs match the actual 3-tuple returns our implementations use
-      @spec mount(term(), keyword()) :: 
-        {:ok, term()} | {:error, term()}
-      
-      @spec on_before_run(Jido.Agent.t()) :: 
-        {:ok, Jido.Agent.t()} | {:error, term()}
-      
-      @spec on_after_run(Jido.Agent.t(), term(), list()) :: 
-        {:ok, Jido.Agent.t()} | {:error, term()}
-      
-      @spec on_error(Jido.Agent.t(), term()) :: 
-        {:ok, Jido.Agent.t()} | {:error, term()}
-      
-      @spec shutdown(term(), term()) :: 
-        {:ok, term()} | {:error, term()}
+      # These specs match the actual returns our implementations use
+      @spec mount(term(), keyword()) ::
+              {:ok, term()}
+
+      @spec on_before_run(Jido.Agent.t()) ::
+              {:ok, Jido.Agent.t()}
+
+      @spec on_after_run(Jido.Agent.t(), term(), list()) ::
+              {:ok, Jido.Agent.t()}
+
+      @spec on_error(Jido.Agent.t(), term()) ::
+              {:ok, Jido.Agent.t()}
+
+      @spec shutdown(term(), term()) ::
+              {:ok, term()}
+
+      # Override Jido.Agent callback specs that cause Dialyzer warnings
+      # Our implementations never return errors for these callbacks
+      @spec handle_signal(Jido.Signal.t(), Jido.Agent.t()) :: {:ok, Jido.Signal.t()}
+      @spec do_validate(Jido.Agent.t(), map(), keyword()) :: {:ok, map()}
+      @spec pending?(Jido.Agent.t()) :: non_neg_integer()
+      @spec reset(Jido.Agent.t()) :: {:ok, Jido.Agent.t()}
+      @spec transform_result(Jido.Signal.t(), term(), Jido.Agent.t()) :: {:ok, term()}
 
       @impl true
       def mount(server_state, opts) do

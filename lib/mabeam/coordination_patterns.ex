@@ -79,11 +79,12 @@ defmodule MABEAM.CoordinationPatterns do
   def monitor_leader(leader_pid, team_id, opts \\ []) do
     interval = Keyword.get(opts, :check_interval, 5000)
 
-    monitor_pid = Foundation.TaskHelper.spawn_supervised(fn ->
-      ref = Process.monitor(leader_pid)
-      monitor_leader_loop(leader_pid, ref, team_id, interval, opts)
-    end)
-    
+    monitor_pid =
+      Foundation.TaskHelper.spawn_supervised(fn ->
+        ref = Process.monitor(leader_pid)
+        monitor_leader_loop(leader_pid, ref, team_id, interval, opts)
+      end)
+
     monitor_pid
   end
 
@@ -222,9 +223,10 @@ defmodule MABEAM.CoordinationPatterns do
     case Coordination.create_barrier(Coordination, barrier_id, expected_count) do
       :ok ->
         # Setup barrier monitoring
-        _monitor_pid = Foundation.TaskHelper.spawn_supervised(fn ->
-          monitor_barrier(barrier_id, expected_count, timeout)
-        end)
+        _monitor_pid =
+          Foundation.TaskHelper.spawn_supervised(fn ->
+            monitor_barrier(barrier_id, expected_count, timeout)
+          end)
 
         {:ok, barrier_id}
 

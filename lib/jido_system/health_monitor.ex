@@ -31,9 +31,12 @@ defmodule JidoSystem.HealthMonitor do
   require Logger
 
   defstruct [
-    :monitored_agents,  # %{agent_pid => %{health_check: fun, interval: ms, last_check: time}}
-    :health_statuses,   # %{agent_pid => %{status: :healthy | :unhealthy, last_update: time}}
-    :process_monitors   # %{monitor_ref => agent_pid}
+    # %{agent_pid => %{health_check: fun, interval: ms, last_check: time}}
+    :monitored_agents,
+    # %{agent_pid => %{status: :healthy | :unhealthy, last_update: time}}
+    :health_statuses,
+    # %{monitor_ref => agent_pid}
+    :process_monitors
   ]
 
   @default_health_check_interval 30_000
@@ -123,7 +126,7 @@ defmodule JidoSystem.HealthMonitor do
 
     # Set up process monitoring
     monitor_ref = Process.monitor(agent_pid)
-    
+
     agent_config = %{
       health_check: health_check,
       interval: interval,
@@ -133,17 +136,19 @@ defmodule JidoSystem.HealthMonitor do
 
     new_monitored = Map.put(state.monitored_agents, agent_pid, agent_config)
     new_monitors = Map.put(state.process_monitors, monitor_ref, agent_pid)
-    
-    # Initialize health status
-    new_statuses = Map.put(state.health_statuses, agent_pid, %{
-      status: :unknown,
-      last_update: DateTime.utc_now()
-    })
 
-    new_state = %{state |
-      monitored_agents: new_monitored,
-      process_monitors: new_monitors,
-      health_statuses: new_statuses
+    # Initialize health status
+    new_statuses =
+      Map.put(state.health_statuses, agent_pid, %{
+        status: :unknown,
+        last_update: DateTime.utc_now()
+      })
+
+    new_state = %{
+      state
+      | monitored_agents: new_monitored,
+        process_monitors: new_monitors,
+        health_statuses: new_statuses
     }
 
     Logger.debug("Registered agent #{inspect(agent_pid)} for health monitoring")
@@ -154,20 +159,21 @@ defmodule JidoSystem.HealthMonitor do
     case Map.get(state.monitored_agents, agent_pid) do
       nil ->
         {:reply, {:error, :not_found}, state}
-        
+
       %{monitor_ref: monitor_ref} ->
         Process.demonitor(monitor_ref, [:flush])
-        
+
         new_monitored = Map.delete(state.monitored_agents, agent_pid)
         new_monitors = Map.delete(state.process_monitors, monitor_ref)
         new_statuses = Map.delete(state.health_statuses, agent_pid)
-        
-        new_state = %{state |
-          monitored_agents: new_monitored,
-          process_monitors: new_monitors,
-          health_statuses: new_statuses
+
+        new_state = %{
+          state
+          | monitored_agents: new_monitored,
+            process_monitors: new_monitors,
+            health_statuses: new_statuses
         }
-        
+
         Logger.debug("Unregistered agent #{inspect(agent_pid)} from health monitoring")
         {:reply, :ok, new_state}
     end
@@ -189,7 +195,7 @@ defmodule JidoSystem.HealthMonitor do
       nil ->
         Logger.warning("Cannot force health check for unmonitored agent #{inspect(agent_pid)}")
         {:noreply, state}
-        
+
       agent_config ->
         new_state = perform_health_check(agent_pid, agent_config, state)
         {:noreply, new_state}
@@ -198,15 +204,16 @@ defmodule JidoSystem.HealthMonitor do
 
   def handle_info(:health_check_cycle, state) do
     # Perform health checks for all monitored agents
-    new_state = Enum.reduce(state.monitored_agents, state, fn {agent_pid, agent_config}, acc_state ->
-      should_check = should_perform_health_check?(agent_config)
-      
-      if should_check do
-        perform_health_check(agent_pid, agent_config, acc_state)
-      else
-        acc_state
-      end
-    end)
+    new_state =
+      Enum.reduce(state.monitored_agents, state, fn {agent_pid, agent_config}, acc_state ->
+        should_check = should_perform_health_check?(agent_config)
+
+        if should_check do
+          perform_health_check(agent_pid, agent_config, acc_state)
+        else
+          acc_state
+        end
+      end)
 
     # Schedule next health check cycle
     schedule_health_checks()
@@ -218,34 +225,36 @@ defmodule JidoSystem.HealthMonitor do
     case Map.get(state.process_monitors, monitor_ref) do
       nil ->
         {:noreply, state}
-        
+
       agent_pid ->
         Logger.info("Monitored agent #{inspect(agent_pid)} went down: #{inspect(reason)}")
-        
+
         # Update health status to dead
-        new_statuses = Map.put(state.health_statuses, agent_pid, %{
-          status: :dead,
-          last_update: DateTime.utc_now(),
-          reason: reason
-        })
-        
+        new_statuses =
+          Map.put(state.health_statuses, agent_pid, %{
+            status: :dead,
+            last_update: DateTime.utc_now(),
+            reason: reason
+          })
+
         # Clean up monitoring data
         new_monitored = Map.delete(state.monitored_agents, agent_pid)
         new_monitors = Map.delete(state.process_monitors, monitor_ref)
-        
-        new_state = %{state |
-          monitored_agents: new_monitored,
-          process_monitors: new_monitors,
-          health_statuses: new_statuses
+
+        new_state = %{
+          state
+          | monitored_agents: new_monitored,
+            process_monitors: new_monitors,
+            health_statuses: new_statuses
         }
-        
+
         # Emit telemetry
         :telemetry.execute(
           [:jido_system, :health_monitor, :agent_died],
           %{},
           %{agent_pid: agent_pid, reason: reason}
         )
-        
+
         {:noreply, new_state}
     end
   end
@@ -253,10 +262,12 @@ defmodule JidoSystem.HealthMonitor do
   # Private helpers
 
   defp schedule_health_checks do
-    Process.send_after(self(), :health_check_cycle, 10_000)  # Every 10 seconds
+    # Every 10 seconds
+    Process.send_after(self(), :health_check_cycle, 10_000)
   end
 
   defp should_perform_health_check?(%{last_check: nil}), do: true
+
   defp should_perform_health_check?(%{last_check: last_check, interval: interval}) do
     elapsed = System.monotonic_time(:millisecond) - last_check
     elapsed >= interval
@@ -264,50 +275,54 @@ defmodule JidoSystem.HealthMonitor do
 
   defp perform_health_check(agent_pid, agent_config, state) do
     start_time = System.monotonic_time(:millisecond)
-    
+
     try do
       health_status = agent_config.health_check.(agent_pid)
-      
+
       # Update agent config with last check time
       updated_config = %{agent_config | last_check: start_time}
       new_monitored = Map.put(state.monitored_agents, agent_pid, updated_config)
-      
+
       # Update health status
       status_record = %{
         status: health_status,
         last_update: DateTime.utc_now()
       }
+
       new_statuses = Map.put(state.health_statuses, agent_pid, status_record)
-      
+
       # Emit telemetry
       :telemetry.execute(
         [:jido_system, :health_monitor, :health_check],
         %{duration: System.monotonic_time(:millisecond) - start_time},
         %{agent_pid: agent_pid, status: health_status}
       )
-      
+
       # Alert on status changes
       previous_status = get_in(state.health_statuses, [agent_pid, :status])
+
       if previous_status && previous_status != health_status do
-        Logger.warning("Agent #{inspect(agent_pid)} health status changed: #{previous_status} -> #{health_status}")
+        Logger.warning(
+          "Agent #{inspect(agent_pid)} health status changed: #{previous_status} -> #{health_status}"
+        )
       end
-      
-      %{state |
-        monitored_agents: new_monitored,
-        health_statuses: new_statuses
-      }
+
+      %{state | monitored_agents: new_monitored, health_statuses: new_statuses}
     rescue
       error ->
-        Logger.error("Health check failed for agent #{inspect(agent_pid)}: #{Exception.message(error)}")
-        
+        Logger.error(
+          "Health check failed for agent #{inspect(agent_pid)}: #{Exception.message(error)}"
+        )
+
         # Mark as unhealthy
         status_record = %{
           status: :unhealthy,
           last_update: DateTime.utc_now(),
           error: Exception.message(error)
         }
+
         new_statuses = Map.put(state.health_statuses, agent_pid, status_record)
-        
+
         %{state | health_statuses: new_statuses}
     end
   end

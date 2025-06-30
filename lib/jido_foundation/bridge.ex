@@ -259,10 +259,11 @@ defmodule JidoFoundation.Bridge do
     registry = Keyword.get(opts, :registry)
 
     # Start a supervised monitoring process
-    monitor_pid = Foundation.TaskHelper.spawn_supervised(fn ->
-      Process.flag(:trap_exit, true)
-      monitor_agent_health(agent_pid, health_check, interval, registry)
-    end)
+    monitor_pid =
+      Foundation.TaskHelper.spawn_supervised(fn ->
+        Process.flag(:trap_exit, true)
+        monitor_agent_health(agent_pid, health_check, interval, registry)
+      end)
 
     # Store monitor PID in process dictionary for testing
     Process.put({:monitor, agent_pid}, monitor_pid)

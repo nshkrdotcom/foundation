@@ -414,6 +414,9 @@ defmodule JidoSystem.Agents.MonitorAgent do
 
           [] ->
             {agent_id, %{status: :not_found}}
+
+          _ ->
+            {agent_id, %{status: :error}}
         end
       end)
 

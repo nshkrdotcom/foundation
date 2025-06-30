@@ -168,13 +168,14 @@ defmodule JidoSystem.Agents.TaskAgent do
               # Handle UpdateErrorCount result - increment error count and potentially pause
               current_count = updated_agent.state.error_count
               new_count = current_count + increment
+
               new_state_base = %{
                 updated_agent.state
                 | error_count: new_count,
                   current_task: nil,
                   status: :idle
               }
-              
+
               # If we have too many errors, pause processing
               if new_count >= 10 do
                 Logger.warning("TaskAgent #{agent.id} has too many errors (#{new_count}), pausing")
@@ -187,17 +188,15 @@ defmodule JidoSystem.Agents.TaskAgent do
             %{error: error_details, status: :failed} ->
               # This is a failed ProcessTask result (not an exception)
               # Increment error count for failed task processing
-              should_count_error = case error_details do
-                {:validation_failed, _} -> true  # Count validation failures  
-                {:unsupported_task_type, _} -> true  # Count unsupported task types
-                _ -> true
-              end
-
-              error_count = if should_count_error do
-                updated_agent.state.error_count + 1
-              else
-                updated_agent.state.error_count
-              end
+              error_count =
+                case error_details do
+                  # Count validation failures  
+                  {:validation_failed, _} -> updated_agent.state.error_count + 1
+                  # Count unsupported task types
+                  {:unsupported_task_type, _} -> updated_agent.state.error_count + 1
+                  # Count all other failures
+                  _ -> updated_agent.state.error_count + 1
+                end
 
               new_state_base = %{
                 updated_agent.state
@@ -207,7 +206,7 @@ defmodule JidoSystem.Agents.TaskAgent do
               }
 
               # If we have too many errors, pause processing  
-              if new_state_base.error_count >= 10 and should_count_error do
+              if new_state_base.error_count >= 10 do
                 Logger.warning("TaskAgent #{agent.id} has too many errors, pausing")
                 %{new_state_base | status: :paused}
               else
@@ -226,17 +225,15 @@ defmodule JidoSystem.Agents.TaskAgent do
             # Handle Jido.Error structs (common from action failures)
             %Jido.Error{type: error_type} = _error ->
               # Increment error count for Jido.Error results
-              should_count_error = case error_type do
-                :validation_error -> true  # Count validation errors
-                :execution_error -> true   # Count execution errors
-                _ -> true
-              end
-
-              error_count = if should_count_error do
-                updated_agent.state.error_count + 1
-              else
-                updated_agent.state.error_count
-              end
+              error_count =
+                case error_type do
+                  # Count validation errors
+                  :validation_error -> updated_agent.state.error_count + 1
+                  # Count execution errors
+                  :execution_error -> updated_agent.state.error_count + 1
+                  # Count all other error types
+                  _ -> updated_agent.state.error_count + 1
+                end
 
               new_state_base = %{
                 updated_agent.state
@@ -246,8 +243,11 @@ defmodule JidoSystem.Agents.TaskAgent do
               }
 
               # If we have too many errors, pause processing
-              if new_state_base.error_count >= 10 and should_count_error do
-                Logger.warning("TaskAgent #{agent.id} has too many errors (#{new_state_base.error_count}), pausing")
+              if new_state_base.error_count >= 10 do
+                Logger.warning(
+                  "TaskAgent #{agent.id} has too many errors (#{new_state_base.error_count}), pausing"
+                )
+
                 %{new_state_base | status: :paused}
               else
                 new_state_base
@@ -289,27 +289,29 @@ defmodule JidoSystem.Agents.TaskAgent do
       # Send an internal action to handle error counting through proper agent action flow
       # This is the correct way - business logic through actions, not supervision callbacks
       agent_pid = self()
-      
+
       Foundation.TaskHelper.spawn_supervised_safe(fn ->
-        Process.sleep(100) # Let error processing complete
-        
-        instruction = Jido.Instruction.new!(%{
-          action: JidoSystem.Actions.UpdateErrorCount,
-          params: %{increment: 1}
-        })
-        
+        # Let error processing complete
+        Process.sleep(100)
+
+        instruction =
+          Jido.Instruction.new!(%{
+            action: JidoSystem.Actions.UpdateErrorCount,
+            params: %{increment: 1}
+          })
+
         Jido.Agent.Server.cast(agent_pid, instruction)
       end)
     end
-    
+
     # on_error is for cleanup and telemetry only, not state mutations
     super(agent, error)
   end
 
   # Custom action implementations
 
-  @spec handle_process_task(Jido.Agent.t(), map()) :: 
-    {:ok, term(), Jido.Agent.t()} | {:error, term()}
+  @spec handle_process_task(Jido.Agent.t(), map()) ::
+          {:ok, term(), Jido.Agent.t()} | {:error, term()}
   def handle_process_task(agent, task_params) do
     try do
       start_time = System.monotonic_time(:microsecond)
@@ -374,8 +376,8 @@ defmodule JidoSystem.Agents.TaskAgent do
     end
   end
 
-  @spec handle_queue_task(Jido.Agent.t(), map()) :: 
-    {:ok, term(), Jido.Agent.t()} | {:error, term()}
+  @spec handle_queue_task(Jido.Agent.t(), map()) ::
+          {:ok, term(), Jido.Agent.t()} | {:error, term()}
   def handle_queue_task(agent, task_params) do
     if :queue.len(agent.state.task_queue) >= agent.state.max_queue_size do
       emit_event(agent, :queue_full, %{queue_size: :queue.len(agent.state.task_queue)}, %{})
@@ -399,8 +401,8 @@ defmodule JidoSystem.Agents.TaskAgent do
     end
   end
 
-  @spec handle_get_status(Jido.Agent.t(), term()) :: 
-    {:ok, map(), Jido.Agent.t()}
+  @spec handle_get_status(Jido.Agent.t(), term()) ::
+          {:ok, map(), Jido.Agent.t()}
   def handle_get_status(agent, _params) do
     status = %{
       status: agent.state.status,
@@ -416,8 +418,8 @@ defmodule JidoSystem.Agents.TaskAgent do
     {:ok, status, agent}
   end
 
-  @spec handle_pause_processing(Jido.Agent.t(), map()) :: 
-    {:ok, map(), Jido.Agent.t()}
+  @spec handle_pause_processing(Jido.Agent.t(), map()) ::
+          {:ok, map(), Jido.Agent.t()}
   def handle_pause_processing(agent, params) do
     new_state = %{agent.state | status: :paused}
     emit_event(agent, :processing_paused, %{}, %{})
@@ -431,8 +433,8 @@ defmodule JidoSystem.Agents.TaskAgent do
      }, %{agent | state: new_state}}
   end
 
-  @spec handle_resume_processing(Jido.Agent.t(), term()) :: 
-    {:ok, atom(), Jido.Agent.t()}
+  @spec handle_resume_processing(Jido.Agent.t(), term()) ::
+          {:ok, atom(), Jido.Agent.t()}
   def handle_resume_processing(agent, _params) do
     new_state = %{agent.state | status: :idle}
     emit_event(agent, :processing_resumed, %{}, %{})
@@ -522,6 +524,4 @@ defmodule JidoSystem.Agents.TaskAgent do
       {:noreply, state}
     end
   end
-
-
 end

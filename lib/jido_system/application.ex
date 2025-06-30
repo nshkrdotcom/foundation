@@ -34,10 +34,10 @@ defmodule JidoSystem.Application do
     children = [
       # Dynamic supervisor for critical agents
       {DynamicSupervisor, name: JidoSystem.AgentSupervisor, strategy: :one_for_one},
-      
+
       # Error persistence service
       JidoSystem.ErrorStore,
-      
+
       # Agent health monitoring
       JidoSystem.HealthMonitor
     ]

@@ -69,6 +69,30 @@ defmodule JidoSystem.Sensors.AgentPerformanceSensor do
   alias Foundation.{Registry, Telemetry}
   alias Jido.Signal
 
+  # Override Jido.Sensor callback specs - our implementations never return errors
+  @spec mount(map()) :: {:ok, map()}
+  @spec deliver_signal(map()) :: {:ok, Jido.Signal.t()}
+  @spec on_before_deliver(Jido.Signal.t(), map()) :: {:ok, Jido.Signal.t()}
+  @spec shutdown(map()) :: {:ok, map()}
+
+  # Override Jido.Sensor generated function specs for more precise types
+  @spec __sensor_metadata__() :: %{
+          category: atom(),
+          description: String.t(),
+          name: String.t(),
+          schema: list(),
+          tags: list(),
+          vsn: String.t()
+        }
+  @spec to_json() :: %{
+          category: atom(),
+          description: String.t(),
+          name: String.t(),
+          schema: list(),
+          tags: list(),
+          vsn: String.t()
+        }
+
   @impl true
   def mount(config) do
     Logger.info("Starting AgentPerformanceSensor",
@@ -141,7 +165,7 @@ defmodule JidoSystem.Sensors.AgentPerformanceSensor do
         )
 
         error_signal =
-          Signal.new(%{
+          Signal.new!(%{
             type: "agent.performance.error",
             source: "/sensors/agent_performance",
             data: %{
@@ -153,6 +177,12 @@ defmodule JidoSystem.Sensors.AgentPerformanceSensor do
 
         {:ok, error_signal, state}
     end
+  end
+
+  @impl true
+  def on_before_deliver(signal, _state) do
+    # Default implementation - pass signal through unchanged
+    {:ok, signal}
   end
 
   @impl true
@@ -607,7 +637,7 @@ defmodule JidoSystem.Sensors.AgentPerformanceSensor do
       requires_attention: overall_status in [:degraded, :critical]
     }
 
-    Signal.new(%{
+    Signal.new!(%{
       type: signal_type,
       source: "/sensors/agent_performance",
       data: signal_data

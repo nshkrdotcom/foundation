@@ -88,6 +88,30 @@ defmodule JidoSystem.Sensors.SystemHealthSensor do
   alias Foundation.Registry
   alias Jido.Signal
 
+  # Override Jido.Sensor callback specs - our implementations never return errors
+  @spec mount(map()) :: {:ok, map()}
+  @spec deliver_signal(map()) :: {:ok, Jido.Signal.t()}
+  @spec on_before_deliver(Jido.Signal.t(), map()) :: {:ok, Jido.Signal.t()}
+  @spec shutdown(map()) :: {:ok, map()}
+
+  # Override Jido.Sensor generated function specs for more precise types
+  @spec __sensor_metadata__() :: %{
+          category: atom(),
+          description: String.t(),
+          name: String.t(),
+          schema: list(),
+          tags: list(),
+          vsn: String.t()
+        }
+  @spec to_json() :: %{
+          category: atom(),
+          description: String.t(),
+          name: String.t(),
+          schema: list(),
+          tags: list(),
+          vsn: String.t()
+        }
+
   @impl true
   def mount(config) do
     # Ensure required fields with defaults first
@@ -185,7 +209,7 @@ defmodule JidoSystem.Sensors.SystemHealthSensor do
 
         # Create error signal
         error_signal =
-          Signal.new(%{
+          Signal.new!(%{
             type: "system.health.error",
             source: "/sensors/system_health",
             data: %{
@@ -385,15 +409,12 @@ defmodule JidoSystem.Sensors.SystemHealthSensor do
     try do
       # Use :erlang.statistics/1 instead of :scheduler.utilization/1
       case :erlang.statistics(:scheduler_wall_time) do
-        nil ->
+        :undefined ->
           []
 
         stats when is_list(stats) ->
           # Return simple scheduler stats
           stats
-
-        _ ->
-          []
       end
     rescue
       _ ->

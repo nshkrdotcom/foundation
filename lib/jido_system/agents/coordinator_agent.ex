@@ -150,8 +150,8 @@ defmodule JidoSystem.Agents.CoordinatorAgent do
 
   # Action Handlers
 
-  @spec handle_register_agents(Jido.Agent.t(), map()) :: 
-    {:ok, map(), Jido.Agent.t()} | {:error, term()}
+  @spec handle_register_agents(Jido.Agent.t(), map()) ::
+          {:ok, map(), Jido.Agent.t()} | {:error, term()}
   def handle_register_agents(agent, %{agents: agents}) when is_list(agents) do
     try do
       # Validate and register each agent

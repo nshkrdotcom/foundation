@@ -12,7 +12,7 @@ defmodule Foundation.TaskHelper do
   Spawns a supervised task using Foundation.TaskSupervisor.
 
   Falls back to regular spawn if the supervisor is not available (test environments).
-  
+
   ## Examples
 
       Foundation.TaskHelper.spawn_supervised(fn ->
@@ -24,14 +24,18 @@ defmodule Foundation.TaskHelper do
       nil ->
         # TaskSupervisor not running, fall back to spawn (test environment)
         spawn(fun)
-        
+
       _pid ->
         # TaskSupervisor is running, use proper supervision
         case Task.Supervisor.start_child(Foundation.TaskSupervisor, fun) do
-          {:ok, pid} -> 
+          {:ok, pid} ->
             pid
+
           {:error, reason} ->
-            Logger.warning("Task.Supervisor.start_child failed: #{inspect(reason)}, falling back to spawn")
+            Logger.warning(
+              "Task.Supervisor.start_child failed: #{inspect(reason)}, falling back to spawn"
+            )
+
             spawn(fun)
         end
     end

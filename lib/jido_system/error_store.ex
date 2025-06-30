@@ -29,9 +29,12 @@ defmodule JidoSystem.ErrorStore do
   require Logger
 
   defstruct [
-    :error_counts,      # %{agent_id => count}
-    :error_history,     # %{agent_id => [error_records]}
-    :retention_policy,  # %{max_history: 1000, max_age_hours: 24}
+    # %{agent_id => count}
+    :error_counts,
+    # %{agent_id => [error_records]}
+    :error_history,
+    # %{max_history: 1000, max_age_hours: 24}
+    :retention_policy,
     :cleanup_timer
   ]
 
@@ -100,9 +103,9 @@ defmodule JidoSystem.ErrorStore do
 
     # Schedule periodic cleanup
     timer = Process.send_after(self(), :cleanup, cleanup_interval)
-    
+
     Logger.info("JidoSystem.ErrorStore started with retention policy: #{inspect(retention_policy)}")
-    
+
     {:ok, %{state | cleanup_timer: timer}}
   end
 
@@ -115,12 +118,9 @@ defmodule JidoSystem.ErrorStore do
   def handle_call({:reset_errors, agent_id}, _from, state) do
     new_counts = Map.delete(state.error_counts, agent_id)
     new_history = Map.delete(state.error_history, agent_id)
-    
-    new_state = %{state | 
-      error_counts: new_counts,
-      error_history: new_history
-    }
-    
+
+    new_state = %{state | error_counts: new_counts, error_history: new_history}
+
     Logger.info("Reset error count for agent #{agent_id}")
     {:reply, :ok, new_state}
   end
@@ -143,20 +143,17 @@ defmodule JidoSystem.ErrorStore do
       timestamp: DateTime.utc_now(),
       count: new_count
     }
-    
+
     current_history = Map.get(state.error_history, agent_id, [])
     new_history_list = [error_record | current_history]
-    
+
     # Apply retention policy
     max_history = state.retention_policy.max_history
     trimmed_history = Enum.take(new_history_list, max_history)
-    
+
     new_history = Map.put(state.error_history, agent_id, trimmed_history)
 
-    new_state = %{state |
-      error_counts: new_counts,
-      error_history: new_history
-    }
+    new_state = %{state | error_counts: new_counts, error_history: new_history}
 
     # Emit telemetry
     :telemetry.execute(
@@ -170,33 +167,39 @@ defmodule JidoSystem.ErrorStore do
 
   def handle_info(:cleanup, state) do
     Logger.debug("JidoSystem.ErrorStore performing cleanup")
-    
+
     # Clean up old error history based on age
     max_age_ms = state.retention_policy.max_age_hours * 60 * 60 * 1000
     cutoff_time = DateTime.add(DateTime.utc_now(), -max_age_ms, :millisecond)
-    
-    new_history = Map.new(state.error_history, fn {agent_id, history} ->
-      filtered_history = Enum.filter(history, fn record ->
-        DateTime.compare(record.timestamp, cutoff_time) == :gt
+
+    new_history =
+      Map.new(state.error_history, fn {agent_id, history} ->
+        filtered_history =
+          Enum.filter(history, fn record ->
+            DateTime.compare(record.timestamp, cutoff_time) == :gt
+          end)
+
+        {agent_id, filtered_history}
       end)
-      {agent_id, filtered_history}
-    end)
-    
+
     # Remove agents with no recent errors
-    new_counts = Map.filter(state.error_counts, fn {agent_id, _count} ->
-      Map.get(new_history, agent_id, []) != []
-    end)
-    
+    new_counts =
+      Map.filter(state.error_counts, fn {agent_id, _count} ->
+        Map.get(new_history, agent_id, []) != []
+      end)
+
     # Schedule next cleanup  
-    cleanup_interval = 60_000  # 1 minute
+    # 1 minute
+    cleanup_interval = 60_000
     timer = Process.send_after(self(), :cleanup, cleanup_interval)
-    
-    new_state = %{state |
-      error_counts: new_counts,
-      error_history: new_history,
-      cleanup_timer: timer
+
+    new_state = %{
+      state
+      | error_counts: new_counts,
+        error_history: new_history,
+        cleanup_timer: timer
     }
-    
+
     {:noreply, new_state}
   end
 
