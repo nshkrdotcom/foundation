@@ -238,7 +238,7 @@ defmodule JidoFoundation.TaskPoolManager do
     end
   end
 
-  def handle_call({:execute_task, pool_name, fun, opts}, _from, state) do
+  def handle_call({:execute_task, pool_name, fun, _opts}, _from, state) do
     case Map.get(state.pools, pool_name) do
       nil ->
         {:reply, {:error, :pool_not_found}, state}
@@ -379,7 +379,7 @@ defmodule JidoFoundation.TaskPoolManager do
 
   # Private helper functions
 
-  defp start_pool_supervisor(pool_name, config) do
+  defp start_pool_supervisor(pool_name, _config) do
     supervisor_name = :"TaskPool_#{pool_name}_Supervisor"
     
     DynamicSupervisor.start_link(
@@ -415,29 +415,11 @@ defmodule JidoFoundation.TaskPoolManager do
         new_active = pool_info.active_tasks + 1
         %{pool_info | stats: new_stats, active_tasks: new_active}
 
-      :task_completed ->
-        new_stats = Map.update!(pool_info.stats, :tasks_completed, &(&1 + 1))
-        new_active = max(0, pool_info.active_tasks - 1)
-        %{pool_info | stats: new_stats, active_tasks: new_active}
-
-      :task_failed ->
-        new_stats = Map.update!(pool_info.stats, :tasks_failed, &(&1 + 1))
-        new_active = max(0, pool_info.active_tasks - 1)
-        %{pool_info | stats: new_stats, active_tasks: new_active}
-
-      :task_timeout ->
-        new_stats = Map.update!(pool_info.stats, :tasks_timeout, &(&1 + 1))
-        new_active = max(0, pool_info.active_tasks - 1)
-        %{pool_info | stats: new_stats, active_tasks: new_active}
-
       :batch_started ->
         task_count = metadata[:task_count] || 0
         new_stats = Map.update!(pool_info.stats, :tasks_started, &(&1 + task_count))
         new_active = pool_info.active_tasks + task_count
         %{pool_info | stats: new_stats, active_tasks: new_active}
-
-      _ ->
-        pool_info
     end
   end
 end

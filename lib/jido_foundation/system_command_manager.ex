@@ -118,7 +118,7 @@ defmodule JidoFoundation.SystemCommandManager do
   @doc """
   Gets system memory information with caching.
   """
-  @spec get_memory_info() :: {:ok, map()} | {:error, term()}
+  @spec get_memory_info() :: {:ok, %{total: integer(), available: integer(), used: integer()}} | {:error, term()}
   def get_memory_info do
     case execute_command("free", ["-b"], cache_ttl: 30_000) do
       {:ok, {output, 0}} ->
