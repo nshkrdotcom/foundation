@@ -47,8 +47,8 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
     initial_process_count = :erlang.system_info(:process_count)
 
     on_exit(fn ->
-      # Wait for cleanup
-      Process.sleep(100)
+      # Wait for cleanup (minimal delay)
+      :timer.sleep(20)
 
       # Verify no process leaks
       final_process_count = :erlang.system_info(:process_count)
@@ -76,11 +76,19 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
       # Kill the TaskPoolManager process
       Process.exit(initial_pid, :kill)
 
-      # Wait for supervisor to restart it
-      Process.sleep(200)
+      # Wait for supervisor to restart it with new pid
+      new_pid =
+        wait_for(
+          fn ->
+            case Process.whereis(JidoFoundation.TaskPoolManager) do
+              pid when pid != initial_pid and is_pid(pid) -> pid
+              _ -> nil
+            end
+          end,
+          5000
+        )
 
       # Verify it restarted with new pid
-      new_pid = Process.whereis(JidoFoundation.TaskPoolManager)
       assert is_pid(new_pid), "TaskPoolManager should be restarted"
       assert new_pid != initial_pid, "Should have new pid after restart"
 
@@ -126,7 +134,8 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
           :test_crash_pool,
           [1, 2, 3],
           fn i ->
-            Process.sleep(50)
+            # Minimal processing time
+            :timer.sleep(10)
             i * 10
           end,
           timeout: 2000
@@ -164,11 +173,19 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
       # Kill the process
       Process.exit(initial_pid, :kill)
 
-      # Wait for restart
-      Process.sleep(200)
+      # Wait for supervisor to restart with new pid
+      new_pid =
+        wait_for(
+          fn ->
+            case Process.whereis(JidoFoundation.SystemCommandManager) do
+              pid when pid != initial_pid and is_pid(pid) -> pid
+              _ -> nil
+            end
+          end,
+          5000
+        )
 
       # Verify restart
-      new_pid = Process.whereis(JidoFoundation.SystemCommandManager)
       assert is_pid(new_pid)
       assert new_pid != initial_pid
 
@@ -209,11 +226,19 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
       # Kill the process
       Process.exit(initial_pid, :kill)
 
-      # Wait for restart
-      Process.sleep(200)
+      # Wait for supervisor to restart with new pid
+      new_pid =
+        wait_for(
+          fn ->
+            case Process.whereis(JidoFoundation.CoordinationManager) do
+              pid when pid != initial_pid and is_pid(pid) -> pid
+              _ -> nil
+            end
+          end,
+          5000
+        )
 
       # Verify restart
-      new_pid = Process.whereis(JidoFoundation.CoordinationManager)
       assert is_pid(new_pid)
       assert new_pid != initial_pid
 
@@ -231,11 +256,19 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
       # Kill the process
       Process.exit(initial_pid, :kill)
 
-      # Wait for restart
-      Process.sleep(200)
+      # Wait for supervisor to restart with new pid
+      new_pid =
+        wait_for(
+          fn ->
+            case Process.whereis(JidoFoundation.SchedulerManager) do
+              pid when pid != initial_pid and is_pid(pid) -> pid
+              _ -> nil
+            end
+          end,
+          5000
+        )
 
       # Verify restart
-      new_pid = Process.whereis(JidoFoundation.SchedulerManager)
       assert is_pid(new_pid)
       assert new_pid != initial_pid
 
@@ -257,16 +290,25 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
       task_pool_pid = Process.whereis(JidoFoundation.TaskPoolManager)
       Process.exit(task_pool_pid, :kill)
 
-      # Wait for restart
-      Process.sleep(200)
+      # Wait for restart (minimal delay for supervisor recovery)
+      :timer.sleep(50)
 
       # Verify other children are still alive (supervisor might restart too)
       current_supervisor =
         case Process.whereis(JidoSystem.Supervisor) do
           nil ->
             # Wait for supervisor to restart
-            Process.sleep(300)
-            restarted_supervisor = Process.whereis(JidoSystem.Supervisor)
+            restarted_supervisor =
+              wait_for(
+                fn ->
+                  case Process.whereis(JidoSystem.Supervisor) do
+                    pid when is_pid(pid) -> pid
+                    _ -> nil
+                  end
+                end,
+                5000
+              )
+
             assert is_pid(restarted_supervisor), "JidoSystem.Supervisor should restart"
             restarted_supervisor
 
@@ -304,8 +346,23 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
       Process.exit(system_cmd_pid, :kill)
       Process.exit(scheduler_pid, :kill)
 
-      # Wait for restarts
-      Process.sleep(500)
+      # Wait for all services to restart
+      wait_for(
+        fn ->
+          new_task_pid = Process.whereis(JidoFoundation.TaskPoolManager)
+          new_sys_pid = Process.whereis(JidoFoundation.SystemCommandManager)
+          new_sched_pid = Process.whereis(JidoFoundation.SchedulerManager)
+
+          if new_task_pid != task_pool_pid and new_sys_pid != system_cmd_pid and
+               new_sched_pid != scheduler_pid and is_pid(new_task_pid) and
+               is_pid(new_sys_pid) and is_pid(new_sched_pid) do
+            {new_task_pid, new_sys_pid, new_sched_pid}
+          else
+            nil
+          end
+        end,
+        8000
+      )
 
       # Verify all services restarted
       new_task_pool_pid = Process.whereis(JidoFoundation.TaskPoolManager)
@@ -347,11 +404,12 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
       for _i <- 1..5 do
         task_pool_pid = Process.whereis(JidoFoundation.TaskPoolManager)
         Process.exit(task_pool_pid, :kill)
-        Process.sleep(100)
+        # Minimal delay for restart cycle
+        :timer.sleep(20)
       end
 
-      # Wait for stabilization
-      Process.sleep(500)
+      # Wait for final stabilization
+      :timer.sleep(100)
 
       final_count = :erlang.system_info(:process_count)
 
@@ -372,12 +430,13 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
 
           system_cmd_pid when is_pid(system_cmd_pid) ->
             Process.exit(system_cmd_pid, :kill)
-            Process.sleep(100)
+            # Minimal delay for restart
+            :timer.sleep(20)
         end
       end
 
-      # Wait for cleanup
-      Process.sleep(300)
+      # Wait for cleanup (minimal delay)
+      :timer.sleep(50)
 
       final_ets_count = :erlang.system_info(:ets_count)
 
@@ -421,9 +480,19 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
           end
       end
 
+      # Wait for restart with new pid
+      new_scheduler_pid =
+        wait_for(
+          fn ->
+            case Process.whereis(JidoFoundation.SchedulerManager) do
+              pid when pid != scheduler_pid and is_pid(pid) -> pid
+              _ -> nil
+            end
+          end,
+          5000
+        )
+
       # Verify it restarted
-      Process.sleep(200)
-      new_scheduler_pid = Process.whereis(JidoFoundation.SchedulerManager)
       assert is_pid(new_scheduler_pid)
       assert new_scheduler_pid != scheduler_pid
     end

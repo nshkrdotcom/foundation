@@ -24,6 +24,7 @@ defmodule Foundation.Services.SignalBus do
 
   use GenServer
   require Logger
+  alias Foundation.Telemetry
 
   @type start_option ::
           {:name, atom()}
@@ -109,16 +110,29 @@ defmodule Foundation.Services.SignalBus do
           started_at: System.monotonic_time(:millisecond)
         }
 
+        Telemetry.service_started(__MODULE__, %{
+          bus_name: bus_name,
+          middleware_count: length(middleware)
+        })
+
         {:ok, state}
 
       {:error, reason} ->
         Logger.error("Failed to start Foundation Signal Bus: #{inspect(reason)}")
+
+        Telemetry.service_error(__MODULE__, reason, %{
+          bus_name: bus_name,
+          operation: :start
+        })
+
         {:stop, reason}
     end
   end
 
   @impl true
   def handle_call(:health_check, _from, state) do
+    start_time = System.monotonic_time()
+
     health_status =
       if Process.alive?(state.bus_pid) do
         # Try a simple operation to verify the bus is responsive
@@ -129,6 +143,18 @@ defmodule Foundation.Services.SignalBus do
       else
         :unhealthy
       end
+
+    Telemetry.emit(
+      [:foundation, :signal_bus, :health_check],
+      %{
+        duration: System.monotonic_time() - start_time,
+        timestamp: System.system_time()
+      },
+      %{
+        bus_name: state.bus_name,
+        status: health_status
+      }
+    )
 
     {:reply, health_status, state}
   end
@@ -141,6 +167,12 @@ defmodule Foundation.Services.SignalBus do
   @impl true
   def handle_info({:DOWN, _ref, :process, pid, reason}, %{bus_pid: pid} = state) do
     Logger.error("Foundation Signal Bus process died: #{inspect(reason)}")
+
+    Telemetry.service_error(__MODULE__, {:signal_bus_died, reason}, %{
+      bus_name: state.bus_name,
+      operation: :monitor
+    })
+
     {:stop, {:signal_bus_died, reason}, state}
   end
 
@@ -153,6 +185,14 @@ defmodule Foundation.Services.SignalBus do
   @impl true
   def terminate(reason, state) do
     Logger.info("Foundation Signal Bus service shutting down: #{inspect(reason)}")
+
+    uptime = System.monotonic_time(:millisecond) - state.started_at
+
+    Telemetry.service_stopped(__MODULE__, %{
+      bus_name: state.bus_name,
+      reason: reason,
+      uptime_ms: uptime
+    })
 
     if Process.alive?(state.bus_pid) do
       # Give the bus a chance to shut down gracefully

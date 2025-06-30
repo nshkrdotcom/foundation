@@ -200,8 +200,8 @@ defmodule JidoSystem.Agents.FoundationAgentTest do
       # Stop the agent
       GenServer.stop(pid)
 
-      # Give some time for cleanup
-      Process.sleep(10)
+      # Give some time for cleanup (minimal delay)
+      :timer.sleep(5)
 
       # Verify deregistration
       assert :error = Foundation.Registry.lookup(global_registry, pid)

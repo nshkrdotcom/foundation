@@ -235,7 +235,8 @@ defmodule JidoFoundation.PerformanceBenchmarkTest do
               pool_name,
               1..10,
               fn x ->
-                Process.sleep(Enum.random(1..20))
+                # Reduced random processing time for faster tests
+                :timer.sleep(Enum.random(1..5))
                 x + 100
               end,
               timeout: 1500
@@ -385,7 +386,8 @@ defmodule JidoFoundation.PerformanceBenchmarkTest do
                   TaskPoolManager.get_all_stats()
               end
 
-              Process.sleep(10)
+              # Minimal delay for operation spacing
+              :timer.sleep(5)
             end
           end)
         end
@@ -399,7 +401,8 @@ defmodule JidoFoundation.PerformanceBenchmarkTest do
               :monitoring,
               [1, 2, 3, 4],
               fn x ->
-                Process.sleep(5)
+                # Minimal processing delay
+                :timer.sleep(2)
                 x * 10
               end,
               timeout: 2000

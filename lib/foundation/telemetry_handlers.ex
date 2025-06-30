@@ -56,4 +56,40 @@ defmodule Foundation.TelemetryHandlers do
     test_pid = config[:test_pid] || self()
     send(test_pid, {:telemetry, event, measurements, metadata})
   end
+
+  @doc """
+  Captures all telemetry events for testing purposes.
+
+  Config should include:
+  - :test_pid - PID to send captured events to
+  - :ref - Unique reference for this capture session
+  - :patterns - Optional list of event patterns to match (nil = capture all)
+  """
+  def handle_test_capture(event, measurements, metadata, config) do
+    test_pid = config.test_pid
+    ref = config.ref
+    patterns = Map.get(config, :patterns)
+
+    if match_event_patterns?(event, patterns) do
+      send(test_pid, {:telemetry_captured, ref, event, measurements, metadata})
+    end
+  end
+
+  defp match_event_patterns?(_event, nil), do: true
+
+  defp match_event_patterns?(event, patterns) do
+    Enum.any?(patterns, fn pattern ->
+      match_event_pattern?(event, pattern)
+    end)
+  end
+
+  defp match_event_pattern?(event, pattern) when length(event) == length(pattern) do
+    Enum.zip(event, pattern)
+    |> Enum.all?(fn
+      {_, :_} -> true
+      {e, p} -> e == p
+    end)
+  end
+
+  defp match_event_pattern?(_event, _pattern), do: false
 end

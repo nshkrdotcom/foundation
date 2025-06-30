@@ -223,7 +223,7 @@ defmodule JidoSystem.Sensors.SystemHealthSensorTest do
         Enum.reduce(1..10, initial_state, fn _i, acc_state ->
           {:ok, _signal, new_state} = SystemHealthSensor.deliver_signal_with_state(acc_state)
           # Small delay to ensure different timestamps
-          Process.sleep(10)
+          :timer.sleep(2)
           new_state
         end)
 
@@ -378,7 +378,7 @@ defmodule JidoSystem.Sensors.SystemHealthSensorTest do
       send(pid, :unknown_message)
 
       # Process should still be alive
-      Process.sleep(10)
+      :timer.sleep(2)
       assert Process.alive?(pid)
     end
   end

@@ -2,6 +2,7 @@ defmodule JidoFoundation.SchedulerManagerTest do
   use ExUnit.Case, async: false
 
   alias JidoFoundation.SchedulerManager
+  import Foundation.AsyncTestHelpers
 
   @moduletag :foundation_integration
 
@@ -108,8 +109,16 @@ defmodule JidoFoundation.SchedulerManagerTest do
       # Kill the test process
       Process.exit(test_agent_pid, :kill)
 
-      # Give the scheduler time to detect the process death
-      Process.sleep(100)
+      # Wait for scheduler to detect process death and clean up
+      wait_for(
+        fn ->
+          case SchedulerManager.list_agent_schedules(test_agent_pid) do
+            {:error, :not_found} -> true
+            _ -> nil
+          end
+        end,
+        2000
+      )
 
       # Check that the schedule was automatically cleaned up
       assert {:error, :not_found} = SchedulerManager.list_agent_schedules(test_agent_pid)
@@ -272,7 +281,12 @@ defmodule JidoFoundation.SchedulerManagerTest do
       # Create and kill a process
       test_agent_pid = spawn(fn -> :ok end)
       # Ensure it's dead
-      Process.sleep(10)
+      wait_for(
+        fn ->
+          if Process.alive?(test_agent_pid), do: nil, else: true
+        end,
+        1000
+      )
 
       # Try to register schedule for dead agent
       assert {:error, :agent_not_alive} =

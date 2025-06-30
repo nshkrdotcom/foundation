@@ -2,6 +2,7 @@ defmodule Foundation.Infrastructure.CircuitBreakerTest do
   # Using registry isolation mode for Foundation Infrastructure CircuitBreaker tests
   use Foundation.UnifiedTestFoundation, :registry
   alias Foundation.CircuitBreaker
+  import Foundation.AsyncTestHelpers
 
   setup do
     # Ensure the application is started
@@ -69,8 +70,16 @@ defmodule Foundation.Infrastructure.CircuitBreakerTest do
         assert {:error, _} = result
       end
 
-      # Give fuse time to register the failures
-      Process.sleep(50)
+      # Wait for circuit to open (deterministic state checking)
+      wait_for(
+        fn ->
+          case CircuitBreaker.get_status(service_id) do
+            {:ok, :open} -> true
+            _ -> nil
+          end
+        end,
+        1000
+      )
 
       # Next call should be rejected (circuit open)
       result =
@@ -93,14 +102,22 @@ defmodule Foundation.Infrastructure.CircuitBreakerTest do
       # Open the circuit
       CircuitBreaker.call(service_id, fn -> raise "fail" end)
 
-      # Give fuse time to register the failure
-      Process.sleep(50)
+      # Wait for circuit to open (deterministic state checking)
+      wait_for(
+        fn ->
+          case CircuitBreaker.get_status(service_id) do
+            {:ok, :open} -> true
+            _ -> nil
+          end
+        end,
+        1000
+      )
 
       {:ok, status} = CircuitBreaker.get_status(service_id)
       assert status == :open
 
-      # Wait for recovery timeout
-      Process.sleep(150)
+      # Wait for recovery timeout (150ms as configured)
+      :timer.sleep(150)
 
       # Reset the circuit manually (since :fuse doesn't auto-transition to half-open)
       :ok = CircuitBreaker.reset(service_id)
@@ -132,8 +149,16 @@ defmodule Foundation.Infrastructure.CircuitBreakerTest do
       # Fail again
       CircuitBreaker.call(service_id, fn -> raise "fail_again" end)
 
-      # Give fuse time to register the failure
-      Process.sleep(50)
+      # Wait for circuit to open again (deterministic state checking)
+      wait_for(
+        fn ->
+          case CircuitBreaker.get_status(service_id) do
+            {:ok, :open} -> true
+            _ -> nil
+          end
+        end,
+        1000
+      )
 
       # Should be open again
       {:ok, status} = CircuitBreaker.get_status(service_id)
@@ -227,8 +252,16 @@ defmodule Foundation.Infrastructure.CircuitBreakerTest do
       # Open the circuit
       CircuitBreaker.call(service_id, fn -> raise "fail" end)
 
-      # Give fuse time to register the failure
-      Process.sleep(50)
+      # Wait for circuit to open (deterministic state checking)
+      wait_for(
+        fn ->
+          case CircuitBreaker.get_status(service_id) do
+            {:ok, :open} -> true
+            _ -> nil
+          end
+        end,
+        1000
+      )
 
       # Next call should return circuit open error
       result =

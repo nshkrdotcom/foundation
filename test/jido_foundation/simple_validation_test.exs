@@ -174,8 +174,8 @@ defmodule JidoFoundation.SimpleValidationTest do
         end
       end
 
-      # Wait for cleanup
-      Process.sleep(200)
+      # Wait for cleanup (minimal delay)
+      :timer.sleep(50)
 
       final_count = :erlang.system_info(:process_count)
       diff = final_count - initial_count

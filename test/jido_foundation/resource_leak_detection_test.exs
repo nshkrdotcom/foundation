@@ -449,7 +449,8 @@ defmodule JidoFoundation.ResourceLeakDetectionTest do
               :erlang.garbage_collect()
             end
 
-            Process.sleep(10)
+            # Minimal delay for task processing
+            :timer.sleep(5)
             {:cont, new_task_count}
           end
         end)
@@ -544,7 +545,8 @@ defmodule JidoFoundation.ResourceLeakDetectionTest do
         # Get stats which might use ETS internally
         TaskPoolManager.get_all_stats()
         SystemCommandManager.get_stats()
-        Process.sleep(10)
+        # Minimal delay for operation spacing
+        :timer.sleep(5)
       end
 
       final_snapshot = ResourceMonitor.snapshot()

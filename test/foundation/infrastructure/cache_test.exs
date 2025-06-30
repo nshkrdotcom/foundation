@@ -2,6 +2,7 @@ defmodule Foundation.Infrastructure.CacheTest do
   # Using registry isolation mode for Foundation Infrastructure Cache tests
   use Foundation.UnifiedTestFoundation, :registry
   alias Foundation.Infrastructure.Cache
+  import Foundation.AsyncTestHelpers
 
   describe "basic cache operations" do
     test "get/put/delete cycle" do
@@ -30,8 +31,17 @@ defmodule Foundation.Infrastructure.CacheTest do
       assert :ok = Cache.put(key, value, ttl: 100)
       assert Cache.get(key) == value
 
-      # Wait for expiration
-      Process.sleep(150)
+      # Wait for TTL expiration (deterministic check)
+      wait_for(
+        fn ->
+          case Cache.get(key) do
+            nil -> true
+            _ -> nil
+          end
+        end,
+        500
+      )
+
       assert Cache.get(key) == nil
     end
 

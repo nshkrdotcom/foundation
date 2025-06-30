@@ -45,8 +45,8 @@ defmodule JidoFoundation.IntegrationValidationTest do
     test "TaskPoolManager integrates with Bridge distributed execution" do
       # Create a mock operation that would use distributed execution
       mock_operation = fn _agent_pid ->
-        # Simulate agent operation
-        Process.sleep(10)
+        # Simulate agent operation (minimal processing time)
+        :timer.sleep(5)
         {:ok, "operation_result"}
       end
 
@@ -270,7 +270,8 @@ defmodule JidoFoundation.IntegrationValidationTest do
               :exit, _ -> :ok
             end
 
-            Process.sleep(50)
+            # Minimal delay to allow service operations
+            :timer.sleep(10)
           end
         end),
         Task.async(fn ->
@@ -286,13 +287,14 @@ defmodule JidoFoundation.IntegrationValidationTest do
               :exit, _ -> :ok
             end
 
-            Process.sleep(100)
+            # Minimal delay to allow service operations
+            :timer.sleep(20)
           end
         end)
       ]
 
-      # Let operations start
-      Process.sleep(200)
+      # Let operations start (minimal delay)
+      :timer.sleep(50)
 
       # 2. Cause failures
       task_pool_pid = Process.whereis(JidoFoundation.TaskPoolManager)
@@ -369,7 +371,17 @@ defmodule JidoFoundation.IntegrationValidationTest do
       # Kill and restart SystemCommandManager
       system_cmd_pid = Process.whereis(JidoFoundation.SystemCommandManager)
       Process.exit(system_cmd_pid, :kill)
-      Process.sleep(200)
+
+      # Wait for restart using wait_for
+      wait_for(
+        fn ->
+          case Process.whereis(JidoFoundation.SystemCommandManager) do
+            pid when pid != system_cmd_pid and is_pid(pid) -> pid
+            _ -> nil
+          end
+        end,
+        5000
+      )
 
       # Verify configuration is maintained
       new_stats = SystemCommandManager.get_stats()
@@ -387,7 +399,17 @@ defmodule JidoFoundation.IntegrationValidationTest do
       # Kill and restart TaskPoolManager
       task_pool_pid = Process.whereis(JidoFoundation.TaskPoolManager)
       Process.exit(task_pool_pid, :kill)
-      Process.sleep(300)
+
+      # Wait for restart using wait_for
+      wait_for(
+        fn ->
+          case Process.whereis(JidoFoundation.TaskPoolManager) do
+            pid when pid != task_pool_pid and is_pid(pid) -> pid
+            _ -> nil
+          end
+        end,
+        5000
+      )
 
       # Verify default pools are recreated (custom pools may be lost)
       case TaskPoolManager.get_pool_stats(:general) do
@@ -417,10 +439,26 @@ defmodule JidoFoundation.IntegrationValidationTest do
       end
 
       # Kill half the services
-      Process.exit(Process.whereis(JidoFoundation.TaskPoolManager), :kill)
-      Process.exit(Process.whereis(JidoFoundation.SystemCommandManager), :kill)
+      task_pid = Process.whereis(JidoFoundation.TaskPoolManager)
+      sys_pid = Process.whereis(JidoFoundation.SystemCommandManager)
+      Process.exit(task_pid, :kill)
+      Process.exit(sys_pid, :kill)
 
-      Process.sleep(300)
+      # Wait for both services to restart
+      wait_for(
+        fn ->
+          new_task_pid = Process.whereis(JidoFoundation.TaskPoolManager)
+          new_sys_pid = Process.whereis(JidoFoundation.SystemCommandManager)
+
+          if new_task_pid != task_pid and new_sys_pid != sys_pid and
+               is_pid(new_task_pid) and is_pid(new_sys_pid) do
+            {new_task_pid, new_sys_pid}
+          else
+            nil
+          end
+        end,
+        8000
+      )
 
       # Verify service discovery still works
       pids_after =
@@ -465,8 +503,8 @@ defmodule JidoFoundation.IntegrationValidationTest do
                 # 20 tasks per pool
                 1..20,
                 fn x ->
-                  # Simulate work
-                  Process.sleep(50)
+                  # Simulate work (minimal processing time)
+                  :timer.sleep(10)
                   x * 10
                 end,
                 timeout: 5000
@@ -503,7 +541,8 @@ defmodule JidoFoundation.IntegrationValidationTest do
       intensive_operation = fn x ->
         # Create some memory pressure
         _large_list = for i <- 1..1000, do: {i, x, :rand.uniform(1000)}
-        Process.sleep(10)
+        # Minimal processing time for load testing
+        :timer.sleep(5)
         x
       end
 

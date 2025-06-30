@@ -43,6 +43,7 @@ defmodule MABEAM.AgentRegistry do
 
   use GenServer
   require Logger
+  alias Foundation.Telemetry
 
   # All handle_call/3 clauses are grouped together below
 
@@ -135,8 +136,10 @@ defmodule MABEAM.AgentRegistry do
   end
 
   def handle_call({:unregister, agent_id}, _from, state) do
+    start_time = System.monotonic_time()
+
     case :ets.lookup(state.main_table, agent_id) do
-      [{^agent_id, _pid, _metadata, _timestamp}] ->
+      [{^agent_id, _pid, metadata, _timestamp}] ->
         # Find monitor reference
         monitor_ref =
           state.monitors
@@ -160,17 +163,40 @@ defmodule MABEAM.AgentRegistry do
             state.monitors
           end
 
+        Telemetry.emit(
+          [:foundation, :mabeam, :registry, :unregister],
+          %{duration: System.monotonic_time() - start_time},
+          %{
+            agent_id: agent_id,
+            registry_id: state.registry_id,
+            capabilities: List.wrap(Map.get(metadata, :capability, [])),
+            health_status: Map.get(metadata, :health_status)
+          }
+        )
+
         Logger.debug("Unregistered agent #{inspect(agent_id)}")
         {:reply, :ok, %{state | monitors: new_monitors}}
 
       [] ->
+        Telemetry.emit(
+          [:foundation, :mabeam, :registry, :unregister_failed],
+          %{duration: System.monotonic_time() - start_time},
+          %{
+            agent_id: agent_id,
+            registry_id: state.registry_id,
+            reason: :not_found
+          }
+        )
+
         {:reply, {:error, :not_found}, state}
     end
   end
 
   def handle_call({:update_metadata, agent_id, new_metadata}, _from, state) do
+    start_time = System.monotonic_time()
+
     with :ok <- validate_agent_metadata(new_metadata),
-         [{^agent_id, pid, _old_metadata, _timestamp}] <- :ets.lookup(state.main_table, agent_id) do
+         [{^agent_id, pid, old_metadata, _timestamp}] <- :ets.lookup(state.main_table, agent_id) do
       # Atomic metadata update - all operations in single GenServer call
       # This provides atomicity through GenServer serialization
 
@@ -181,11 +207,47 @@ defmodule MABEAM.AgentRegistry do
       clear_agent_from_indexes(state, agent_id)
       update_all_indexes(state, agent_id, new_metadata)
 
+      Telemetry.emit(
+        [:foundation, :mabeam, :registry, :update],
+        %{duration: System.monotonic_time() - start_time},
+        %{
+          agent_id: agent_id,
+          registry_id: state.registry_id,
+          old_capabilities: List.wrap(Map.get(old_metadata, :capability, [])),
+          new_capabilities: List.wrap(Map.get(new_metadata, :capability, [])),
+          old_health: Map.get(old_metadata, :health_status),
+          new_health: Map.get(new_metadata, :health_status)
+        }
+      )
+
       Logger.debug("Updated metadata for agent #{inspect(agent_id)}")
       {:reply, :ok, state}
     else
-      [] -> {:reply, {:error, :not_found}, state}
-      error -> {:reply, error, state}
+      [] ->
+        Telemetry.emit(
+          [:foundation, :mabeam, :registry, :update_failed],
+          %{duration: System.monotonic_time() - start_time},
+          %{
+            agent_id: agent_id,
+            registry_id: state.registry_id,
+            reason: :not_found
+          }
+        )
+
+        {:reply, {:error, :not_found}, state}
+
+      error ->
+        Telemetry.emit(
+          [:foundation, :mabeam, :registry, :update_failed],
+          %{duration: System.monotonic_time() - start_time},
+          %{
+            agent_id: agent_id,
+            registry_id: state.registry_id,
+            reason: error
+          }
+        )
+
+        {:reply, error, state}
     end
   end
 
@@ -225,6 +287,8 @@ defmodule MABEAM.AgentRegistry do
   end
 
   def handle_call({:query, criteria}, _from, state) when is_list(criteria) do
+    start_time = System.monotonic_time()
+
     result =
       case MatchSpecCompiler.validate_criteria(criteria) do
         :ok ->
@@ -234,7 +298,22 @@ defmodule MABEAM.AgentRegistry do
               # Use atomic ETS select for O(1) performance
               try do
                 results = :ets.select(state.main_table, match_spec)
-                {:ok, results}
+                query_result = {:ok, results}
+
+                Telemetry.emit(
+                  [:foundation, :mabeam, :registry, :query],
+                  %{
+                    duration: System.monotonic_time() - start_time,
+                    result_count: length(results)
+                  },
+                  %{
+                    registry_id: state.registry_id,
+                    criteria_count: length(criteria),
+                    query_type: :match_spec
+                  }
+                )
+
+                query_result
               rescue
                 e ->
                   # Fall back to application-level filtering when match spec fails
@@ -242,7 +321,7 @@ defmodule MABEAM.AgentRegistry do
                     "Match spec execution failed: #{Exception.message(e)}. Using application-level filtering."
                   )
 
-                  do_application_level_query(criteria, state)
+                  do_application_level_query(criteria, state, start_time)
               end
 
             {:error, reason} ->
@@ -347,6 +426,15 @@ defmodule MABEAM.AgentRegistry do
   end
 
   defp handle_agent_down(agent_id, monitor_ref, reason, state) do
+    start_time = System.monotonic_time()
+
+    # Get agent metadata before deletion for telemetry
+    metadata =
+      case :ets.lookup(state.main_table, agent_id) do
+        [{^agent_id, _pid, meta, _timestamp}] -> meta
+        [] -> %{}
+      end
+
     Logger.info("Agent #{inspect(agent_id)} process died (#{inspect(reason)}), cleaning up")
 
     # Atomic cleanup - all operations in single GenServer message handler
@@ -356,6 +444,21 @@ defmodule MABEAM.AgentRegistry do
 
     # Remove from monitors
     new_monitors = Map.delete(state.monitors, monitor_ref)
+
+    Telemetry.emit(
+      [:foundation, :mabeam, :registry, :agent_down],
+      %{
+        duration: System.monotonic_time() - start_time,
+        timestamp: System.system_time()
+      },
+      %{
+        agent_id: agent_id,
+        registry_id: state.registry_id,
+        reason: reason,
+        capabilities: List.wrap(Map.get(metadata, :capability, [])),
+        health_status: Map.get(metadata, :health_status)
+      }
+    )
 
     # Notify ResourceManager about cleanup if available
     notify_resource_manager_cleanup(agent_id, reason)
@@ -391,15 +494,41 @@ defmodule MABEAM.AgentRegistry do
   end
 
   defp register_with_resource(agent_id, pid, metadata, state, resource_token) do
+    start_time = System.monotonic_time()
     result = perform_registration(agent_id, pid, metadata, state)
 
     # Release resource token if registration failed
     case result do
-      {:reply, :ok, _} ->
-        result
+      {:reply, :ok, _new_state} = success_result ->
+        Telemetry.emit(
+          [:foundation, :mabeam, :registry, :register],
+          %{duration: System.monotonic_time() - start_time},
+          %{
+            agent_id: agent_id,
+            registry_id: state.registry_id,
+            capabilities: List.wrap(Map.get(metadata, :capability, [])),
+            health_status: Map.get(metadata, :health_status),
+            node: Map.get(metadata, :node)
+          }
+        )
+
+        success_result
 
       error_result ->
         if resource_token, do: Foundation.ResourceManager.release_resource(resource_token)
+
+        {:reply, {:error, reason}, _} = error_result
+
+        Telemetry.emit(
+          [:foundation, :mabeam, :registry, :register_failed],
+          %{duration: System.monotonic_time() - start_time},
+          %{
+            agent_id: agent_id,
+            registry_id: state.registry_id,
+            reason: reason
+          }
+        )
+
         error_result
     end
   end
@@ -465,7 +594,44 @@ defmodule MABEAM.AgentRegistry do
   end
 
   defp execute_batch_registration_with_resource(agents, state, resource_token) do
+    start_time = System.monotonic_time()
     result = execute_batch_register(agents, state, [], resource_token)
+
+    # Emit telemetry based on result
+    case result do
+      {:ok, registered_ids, _new_state} ->
+        Telemetry.emit(
+          [:foundation, :mabeam, :registry, :batch_operation],
+          %{
+            duration: System.monotonic_time() - start_time,
+            success_count: length(registered_ids),
+            total_count: length(agents)
+          },
+          %{
+            registry_id: state.registry_id,
+            operation: :batch_register,
+            status: :success
+          }
+        )
+
+      {:error, reason, partial_ids, _} ->
+        Telemetry.emit(
+          [:foundation, :mabeam, :registry, :batch_operation],
+          %{
+            duration: System.monotonic_time() - start_time,
+            success_count: length(partial_ids),
+            total_count: length(agents),
+            failed_count: length(agents) - length(partial_ids)
+          },
+          %{
+            registry_id: state.registry_id,
+            operation: :batch_register,
+            status: :partial_failure,
+            error: reason
+          }
+        )
+    end
+
     handle_batch_register_result(result, state, resource_token)
   end
 
@@ -478,7 +644,8 @@ defmodule MABEAM.AgentRegistry do
     {:reply, {:error, reason, partial_ids}, state}
   end
 
-  defp do_application_level_query(criteria, state) do
+  defp do_application_level_query(criteria, state, start_time \\ nil) do
+    query_start = start_time || System.monotonic_time()
     all_agents = :ets.tab2list(state.main_table)
 
     filtered =
@@ -492,6 +659,20 @@ defmodule MABEAM.AgentRegistry do
       Enum.map(filtered, fn {id, pid, metadata, _timestamp} ->
         {id, pid, metadata}
       end)
+
+    Telemetry.emit(
+      [:foundation, :mabeam, :registry, :query],
+      %{
+        duration: System.monotonic_time() - query_start,
+        result_count: length(formatted_results),
+        total_scanned: length(all_agents)
+      },
+      %{
+        registry_id: state.registry_id,
+        criteria_count: length(criteria),
+        query_type: :application_level
+      }
+    )
 
     {:ok, formatted_results}
   rescue

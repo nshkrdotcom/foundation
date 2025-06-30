@@ -8,6 +8,7 @@ defmodule Foundation.Infrastructure.Cache do
 
   use GenServer
   require Logger
+  alias Foundation.Telemetry
 
   @table_options [
     :set,
@@ -50,23 +51,32 @@ defmodule Foundation.Infrastructure.Cache do
   """
   @spec get(any(), any(), keyword()) :: any()
   def get(key, default \\ nil, opts \\ []) do
-    cache = Keyword.get(opts, :cache, __MODULE__)
-    table = get_table_name(cache)
+    start_time = System.monotonic_time()
 
-    case :ets.lookup(table, key) do
-      [{^key, value, expiry}] ->
-        if expired?(expiry) do
-          :ets.delete(table, key)
+    try do
+      cache = Keyword.get(opts, :cache, __MODULE__)
+      table = get_table_name(cache)
+
+      case :ets.lookup(table, key) do
+        [{^key, value, expiry}] ->
+          if expired?(expiry) do
+            :ets.delete(table, key)
+            emit_cache_event(:miss, key, start_time, %{reason: :expired})
+            default
+          else
+            emit_cache_event(:hit, key, start_time)
+            value
+          end
+
+        [] ->
+          emit_cache_event(:miss, key, start_time, %{reason: :not_found})
           default
-        else
-          value
-        end
-
-      [] ->
+      end
+    rescue
+      ArgumentError ->
+        emit_cache_event(:error, key, start_time, %{error: :cache_unavailable})
         default
     end
-  rescue
-    ArgumentError -> default
   end
 
   @doc """
@@ -79,18 +89,27 @@ defmodule Foundation.Infrastructure.Cache do
   """
   @spec put(any(), any(), keyword()) :: :ok | {:error, term()}
   def put(key, value, opts \\ []) do
-    case validate_key(key) do
-      :ok ->
-        cache = Keyword.get(opts, :cache, __MODULE__)
-        ttl = Keyword.get(opts, :ttl, @default_ttl)
+    start_time = System.monotonic_time()
 
-        GenServer.call(cache, {:put, key, value, ttl})
+    try do
+      case validate_key(key) do
+        :ok ->
+          cache = Keyword.get(opts, :cache, __MODULE__)
+          ttl = Keyword.get(opts, :ttl, @default_ttl)
 
-      {:error, _} = error ->
-        error
+          result = GenServer.call(cache, {:put, key, value, ttl})
+          emit_cache_event(:put, key, start_time, %{ttl: ttl})
+          result
+
+        {:error, reason} = error ->
+          emit_cache_event(:error, key, start_time, %{error: reason, operation: :put})
+          error
+      end
+    rescue
+      _ ->
+        emit_cache_event(:error, key, start_time, %{error: :cache_unavailable, operation: :put})
+        {:error, :cache_unavailable}
     end
-  rescue
-    _ -> {:error, :cache_unavailable}
   end
 
   @doc """
@@ -98,18 +117,27 @@ defmodule Foundation.Infrastructure.Cache do
   """
   @spec delete(any(), keyword()) :: :ok | {:error, term()}
   def delete(key, opts \\ []) do
-    case validate_key(key) do
-      :ok ->
-        cache = Keyword.get(opts, :cache, __MODULE__)
-        table = get_table_name(cache)
-        :ets.delete(table, key)
-        :ok
+    start_time = System.monotonic_time()
 
-      {:error, _} = error ->
-        error
+    try do
+      case validate_key(key) do
+        :ok ->
+          cache = Keyword.get(opts, :cache, __MODULE__)
+          table = get_table_name(cache)
+          existed = :ets.member(table, key)
+          :ets.delete(table, key)
+          emit_cache_event(:delete, key, start_time, %{existed: existed})
+          :ok
+
+        {:error, reason} = error ->
+          emit_cache_event(:error, key, start_time, %{error: reason, operation: :delete})
+          error
+      end
+    rescue
+      ArgumentError ->
+        emit_cache_event(:error, key, start_time, %{error: :cache_unavailable, operation: :delete})
+        {:error, :cache_unavailable}
     end
-  rescue
-    ArgumentError -> {:error, :cache_unavailable}
   end
 
   @doc """
@@ -117,12 +145,34 @@ defmodule Foundation.Infrastructure.Cache do
   """
   @spec clear(keyword()) :: :ok
   def clear(opts \\ []) do
+    start_time = System.monotonic_time()
     cache = Keyword.get(opts, :cache, __MODULE__)
-    table = get_table_name(cache)
-    :ets.delete_all_objects(table)
-    :ok
-  rescue
-    ArgumentError -> {:error, :cache_unavailable}
+
+    try do
+      table = get_table_name(cache)
+      count = :ets.info(table, :size)
+      :ets.delete_all_objects(table)
+
+      Telemetry.emit(
+        [:foundation, :cache, :cleared],
+        %{
+          duration: System.monotonic_time() - start_time,
+          count: count
+        },
+        %{cache: cache}
+      )
+
+      :ok
+    rescue
+      ArgumentError ->
+        Telemetry.emit(
+          [:foundation, :cache, :error],
+          %{duration: System.monotonic_time() - start_time},
+          %{cache: cache, error: :cache_unavailable, operation: :clear}
+        )
+
+        {:error, :cache_unavailable}
+    end
   end
 
   # Server callbacks
@@ -146,6 +196,16 @@ defmodule Foundation.Infrastructure.Cache do
       cleanup_interval: cleanup_interval
     }
 
+    Telemetry.emit(
+      [:foundation, :cache, :started],
+      %{timestamp: System.system_time()},
+      %{
+        table: table_name,
+        max_size: max_size,
+        cleanup_interval: cleanup_interval
+      }
+    )
+
     {:ok, state}
   end
 
@@ -155,7 +215,15 @@ defmodule Foundation.Infrastructure.Cache do
 
     # Check size limit and evict if necessary
     if max_size != :infinity and :ets.info(table, :size) >= max_size do
-      evict_oldest(table)
+      evicted_key = evict_oldest(table)
+
+      if evicted_key != nil do
+        Telemetry.emit(
+          [:foundation, :cache, :evicted],
+          %{timestamp: System.system_time()},
+          %{key: evicted_key, reason: :size_limit}
+        )
+      end
     end
 
     expiry = calculate_expiry(ttl)
@@ -216,6 +284,7 @@ defmodule Foundation.Infrastructure.Cache do
   end
 
   defp cleanup_expired_entries(table) do
+    start_time = System.monotonic_time()
     now = System.monotonic_time(:millisecond)
 
     match_spec = [
@@ -230,6 +299,16 @@ defmodule Foundation.Infrastructure.Cache do
     Enum.each(expired_keys, &:ets.delete(table, &1))
 
     if length(expired_keys) > 0 do
+      Telemetry.emit(
+        [:foundation, :cache, :cleanup],
+        %{
+          duration: System.monotonic_time() - start_time,
+          expired_count: length(expired_keys),
+          timestamp: System.system_time()
+        },
+        %{table: table}
+      )
+
       Logger.debug("Cache cleanup: removed #{length(expired_keys)} expired entries")
     end
   end
@@ -238,8 +317,23 @@ defmodule Foundation.Infrastructure.Cache do
     # Simple FIFO eviction - remove the first entry
     # In production, might want LRU or other strategies
     case :ets.first(table) do
-      :"$end_of_table" -> :ok
-      key -> :ets.delete(table, key)
+      :"$end_of_table" ->
+        nil
+
+      key ->
+        :ets.delete(table, key)
+        key
     end
+  end
+
+  # Telemetry helper
+  defp emit_cache_event(operation, key, start_time, metadata \\ %{}) do
+    duration = System.monotonic_time() - start_time
+
+    Telemetry.emit(
+      [:foundation, :cache, operation],
+      %{duration: duration, timestamp: System.system_time()},
+      Map.merge(metadata, %{key: key})
+    )
   end
 end

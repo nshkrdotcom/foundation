@@ -2,6 +2,7 @@ defmodule Foundation.Services.RetryServiceTest do
   use ExUnit.Case, async: true
 
   alias Foundation.Services.RetryService
+  import Foundation.AsyncTestHelpers
 
   describe "RetryService" do
     test "starts successfully with unique name" do
@@ -87,16 +88,21 @@ defmodule Foundation.Services.RetryServiceTest do
       # Kill the RetryService
       Process.exit(retry_pid, :kill)
 
-      # Wait a moment for restart
-      Process.sleep(200)
+      # Wait for supervisor to restart with new pid
+      new_retry_pid =
+        wait_for(
+          fn ->
+            new_children = Supervisor.which_children(Foundation.Services.Supervisor)
 
-      # Verify it restarted with a new pid
-      new_children = Supervisor.which_children(Foundation.Services.Supervisor)
-
-      {_, new_retry_pid, _, _} =
-        Enum.find(new_children, fn {id, _, _, _} ->
-          id == Foundation.Services.RetryService
-        end)
+            case Enum.find(new_children, fn {id, _, _, _} ->
+                   id == Foundation.Services.RetryService
+                 end) do
+              {_, pid, _, _} when pid != original_pid and is_pid(pid) -> pid
+              _ -> nil
+            end
+          end,
+          5000
+        )
 
       assert new_retry_pid != original_pid
       assert Process.alive?(new_retry_pid)

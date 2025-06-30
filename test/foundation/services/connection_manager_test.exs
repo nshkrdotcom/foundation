@@ -2,6 +2,7 @@ defmodule Foundation.Services.ConnectionManagerTest do
   use ExUnit.Case, async: true
 
   alias Foundation.Services.ConnectionManager
+  import Foundation.AsyncTestHelpers
 
   describe "ConnectionManager service" do
     test "starts successfully with unique name" do
@@ -185,16 +186,21 @@ defmodule Foundation.Services.ConnectionManagerTest do
       # Kill the ConnectionManager
       Process.exit(manager_pid, :kill)
 
-      # Wait a moment for restart
-      Process.sleep(200)
+      # Wait for supervisor to restart with new pid
+      new_manager_pid =
+        wait_for(
+          fn ->
+            new_children = Supervisor.which_children(Foundation.Services.Supervisor)
 
-      # Verify it restarted with a new pid
-      new_children = Supervisor.which_children(Foundation.Services.Supervisor)
-
-      {_, new_manager_pid, _, _} =
-        Enum.find(new_children, fn {id, _, _, _} ->
-          id == Foundation.Services.ConnectionManager
-        end)
+            case Enum.find(new_children, fn {id, _, _, _} ->
+                   id == Foundation.Services.ConnectionManager
+                 end) do
+              {_, pid, _, _} when pid != original_pid and is_pid(pid) -> pid
+              _ -> nil
+            end
+          end,
+          5000
+        )
 
       assert new_manager_pid != original_pid
       assert Process.alive?(new_manager_pid)

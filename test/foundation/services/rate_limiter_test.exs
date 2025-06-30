@@ -2,6 +2,7 @@ defmodule Foundation.Services.RateLimiterTest do
   use ExUnit.Case, async: true
 
   alias Foundation.Services.RateLimiter
+  import Foundation.AsyncTestHelpers
 
   describe "RateLimiter service" do
     test "starts successfully with unique name" do
@@ -230,16 +231,21 @@ defmodule Foundation.Services.RateLimiterTest do
       # Kill the RateLimiter
       Process.exit(limiter_pid, :kill)
 
-      # Wait a moment for restart
-      Process.sleep(200)
+      # Wait for supervisor to restart with new pid
+      new_limiter_pid =
+        wait_for(
+          fn ->
+            new_children = Supervisor.which_children(Foundation.Services.Supervisor)
 
-      # Verify it restarted with a new pid
-      new_children = Supervisor.which_children(Foundation.Services.Supervisor)
-
-      {_, new_limiter_pid, _, _} =
-        Enum.find(new_children, fn {id, _, _, _} ->
-          id == Foundation.Services.RateLimiter
-        end)
+            case Enum.find(new_children, fn {id, _, _, _} ->
+                   id == Foundation.Services.RateLimiter
+                 end) do
+              {_, pid, _, _} when pid != original_pid and is_pid(pid) -> pid
+              _ -> nil
+            end
+          end,
+          5000
+        )
 
       assert new_limiter_pid != original_pid
       assert Process.alive?(new_limiter_pid)

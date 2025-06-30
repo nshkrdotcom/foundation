@@ -79,7 +79,13 @@ defmodule JidoFoundation.ActionIntegrationTest do
       {:ok, agent} = MockJidoAgent.start_link(id: "test_agent")
 
       on_exit(fn ->
-        if Process.alive?(agent), do: GenServer.stop(agent)
+        if is_pid(agent) && Process.alive?(agent) do
+          try do
+            GenServer.stop(agent, :normal, 100)
+          catch
+            :exit, _ -> :ok
+          end
+        end
       end)
 
       # Register agent with Foundation
@@ -108,7 +114,13 @@ defmodule JidoFoundation.ActionIntegrationTest do
       {:ok, agent} = MockJidoAgent.start_link(id: "failing_agent")
 
       on_exit(fn ->
-        if Process.alive?(agent), do: GenServer.stop(agent)
+        if is_pid(agent) && Process.alive?(agent) do
+          try do
+            GenServer.stop(agent, :normal, 100)
+          catch
+            :exit, _ -> :ok
+          end
+        end
       end)
 
       :ok =
@@ -154,7 +166,13 @@ defmodule JidoFoundation.ActionIntegrationTest do
       {:ok, agent} = MockJidoAgent.start_link(id: "telemetry_agent")
 
       on_exit(fn ->
-        if Process.alive?(agent), do: GenServer.stop(agent)
+        if is_pid(agent) && Process.alive?(agent) do
+          try do
+            GenServer.stop(agent, :normal, 100)
+          catch
+            :exit, _ -> :ok
+          end
+        end
       end)
 
       :ok =
@@ -229,7 +247,13 @@ defmodule JidoFoundation.ActionIntegrationTest do
       {:ok, agent} = MockJidoAgent.start_link(id: "resource_agent")
 
       on_exit(fn ->
-        if Process.alive?(agent), do: GenServer.stop(agent)
+        if is_pid(agent) && Process.alive?(agent) do
+          try do
+            GenServer.stop(agent, :normal, 100)
+          catch
+            :exit, _ -> :ok
+          end
+        end
       end)
 
       :ok =
@@ -264,7 +288,13 @@ defmodule JidoFoundation.ActionIntegrationTest do
       {:ok, agent} = MockJidoAgent.start_link(id: "resource_limited_agent")
 
       on_exit(fn ->
-        if Process.alive?(agent), do: GenServer.stop(agent)
+        if is_pid(agent) && Process.alive?(agent) do
+          try do
+            GenServer.stop(agent, :normal, 100)
+          catch
+            :exit, _ -> :ok
+          end
+        end
       end)
 
       :ok =
@@ -295,7 +325,13 @@ defmodule JidoFoundation.ActionIntegrationTest do
       {:ok, agent} = MockJidoAgent.start_link(id: "crash_agent")
 
       on_exit(fn ->
-        if Process.alive?(agent), do: GenServer.stop(agent)
+        if is_pid(agent) && Process.alive?(agent) do
+          try do
+            GenServer.stop(agent, :normal, 100)
+          catch
+            :exit, _ -> :ok
+          end
+        end
       end)
 
       :ok =
@@ -330,7 +366,13 @@ defmodule JidoFoundation.ActionIntegrationTest do
       {:ok, agent} = MockJidoAgent.start_link(id: "error_tracking_agent")
 
       on_exit(fn ->
-        if Process.alive?(agent), do: GenServer.stop(agent)
+        if is_pid(agent) && Process.alive?(agent) do
+          try do
+            GenServer.stop(agent, :normal, 100)
+          catch
+            :exit, _ -> :ok
+          end
+        end
       end)
 
       # Attach telemetry handler for errors

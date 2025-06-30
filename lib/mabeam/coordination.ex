@@ -21,6 +21,7 @@ defmodule MABEAM.Coordination do
   """
 
   require Logger
+  alias Foundation.Telemetry
 
   # --- Capability-Based Coordination ---
 
@@ -61,9 +62,22 @@ defmodule MABEAM.Coordination do
         ) ::
           {:ok, term()} | {:error, term()}
   def coordinate_capable_agents(capability, coordination_type, proposal, impl \\ nil) do
+    start_time = System.monotonic_time()
+
     case MABEAM.Discovery.find_capable_and_healthy(capability, impl) do
       {:ok, []} ->
         Logger.warning("No capable agents found for coordination: #{inspect(capability)}")
+
+        Telemetry.emit(
+          [:foundation, :mabeam, :coordination, :failed],
+          %{duration: System.monotonic_time() - start_time},
+          %{
+            capability: capability,
+            coordination_type: coordination_type,
+            reason: :no_capable_agents
+          }
+        )
+
         {:error, :no_capable_agents}
 
       {:ok, agents} ->
@@ -73,10 +87,33 @@ defmodule MABEAM.Coordination do
           "Starting #{coordination_type} coordination with #{length(participant_ids)} #{capability} agents"
         )
 
+        Telemetry.emit(
+          [:foundation, :mabeam, :coordination, :started],
+          %{
+            duration: System.monotonic_time() - start_time,
+            participant_count: length(participant_ids)
+          },
+          %{
+            capability: capability,
+            coordination_type: coordination_type
+          }
+        )
+
         handle_coordination_type(coordination_type, participant_ids, proposal, impl)
 
       {:error, reason} ->
         Logger.warning("Failed to find capable agents for coordination: #{inspect(reason)}")
+
+        Telemetry.emit(
+          [:foundation, :mabeam, :coordination, :failed],
+          %{duration: System.monotonic_time() - start_time},
+          %{
+            capability: capability,
+            coordination_type: coordination_type,
+            reason: reason
+          }
+        )
+
         {:error, reason}
     end
   end
@@ -116,12 +153,24 @@ defmodule MABEAM.Coordination do
         ) ::
           {:ok, term()} | {:error, term()}
   def coordinate_resource_allocation(required_resources, allocation_strategy, impl \\ nil) do
+    start_time = System.monotonic_time()
     min_memory = Map.get(required_resources, :memory, 0.0)
     min_cpu = Map.get(required_resources, :cpu, 0.0)
 
     case MABEAM.Discovery.find_agents_with_resources(min_memory, min_cpu, impl) do
       {:ok, []} ->
         Logger.warning("No agents meet resource requirements: #{inspect(required_resources)}")
+
+        Telemetry.emit(
+          [:foundation, :mabeam, :coordination, :resource_allocation_failed],
+          %{duration: System.monotonic_time() - start_time},
+          %{
+            required_resources: required_resources,
+            allocation_strategy: allocation_strategy,
+            reason: :insufficient_resources
+          }
+        )
+
         {:error, :insufficient_resources}
 
       {:ok, eligible_agents} ->
@@ -143,10 +192,35 @@ defmodule MABEAM.Coordination do
           "Starting resource allocation coordination with #{length(participant_ids)} agents using #{allocation_strategy} strategy"
         )
 
+        Telemetry.emit(
+          [:foundation, :mabeam, :coordination, :resource_allocation],
+          %{
+            duration: System.monotonic_time() - start_time,
+            eligible_count: length(eligible_agents),
+            selected_count: length(selected_agents)
+          },
+          %{
+            allocation_strategy: allocation_strategy,
+            min_memory: min_memory,
+            min_cpu: min_cpu
+          }
+        )
+
         Foundation.start_consensus(participant_ids, proposal, 30_000, impl)
 
       {:error, reason} ->
         Logger.warning("Failed to find agents with resources: #{inspect(reason)}")
+
+        Telemetry.emit(
+          [:foundation, :mabeam, :coordination, :resource_allocation_failed],
+          %{duration: System.monotonic_time() - start_time},
+          %{
+            required_resources: required_resources,
+            allocation_strategy: allocation_strategy,
+            reason: reason
+          }
+        )
+
         {:error, reason}
     end
   end
