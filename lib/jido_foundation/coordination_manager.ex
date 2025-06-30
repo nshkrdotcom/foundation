@@ -89,7 +89,8 @@ defmodule JidoFoundation.CoordinationManager do
   - `{:error, reason}` - Failed to send message
   """
   @spec coordinate_agents(pid(), pid(), map()) :: :ok | {:error, term()}
-  def coordinate_agents(sender_agent, receiver_agent, message) when is_pid(sender_agent) and is_pid(receiver_agent) do
+  def coordinate_agents(sender_agent, receiver_agent, message)
+      when is_pid(sender_agent) and is_pid(receiver_agent) do
     GenServer.call(__MODULE__, {:coordinate_agents, sender_agent, receiver_agent, message})
   end
 
@@ -108,7 +109,8 @@ defmodule JidoFoundation.CoordinationManager do
   - `{:error, reason}` - Failed to distribute task
   """
   @spec distribute_task(pid(), pid(), map()) :: :ok | {:error, term()}
-  def distribute_task(coordinator_agent, worker_agent, task) when is_pid(coordinator_agent) and is_pid(worker_agent) do
+  def distribute_task(coordinator_agent, worker_agent, task)
+      when is_pid(coordinator_agent) and is_pid(worker_agent) do
     GenServer.call(__MODULE__, {:distribute_task, coordinator_agent, worker_agent, task})
   end
 
@@ -127,7 +129,8 @@ defmodule JidoFoundation.CoordinationManager do
   - `{:error, reason}` - Failed to delegate task
   """
   @spec delegate_task(pid(), pid(), map()) :: :ok | {:error, term()}
-  def delegate_task(delegator_agent, delegate_agent, task) when is_pid(delegator_agent) and is_pid(delegate_agent) do
+  def delegate_task(delegator_agent, delegate_agent, task)
+      when is_pid(delegator_agent) and is_pid(delegate_agent) do
     GenServer.call(__MODULE__, {:delegate_task, delegator_agent, delegate_agent, task})
   end
 
@@ -191,7 +194,12 @@ defmodule JidoFoundation.CoordinationManager do
 
   @impl true
   def handle_call({:coordinate_agents, sender_agent, receiver_agent, message}, _from, state) do
-    case send_coordinated_message(sender_agent, receiver_agent, {:mabeam_coordination, sender_agent, message}, state) do
+    case send_coordinated_message(
+           sender_agent,
+           receiver_agent,
+           {:mabeam_coordination, sender_agent, message},
+           state
+         ) do
       {:ok, new_state} ->
         # Emit telemetry for coordination
         JidoFoundation.Bridge.emit_agent_event(
@@ -213,7 +221,12 @@ defmodule JidoFoundation.CoordinationManager do
   end
 
   def handle_call({:distribute_task, coordinator_agent, worker_agent, task}, _from, state) do
-    case send_coordinated_message(coordinator_agent, worker_agent, {:mabeam_task, task.id, task}, state) do
+    case send_coordinated_message(
+           coordinator_agent,
+           worker_agent,
+           {:mabeam_task, task.id, task},
+           state
+         ) do
       {:ok, new_state} ->
         # Emit telemetry for task distribution
         JidoFoundation.Bridge.emit_agent_event(
@@ -235,7 +248,12 @@ defmodule JidoFoundation.CoordinationManager do
   end
 
   def handle_call({:delegate_task, delegator_agent, delegate_agent, task}, _from, state) do
-    case send_coordinated_message(delegator_agent, delegate_agent, {:mabeam_task, task.id, task}, state) do
+    case send_coordinated_message(
+           delegator_agent,
+           delegate_agent,
+           {:mabeam_task, task.id, task},
+           state
+         ) do
       {:ok, new_state} ->
         # Emit telemetry for task delegation
         JidoFoundation.Bridge.emit_agent_event(
@@ -260,17 +278,23 @@ defmodule JidoFoundation.CoordinationManager do
   def handle_call({:create_coordination_context, agents, context}, _from, state) do
     coordination_id = System.unique_integer()
     enhanced_context = Map.put(context, :coordination_id, coordination_id)
-    
+
     # Send context to all agents
-    results = Enum.map(agents, fn agent ->
-      send_coordinated_message(agent, agent, {:mabeam_coordination_context, coordination_id, enhanced_context}, state)
-    end)
+    results =
+      Enum.map(agents, fn agent ->
+        send_coordinated_message(
+          agent,
+          agent,
+          {:mabeam_coordination_context, coordination_id, enhanced_context},
+          state
+        )
+      end)
 
     case Enum.find(results, fn {status, _state} -> status == :error end) do
       nil ->
         # All successful
         final_state = List.last(results) |> elem(1)
-        
+
         # Emit context creation telemetry
         :telemetry.execute(
           [:jido, :coordination, :context_created],
@@ -286,12 +310,13 @@ defmodule JidoFoundation.CoordinationManager do
   end
 
   def handle_call(:get_stats, _from, state) do
-    enhanced_stats = Map.merge(state.stats, %{
-      monitored_processes: map_size(state.monitored_processes),
-      pending_messages: map_size(state.pending_messages),
-      buffered_agents: map_size(state.message_buffers),
-      circuit_breaker_count: map_size(state.circuit_breakers)
-    })
+    enhanced_stats =
+      Map.merge(state.stats, %{
+        monitored_processes: map_size(state.monitored_processes),
+        pending_messages: map_size(state.pending_messages),
+        buffered_agents: map_size(state.message_buffers),
+        circuit_breaker_count: map_size(state.circuit_breakers)
+      })
 
     {:reply, enhanced_stats, state}
   end
@@ -308,10 +333,10 @@ defmodule JidoFoundation.CoordinationManager do
 
     # Clean up monitoring data
     new_monitored = Map.delete(state.monitored_processes, pid)
-    
+
     # Handle any pending messages for this process
     new_pending = handle_process_down(pid, state.pending_messages)
-    
+
     # Clear message buffer for this process
     new_buffers = Map.delete(state.message_buffers, pid)
 
@@ -344,7 +369,7 @@ defmodule JidoFoundation.CoordinationManager do
   @impl true
   def terminate(reason, state) do
     Logger.info("CoordinationManager terminating: #{inspect(reason)}")
-    
+
     # Clean up all process monitors
     Enum.each(state.monitored_processes, fn {_pid, %{monitor_ref: ref}} ->
       Process.demonitor(ref, [:flush])
@@ -364,7 +389,7 @@ defmodule JidoFoundation.CoordinationManager do
     case check_circuit_breaker(receiver_pid, state_with_monitoring) do
       :ok ->
         attempt_message_delivery(sender_pid, receiver_pid, message, state_with_monitoring)
-      
+
       {:error, :circuit_open} ->
         # Buffer the message or reject
         Logger.warning("Circuit breaker open for #{inspect(receiver_pid)}, buffering message")
@@ -376,14 +401,21 @@ defmodule JidoFoundation.CoordinationManager do
     if Process.alive?(receiver_pid) do
       try do
         send(receiver_pid, message)
-        
+
+        # Update circuit breaker on success
+        new_circuit_breakers =
+          update_circuit_breaker(receiver_pid, :success, state.circuit_breakers)
+
         # Update stats
         new_stats = Map.update!(state.stats, :messages_sent, &(&1 + 1))
-        
-        {:ok, %{state | stats: new_stats}}
+
+        {:ok, %{state | circuit_breakers: new_circuit_breakers, stats: new_stats}}
       catch
         kind, reason ->
-          Logger.warning("Failed to send message to #{inspect(receiver_pid)}: #{kind} #{inspect(reason)}")
+          Logger.warning(
+            "Failed to send message to #{inspect(receiver_pid)}: #{kind} #{inspect(reason)}"
+          )
+
           handle_delivery_failure(sender_pid, receiver_pid, message, reason, state)
       end
     else
@@ -392,10 +424,10 @@ defmodule JidoFoundation.CoordinationManager do
     end
   end
 
-  defp handle_delivery_failure(_sender_pid, receiver_pid, message, reason, state) do
+  defp handle_delivery_failure(_sender_pid, receiver_pid, _message, reason, state) do
     # Update circuit breaker
     new_circuit_breakers = update_circuit_breaker(receiver_pid, :failure, state.circuit_breakers)
-    
+
     # Update stats
     new_stats = Map.update!(state.stats, :messages_failed, &(&1 + 1))
 
@@ -409,7 +441,7 @@ defmodule JidoFoundation.CoordinationManager do
       nil ->
         # Not monitored, start monitoring
         monitor_ref = Process.monitor(pid)
-        
+
         monitor_info = %{
           monitor_ref: monitor_ref,
           last_seen: DateTime.utc_now()
@@ -419,7 +451,7 @@ defmodule JidoFoundation.CoordinationManager do
         new_stats = Map.update!(state.stats, :processes_monitored, &(&1 + 1))
 
         Logger.debug("Started monitoring process #{inspect(pid)}")
-        
+
         %{state | monitored_processes: new_monitored, stats: new_stats}
 
       _existing ->
@@ -443,9 +475,13 @@ defmodule JidoFoundation.CoordinationManager do
     case event do
       :failure ->
         new_failures = current.failures + 1
-        
+
         if new_failures >= @circuit_breaker_threshold do
-          Map.put(circuit_breakers, pid, %{failures: new_failures, status: :open, opened_at: DateTime.utc_now()})
+          Map.put(circuit_breakers, pid, %{
+            failures: new_failures,
+            status: :open,
+            opened_at: DateTime.utc_now()
+          })
         else
           Map.put(circuit_breakers, pid, %{current | failures: new_failures})
         end
@@ -457,7 +493,7 @@ defmodule JidoFoundation.CoordinationManager do
 
   defp buffer_message(receiver_pid, message, state) do
     current_buffer = Map.get(state.message_buffers, receiver_pid, [])
-    
+
     if length(current_buffer) >= @buffer_max_size do
       # Buffer overflow
       new_stats = Map.update!(state.stats, :buffer_overflows, &(&1 + 1))
@@ -466,7 +502,7 @@ defmodule JidoFoundation.CoordinationManager do
       # Add to buffer
       new_buffer = [message | current_buffer]
       new_buffers = Map.put(state.message_buffers, receiver_pid, new_buffer)
-      
+
       {:ok, %{state | message_buffers: new_buffers}}
     end
   end
@@ -493,8 +529,13 @@ defmodule JidoFoundation.CoordinationManager do
     if message_info.retry_count < @max_retry_attempts do
       # Retry the message
       Logger.debug("Retrying message #{message_id}, attempt #{message_info.retry_count + 1}")
-      
-      case attempt_message_delivery(message_info.sender, message_info.receiver, message_info.message, state) do
+
+      case attempt_message_delivery(
+             message_info.sender,
+             message_info.receiver,
+             message_info.message,
+             state
+           ) do
         {:ok, new_state} ->
           # Success, remove from pending
           new_pending = Map.delete(new_state.pending_messages, message_id)
@@ -504,10 +545,10 @@ defmodule JidoFoundation.CoordinationManager do
           # Still failing, update retry count
           updated_message_info = %{message_info | retry_count: message_info.retry_count + 1}
           new_pending = Map.put(new_state.pending_messages, message_id, updated_message_info)
-          
+
           # Schedule next retry
           Process.send_after(self(), {:retry_message, message_id}, @retry_delay_ms)
-          
+
           %{new_state | pending_messages: new_pending}
       end
     else

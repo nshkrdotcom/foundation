@@ -53,14 +53,14 @@ defmodule JidoFoundation.AgentMonitor do
   ]
 
   @type t :: %__MODULE__{
-    agent_pid: pid(),
-    health_check: (pid() -> :healthy | :degraded | :unhealthy),
-    interval: non_neg_integer(),
-    registry: module() | nil,
-    monitor_ref: reference() | nil,
-    timer_ref: reference() | nil,
-    last_health_status: :healthy | :degraded | :unhealthy | nil
-  }
+          agent_pid: pid(),
+          health_check: (pid() -> :healthy | :degraded | :unhealthy),
+          interval: non_neg_integer(),
+          registry: module() | nil,
+          monitor_ref: reference() | nil,
+          timer_ref: reference() | nil,
+          last_health_status: :healthy | :degraded | :unhealthy | nil
+        }
 
   # Client API
 
@@ -77,10 +77,10 @@ defmodule JidoFoundation.AgentMonitor do
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
     agent_pid = Keyword.fetch!(opts, :agent_pid)
-    
+
     # Generate unique name for this monitor
     name = {:via, Registry, {JidoFoundation.MonitorRegistry, agent_pid}}
-    
+
     GenServer.start_link(__MODULE__, opts, name: name)
   end
 
@@ -90,11 +90,12 @@ defmodule JidoFoundation.AgentMonitor do
   @spec child_spec(keyword()) :: Supervisor.child_spec()
   def child_spec(opts) do
     agent_pid = Keyword.fetch!(opts, :agent_pid)
-    
+
     %{
       id: {__MODULE__, agent_pid},
       start: {__MODULE__, :start_link, [opts]},
-      restart: :transient,  # Don't restart if agent is dead
+      # Don't restart if agent is dead
+      restart: :transient,
       shutdown: 5_000,
       type: :worker
     }
@@ -108,9 +109,10 @@ defmodule JidoFoundation.AgentMonitor do
     case Registry.lookup(JidoFoundation.MonitorRegistry, agent_pid) do
       [{monitor_pid, _}] ->
         GenServer.stop(monitor_pid, :normal)
-      
+
       [] ->
-        :ok  # Already stopped
+        # Already stopped
+        :ok
     end
   end
 
@@ -122,7 +124,7 @@ defmodule JidoFoundation.AgentMonitor do
     case Registry.lookup(JidoFoundation.MonitorRegistry, agent_pid) do
       [{monitor_pid, _}] ->
         GenServer.call(monitor_pid, :get_health_status)
-      
+
       [] ->
         {:error, :not_monitored}
     end
@@ -136,7 +138,7 @@ defmodule JidoFoundation.AgentMonitor do
     case Registry.lookup(JidoFoundation.MonitorRegistry, agent_pid) do
       [{monitor_pid, _}] ->
         GenServer.cast(monitor_pid, :force_health_check)
-      
+
       [] ->
         {:error, :not_monitored}
     end
@@ -252,7 +254,8 @@ defmodule JidoFoundation.AgentMonitor do
     end
 
     # Final registry update on shutdown
-    if is_atom(state.registry) and not is_nil(state.registry) and state.last_health_status != :unhealthy do
+    if is_atom(state.registry) and not is_nil(state.registry) and
+         state.last_health_status != :unhealthy do
       try do
         JidoFoundation.Bridge.update_agent_metadata(
           state.agent_pid,
@@ -270,18 +273,23 @@ defmodule JidoFoundation.AgentMonitor do
   # Private helper functions
 
   defp update_registry_if_changed(state, new_health_status) do
-    if is_atom(state.registry) and not is_nil(state.registry) and new_health_status != state.last_health_status do
+    if is_atom(state.registry) and not is_nil(state.registry) and
+         new_health_status != state.last_health_status do
       try do
         JidoFoundation.Bridge.update_agent_metadata(
           state.agent_pid,
           %{health_status: new_health_status},
           registry: state.registry
         )
-        
-        Logger.debug("Updated agent #{inspect(state.agent_pid)} health status to #{new_health_status}")
+
+        Logger.debug(
+          "Updated agent #{inspect(state.agent_pid)} health status to #{new_health_status}"
+        )
       catch
         kind, reason ->
-          Logger.warning("Failed to update registry for agent #{inspect(state.agent_pid)}: #{kind} #{inspect(reason)}")
+          Logger.warning(
+            "Failed to update registry for agent #{inspect(state.agent_pid)}: #{kind} #{inspect(reason)}"
+          )
       end
     end
 

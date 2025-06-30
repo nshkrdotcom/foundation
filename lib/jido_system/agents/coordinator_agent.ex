@@ -115,11 +115,8 @@ defmodule JidoSystem.Agents.CoordinatorAgent do
         agent = initialized_server_state.agent
         Logger.info("CoordinatorAgent #{agent.id} mounted for multi-agent coordination")
 
-        # Start periodic health checks
-        schedule_agent_health_checks()
-
-        # Start workflow monitoring
-        schedule_workflow_monitoring()
+        # Register with supervised scheduler instead of self-scheduling
+        register_with_scheduler()
 
         {:ok, initialized_server_state}
     end
@@ -417,14 +414,28 @@ defmodule JidoSystem.Agents.CoordinatorAgent do
 
   # Private helper functions
 
-  defp schedule_agent_health_checks() do
-    # 1 minute
-    Process.send_after(self(), :check_agent_health, 60_000)
+  defp register_with_scheduler() do
+    # Register periodic operations with the supervised scheduler
+    JidoFoundation.SchedulerManager.register_periodic(
+      self(),
+      :agent_health_checks,
+      # 1 minute
+      60_000,
+      :check_agent_health
+    )
+
+    JidoFoundation.SchedulerManager.register_periodic(
+      self(),
+      :workflow_monitoring,
+      # 30 seconds
+      30_000,
+      :monitor_workflows
+    )
   end
 
-  defp schedule_workflow_monitoring() do
-    # 30 seconds
-    Process.send_after(self(), :monitor_workflows, 30_000)
+  defp unregister_from_scheduler() do
+    # Unregister all periodic operations when stopping
+    JidoFoundation.SchedulerManager.unregister_agent(self())
   end
 
   defp validate_and_register_agent(%{pid: pid, capabilities: capabilities} = agent_spec)
@@ -673,10 +684,10 @@ defmodule JidoSystem.Agents.CoordinatorAgent do
         %{dead_agents: dead_agents}
       )
 
-      schedule_agent_health_checks()
+      # Note: No longer self-scheduling - SchedulerManager handles this
       {:noreply, %{state | agent: new_agent}}
     else
-      schedule_agent_health_checks()
+      # Note: No longer self-scheduling - SchedulerManager handles this
       {:noreply, state}
     end
   end
@@ -705,12 +716,26 @@ defmodule JidoSystem.Agents.CoordinatorAgent do
       )
     end
 
-    schedule_workflow_monitoring()
+    # Note: No longer self-scheduling - SchedulerManager handles this
     {:noreply, state}
   end
 
   def handle_info(msg, state) do
     Logger.debug("CoordinatorAgent received unknown message: #{inspect(msg)}")
     {:noreply, state}
+  end
+
+  @impl true
+  def terminate(reason, _state) do
+    Logger.info("CoordinatorAgent terminating: #{inspect(reason)}")
+
+    # Ensure we unregister from scheduler on termination
+    try do
+      unregister_from_scheduler()
+    catch
+      _, _ -> :ok
+    end
+
+    :ok
   end
 end

@@ -109,9 +109,8 @@ defmodule JidoSystem.Agents.MonitorAgent do
         agent = initialized_server_state.agent
         Logger.info("MonitorAgent #{agent.id} mounted and starting monitoring")
 
-        # Start periodic monitoring
-        schedule_metrics_collection()
-        schedule_health_analysis()
+        # Register with supervised scheduler instead of self-scheduling
+        register_with_scheduler()
 
         # Subscribe to Foundation telemetry events
         subscribe_to_telemetry_events()
@@ -333,8 +332,7 @@ defmodule JidoSystem.Agents.MonitorAgent do
 
   def handle_start_monitoring(agent, _params) do
     new_state = %{agent.state | monitoring_status: :active}
-    schedule_metrics_collection()
-    schedule_health_analysis()
+    register_with_scheduler()
 
     emit_event(agent, :monitoring_started, %{}, %{})
 
@@ -344,6 +342,9 @@ defmodule JidoSystem.Agents.MonitorAgent do
   def handle_stop_monitoring(agent, _params) do
     new_state = %{agent.state | monitoring_status: :paused}
 
+    # Unregister from scheduler when stopping
+    unregister_from_scheduler()
+
     emit_event(agent, :monitoring_stopped, %{}, %{})
 
     {:ok, :stopped, %{agent | state: new_state}}
@@ -351,14 +352,28 @@ defmodule JidoSystem.Agents.MonitorAgent do
 
   # Private helper functions
 
-  defp schedule_metrics_collection() do
-    # 30 seconds
-    Process.send_after(self(), :collect_metrics, 30_000)
+  defp register_with_scheduler() do
+    # Register periodic operations with the supervised scheduler
+    JidoFoundation.SchedulerManager.register_periodic(
+      self(),
+      :metrics_collection,
+      # 30 seconds
+      30_000,
+      :collect_metrics
+    )
+
+    JidoFoundation.SchedulerManager.register_periodic(
+      self(),
+      :health_analysis,
+      # 1 minute
+      60_000,
+      :analyze_health
+    )
   end
 
-  defp schedule_health_analysis() do
-    # 1 minute
-    Process.send_after(self(), :analyze_health, 60_000)
+  defp unregister_from_scheduler() do
+    # Unregister all periodic operations when stopping
+    JidoFoundation.SchedulerManager.unregister_agent(self())
   end
 
   defp subscribe_to_telemetry_events() do
@@ -684,7 +699,7 @@ defmodule JidoSystem.Agents.MonitorAgent do
         })
 
       Jido.Agent.Server.cast(self(), instruction)
-      schedule_metrics_collection()
+      # Note: No longer self-scheduling - SchedulerManager handles this
     end
 
     {:noreply, state}
@@ -699,7 +714,7 @@ defmodule JidoSystem.Agents.MonitorAgent do
         })
 
       Jido.Agent.Server.cast(self(), instruction)
-      schedule_health_analysis()
+      # Note: No longer self-scheduling - SchedulerManager handles this
     end
 
     {:noreply, state}
@@ -762,5 +777,19 @@ defmodule JidoSystem.Agents.MonitorAgent do
   def handle_info(msg, state) do
     Logger.debug("MonitorAgent received unknown message: #{inspect(msg)}")
     {:noreply, state}
+  end
+
+  @impl true
+  def terminate(reason, _state) do
+    Logger.info("MonitorAgent terminating: #{inspect(reason)}")
+
+    # Ensure we unregister from scheduler on termination
+    try do
+      unregister_from_scheduler()
+    catch
+      _, _ -> :ok
+    end
+
+    :ok
   end
 end

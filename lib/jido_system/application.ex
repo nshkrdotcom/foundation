@@ -48,7 +48,10 @@ defmodule JidoSystem.Application do
       JidoFoundation.MonitorSupervisor,
 
       # Agent coordination manager (OTP compliant replacement for raw message passing)
-      JidoFoundation.CoordinationManager
+      JidoFoundation.CoordinationManager,
+
+      # Scheduler manager (OTP compliant replacement for agent self-scheduling)
+      JidoFoundation.SchedulerManager
     ]
 
     opts = [

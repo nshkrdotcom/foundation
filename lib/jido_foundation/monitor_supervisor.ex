@@ -66,29 +66,36 @@ defmodule JidoFoundation.MonitorSupervisor do
     case Registry.lookup(@registry_name, agent_pid) do
       [] ->
         # Not currently monitored, start new monitor
-        monitor_opts = [
-          agent_pid: agent_pid,
-          health_check: Keyword.get(opts, :health_check),
-          interval: Keyword.get(opts, :health_check_interval, 30_000),
-          registry: Keyword.get(opts, :registry)
-        ]
-        |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+        monitor_opts =
+          [
+            agent_pid: agent_pid,
+            health_check: Keyword.get(opts, :health_check),
+            interval: Keyword.get(opts, :health_check_interval, 30_000),
+            registry: Keyword.get(opts, :registry)
+          ]
+          |> Enum.reject(fn {_k, v} -> is_nil(v) end)
 
         child_spec = JidoFoundation.AgentMonitor.child_spec(monitor_opts)
-        
+
         case DynamicSupervisor.start_child(__MODULE__, child_spec) do
           {:ok, _monitor_pid} = success ->
             Logger.debug("Started agent monitor for #{inspect(agent_pid)}")
             success
-          
+
           {:error, reason} = error ->
-            Logger.error("Failed to start agent monitor for #{inspect(agent_pid)}: #{inspect(reason)}")
+            Logger.error(
+              "Failed to start agent monitor for #{inspect(agent_pid)}: #{inspect(reason)}"
+            )
+
             error
         end
 
       [{monitor_pid, _}] ->
         # Already monitoring
-        Logger.debug("Agent #{inspect(agent_pid)} is already being monitored by #{inspect(monitor_pid)}")
+        Logger.debug(
+          "Agent #{inspect(agent_pid)} is already being monitored by #{inspect(monitor_pid)}"
+        )
+
         {:ok, monitor_pid}
     end
   end
@@ -104,9 +111,12 @@ defmodule JidoFoundation.MonitorSupervisor do
           :ok ->
             Logger.debug("Stopped agent monitor for #{inspect(agent_pid)}")
             :ok
-          
+
           {:error, reason} ->
-            Logger.error("Failed to stop agent monitor for #{inspect(agent_pid)}: #{inspect(reason)}")
+            Logger.error(
+              "Failed to stop agent monitor for #{inspect(agent_pid)}: #{inspect(reason)}"
+            )
+
             {:error, reason}
         end
 
@@ -157,10 +167,15 @@ defmodule JidoFoundation.MonitorSupervisor do
   @doc """
   Returns statistics about the monitor supervisor.
   """
-  @spec stats() :: map()
+  @spec stats() :: %{
+          monitor_count: non_neg_integer(),
+          active_monitors: non_neg_integer(),
+          supervisor_pid: pid() | nil,
+          registry_pid: pid() | nil
+        }
   def stats do
     children = DynamicSupervisor.which_children(__MODULE__)
-    
+
     %{
       monitor_count: length(children),
       active_monitors: Registry.count(@registry_name),
@@ -172,15 +187,15 @@ defmodule JidoFoundation.MonitorSupervisor do
   @doc """
   Performs health check on the monitor supervisor itself.
   """
-  @spec health_check() :: :ok | {:error, term()}
+  @spec health_check() :: :ok | {:error, :supervisor_not_alive | :registry_not_alive}
   def health_check do
     cond do
       not Process.alive?(Process.whereis(__MODULE__)) ->
         {:error, :supervisor_not_alive}
-      
+
       not Process.alive?(Process.whereis(@registry_name)) ->
         {:error, :registry_not_alive}
-      
+
       true ->
         :ok
     end

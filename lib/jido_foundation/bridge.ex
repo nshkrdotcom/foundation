@@ -252,7 +252,7 @@ defmodule JidoFoundation.Bridge do
   Sets up monitoring for a Jido agent.
 
   Automatically updates Foundation registry when agent health changes.
-  
+
   This function now uses proper OTP supervision via JidoFoundation.MonitorSupervisor
   instead of spawning unsupervised processes.
   """
@@ -261,9 +261,12 @@ defmodule JidoFoundation.Bridge do
     case JidoFoundation.MonitorSupervisor.start_monitoring(agent_pid, opts) do
       {:ok, _monitor_pid} ->
         :ok
-      
+
       {:error, reason} ->
-        Logger.error("Failed to start monitoring for agent #{inspect(agent_pid)}: #{inspect(reason)}")
+        Logger.error(
+          "Failed to start monitoring for agent #{inspect(agent_pid)}: #{inspect(reason)}"
+        )
+
         {:error, reason}
     end
   end
@@ -384,7 +387,7 @@ defmodule JidoFoundation.Bridge do
 
   @doc """
   Stops monitoring for a Jido agent.
-  
+
   This cleanly terminates the supervised monitoring process.
   """
   def stop_monitoring(agent_pid) when is_pid(agent_pid) do
