@@ -163,7 +163,7 @@ defmodule JidoSystem.Agents.FoundationAgent do
       end
 
       @impl true
-      def on_after_run(agent, result, _directives) do
+      def on_after_run(agent, result, directives) do
         # Emit telemetry after action execution
         case result do
           {:ok, _} ->
@@ -198,6 +198,14 @@ defmodule JidoSystem.Agents.FoundationAgent do
               )
             end
 
+          # Handle Jido.Error structs (common from action failures)
+          %Jido.Error{} = error ->
+            :telemetry.execute(
+              [:jido_foundation, :bridge, :agent_event],
+              %{error: error.message},
+              %{agent_id: agent.id, result: :error, event_type: :action_failed}
+            )
+
           # Handle any other result as success (for compatibility)
           _ ->
             Logger.debug("FoundationAgent received unexpected result format: #{inspect(result)}")
@@ -209,6 +217,8 @@ defmodule JidoSystem.Agents.FoundationAgent do
             )
         end
 
+        # Return the agent as expected by Jido framework
+        # Note: on_after_run callback should return {:ok, agent}, not directives
         {:ok, agent}
       end
 
@@ -230,9 +240,8 @@ defmodule JidoSystem.Agents.FoundationAgent do
           }
         )
 
-        # Attempt recovery by resetting to idle state
-        new_state = Map.put(agent.state, :status, :recovering)
-        {:ok, %{agent | state: new_state}}
+        # Follow the Jido framework pattern - return error to maintain proper error flow
+        {:error, error}
       end
 
       @impl true

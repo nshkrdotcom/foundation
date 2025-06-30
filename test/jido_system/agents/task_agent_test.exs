@@ -17,6 +17,27 @@ defmodule JidoSystem.Agents.TaskAgentTest do
     :ok
   end
 
+  # TODO: Move to shared test utilities once Foundation telemetry system is complete
+  # Utility function for polling with timeout instead of fixed sleeps
+  defp poll_with_timeout(poll_fn, timeout_ms, interval_ms) do
+    end_time = System.monotonic_time(:millisecond) + timeout_ms
+    poll_loop(poll_fn, end_time, interval_ms)
+  end
+
+  defp poll_loop(poll_fn, end_time, interval_ms) do
+    case poll_fn.() do
+      :continue ->
+        if System.monotonic_time(:millisecond) < end_time do
+          Process.sleep(interval_ms)
+          poll_loop(poll_fn, end_time, interval_ms)
+        else
+          :timeout
+        end
+      result ->
+        result
+    end
+  end
+
   describe "task agent initialization" do
     test "successfully initializes with correct capabilities", %{registry: _registry} do
       {:ok, pid} = start_supervised({TaskAgent, [id: "task_agent_init"]})
@@ -128,11 +149,28 @@ defmodule JidoSystem.Agents.TaskAgentTest do
 
       Jido.Agent.Server.cast(agent, instruction)
 
-      # Wait a bit for processing
-      Process.sleep(100)
+      # TODO: Replace with proper telemetry-based synchronization once Foundation telemetry system is built out
+      # This polling approach is a temporary workaround for async agent error processing
+      poll_for_error_count = fn ->
+        case Jido.Agent.Server.state(agent) do
+          {:ok, state} when state.agent.state.error_count > 0 -> 
+            {:ok, state}
+          {:ok, _state} -> 
+            :continue
+          error -> 
+            error
+        end
+      end
 
-      # Verify error count increased
-      {:ok, state} = Jido.Agent.Server.state(agent)
+      # Poll with timeout for error count to be updated
+      state = case poll_with_timeout(poll_for_error_count, 5000, 100) do
+        {:ok, final_state} -> final_state
+        :timeout -> 
+          {:ok, timeout_state} = Jido.Agent.Server.state(agent)
+          flunk("Timeout waiting for error count update. Final state: error_count=#{timeout_state.agent.state.error_count}")
+      end
+
+      IO.puts("*** Test checking state: error_count=#{state.agent.state.error_count}, status=#{state.agent.state.status}")
       assert state.agent.state.error_count > 0
     end
 
@@ -313,12 +351,29 @@ defmodule JidoSystem.Agents.TaskAgentTest do
         })
 
       Jido.Agent.Server.cast(agent, instruction)
-      Process.sleep(100)
 
       # Agent should handle the error and continue operating
       assert Process.alive?(agent)
 
-      {:ok, state} = Jido.Agent.Server.state(agent)
+      # TODO: Replace with proper telemetry-based synchronization once Foundation telemetry system is built out
+      poll_for_error_count = fn ->
+        case Jido.Agent.Server.state(agent) do
+          {:ok, state} when state.agent.state.error_count > 0 -> 
+            {:ok, state}
+          {:ok, _state} -> 
+            :continue
+          error -> 
+            error
+        end
+      end
+
+      state = case poll_with_timeout(poll_for_error_count, 3000, 100) do
+        {:ok, final_state} -> final_state
+        :timeout -> 
+          {:ok, timeout_state} = Jido.Agent.Server.state(agent)
+          flunk("Timeout waiting for error count update. Final state: error_count=#{timeout_state.agent.state.error_count}")
+      end
+
       assert state.agent.state.error_count > 0
       # Should recover to idle
       assert state.agent.state.status == :idle
@@ -345,10 +400,27 @@ defmodule JidoSystem.Agents.TaskAgentTest do
         Jido.Agent.Server.cast(agent, instruction)
       end
 
-      Process.sleep(500)
+      # TODO: Replace with proper telemetry-based synchronization once Foundation telemetry system is built out
+      poll_for_pause = fn ->
+        case Jido.Agent.Server.state(agent) do
+          {:ok, state} when state.agent.state.error_count >= 10 -> 
+            {:ok, state}
+          {:ok, _state} -> 
+            :continue
+          error -> 
+            error
+        end
+      end
 
-      # Agent should be paused after too many errors
-      {:ok, state} = Jido.Agent.Server.state(agent)
+      # Poll for error count to reach 10+ (which should trigger pause)
+      state = case poll_with_timeout(poll_for_pause, 8000, 200) do
+        {:ok, final_state} -> final_state
+        :timeout -> 
+          {:ok, timeout_state} = Jido.Agent.Server.state(agent)
+          flunk("Timeout waiting for error count to reach 10+. Final state: error_count=#{timeout_state.agent.state.error_count}")
+      end
+
+      IO.puts("*** Test 3 checking state: error_count=#{state.agent.state.error_count}, status=#{state.agent.state.status}")
       assert state.agent.state.error_count >= 10
       # Note: The actual pausing logic would need to be verified based on implementation
     end
