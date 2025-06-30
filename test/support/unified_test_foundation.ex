@@ -215,7 +215,7 @@ defmodule Foundation.UnifiedTestFoundation do
   @doc """
   Full isolation setup with all services isolated.
   """
-  def full_isolation_setup(_context) do
+  def full_isolation_setup(context \\ %{}) do
     ensure_foundation_services()
     test_id = :erlang.unique_integer([:positive])
 
@@ -232,9 +232,12 @@ defmodule Foundation.UnifiedTestFoundation do
     # Start isolated services
     case Foundation.TestIsolation.start_isolated_test(test_context: test_context) do
       {:ok, supervisor, enhanced_context} ->
-        on_exit(fn ->
-          Foundation.TestIsolation.stop_isolated_test(supervisor)
-        end)
+        # Only register cleanup if not being called from a parent setup
+        unless Map.get(context, :skip_cleanup, false) do
+          on_exit(fn ->
+            Foundation.TestIsolation.stop_isolated_test(supervisor)
+          end)
+        end
 
         %{
           test_id: test_id,
@@ -252,17 +255,22 @@ defmodule Foundation.UnifiedTestFoundation do
   Contamination detection setup with full monitoring.
   """
   def contamination_detection_setup(context) do
-    # Start with full isolation
-    base_setup = full_isolation_setup(context)
+    # Start with full isolation but skip its cleanup registration
+    base_setup = full_isolation_setup(Map.put(context, :skip_cleanup, true))
     test_id = base_setup.test_id
+    supervisor = base_setup.supervisor
 
     # Capture initial system state
     initial_state = capture_system_state(test_id)
 
-    # Setup contamination monitoring
+    # Setup combined cleanup: contamination detection THEN supervisor cleanup
     on_exit(fn ->
+      # First, capture final state and detect contamination
       final_state = capture_system_state(test_id)
       detect_contamination(initial_state, final_state, test_id)
+
+      # Then clean up the supervisor
+      Foundation.TestIsolation.stop_isolated_test(supervisor)
     end)
 
     # Merge the contamination detection data with the base setup

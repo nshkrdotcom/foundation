@@ -279,7 +279,14 @@ defmodule JidoFoundation.BridgeTest do
 
       on_exit(fn ->
         Enum.each(agents, fn {_i, agent} ->
-          if Process.alive?(agent), do: GenServer.stop(agent, :normal, 5000)
+          if Process.alive?(agent) do
+            try do
+              GenServer.stop(agent, :normal, 5000)
+            catch
+              # Process may already be stopped by registry cleanup
+              :exit, _ -> :ok
+            end
+          end
         end)
       end)
 
@@ -395,7 +402,14 @@ defmodule JidoFoundation.BridgeTest do
           monitor_pid -> Process.exit(monitor_pid, :shutdown)
         end
 
-        if Process.alive?(agent), do: GenServer.stop(agent, :normal, 5000)
+        if Process.alive?(agent) do
+          try do
+            GenServer.stop(agent, :normal, 5000)
+          catch
+            # Process may already be stopped by registry cleanup
+            :exit, _ -> :ok
+          end
+        end
       end)
 
       # Track when health checks happen
@@ -467,7 +481,15 @@ defmodule JidoFoundation.BridgeTest do
 
       on_exit(fn ->
         Process.flag(:trap_exit, false)
-        if Process.alive?(agent), do: GenServer.stop(agent, :normal, 5000)
+
+        if Process.alive?(agent) do
+          try do
+            GenServer.stop(agent, :normal, 5000)
+          catch
+            # Process may already be stopped by registry cleanup
+            :exit, _ -> :ok
+          end
+        end
       end)
 
       :ok =
