@@ -271,10 +271,6 @@ defmodule JidoSystem.Agents.TaskAgent do
           end
 
         {:ok, %{updated_agent | state: new_state}}
-
-      {:error, reason} ->
-        # Handle super() returning error
-        {:error, reason}
     end
   end
 
@@ -294,21 +290,15 @@ defmodule JidoSystem.Agents.TaskAgent do
       # This is the correct way - business logic through actions, not supervision callbacks
       agent_pid = self()
       
-      {:ok, _task_pid} = Task.start(fn ->
+      Foundation.TaskHelper.spawn_supervised_safe(fn ->
         Process.sleep(100) # Let error processing complete
         
-        try do
-          instruction = Jido.Instruction.new!(%{
-            action: JidoSystem.Actions.UpdateErrorCount,
-            params: %{increment: 1}
-          })
-          
-          Jido.Agent.Server.cast(agent_pid, instruction)
-        rescue
-          _e ->
-            # Silently handle cast failures - error counting is non-critical
-            :ok
-        end
+        instruction = Jido.Instruction.new!(%{
+          action: JidoSystem.Actions.UpdateErrorCount,
+          params: %{increment: 1}
+        })
+        
+        Jido.Agent.Server.cast(agent_pid, instruction)
       end)
     end
     

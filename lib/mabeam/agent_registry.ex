@@ -365,7 +365,7 @@ defmodule MABEAM.AgentRegistry do
 
   defp notify_resource_manager_cleanup(agent_id, reason) do
     if Process.whereis(Foundation.ResourceManager) do
-      spawn(fn ->
+      Foundation.TaskHelper.spawn_supervised_safe(fn ->
         Foundation.ResourceManager.release_resource(%{
           id: agent_id,
           type: :register_agent,

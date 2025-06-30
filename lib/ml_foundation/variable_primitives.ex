@@ -588,7 +588,9 @@ defmodule MLFoundation.VariablePrimitives do
 
   defp notify_observers(observers, old_value, new_value) do
     Enum.each(observers, fn callback ->
-      spawn(fn -> callback.(old_value, new_value) end)
+      Foundation.TaskHelper.spawn_supervised_safe(fn -> 
+        callback.(old_value, new_value) 
+      end)
     end)
   end
 

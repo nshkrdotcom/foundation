@@ -387,14 +387,9 @@ defmodule Foundation.ResourceManager do
 
   defp trigger_alert(state, alert_type, data) do
     Enum.each(state.alert_callbacks, fn callback ->
-      # Call in a spawned process to avoid blocking
-      spawn(fn ->
-        try do
-          callback.(alert_type, data)
-        rescue
-          e ->
-            Logger.error("Alert callback failed: #{Exception.message(e)}")
-        end
+      # Use supervised task to avoid blocking and ensure proper supervision
+      Foundation.TaskHelper.spawn_supervised_safe(fn ->
+        callback.(alert_type, data)
       end)
     end)
 

@@ -35,6 +35,9 @@ defmodule Foundation.Application do
 
     # Foundation supervision tree with service layer architecture
     children = [
+      # Task supervisor for Foundation async operations  
+      {Task.Supervisor, name: Foundation.TaskSupervisor},
+
       # Performance monitor for metrics collection
       Foundation.PerformanceMonitor,
 
@@ -42,7 +45,10 @@ defmodule Foundation.Application do
       Foundation.ResourceManager,
 
       # Service layer supervisor for Foundation services
-      Foundation.Services.Supervisor
+      Foundation.Services.Supervisor,
+
+      # JidoSystem agent supervision infrastructure
+      JidoSystem.Application
     ]
 
     opts = [strategy: :one_for_one, name: Foundation.Supervisor]
