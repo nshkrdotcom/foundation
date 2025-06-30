@@ -719,24 +719,8 @@ defmodule JidoFoundation.Bridge do
       Bridge.coordinate_agents(sender_agent, receiver_agent, coordination_message)
   """
   def coordinate_agents(sender_agent, receiver_agent, message) do
-    # Send coordination message directly to the receiving agent
-    send(receiver_agent, {:mabeam_coordination, sender_agent, message})
-
-    # Emit coordination telemetry
-    emit_agent_event(
-      sender_agent,
-      :coordination,
-      %{
-        messages_sent: 1
-      },
-      %{
-        target_agent: receiver_agent,
-        message_type: Map.get(message, :action, :unknown),
-        coordination_type: :direct
-      }
-    )
-
-    :ok
+    # Use supervised coordination instead of raw send()
+    JidoFoundation.CoordinationManager.coordinate_agents(sender_agent, receiver_agent, message)
   catch
     kind, reason ->
       Logger.warning("Agent coordination failed: #{kind} #{inspect(reason)}")
@@ -752,24 +736,8 @@ defmodule JidoFoundation.Bridge do
       Bridge.distribute_task(coordinator_agent, worker_agent, task)
   """
   def distribute_task(coordinator_agent, worker_agent, task) do
-    # Send task to worker agent
-    send(worker_agent, {:mabeam_task, task.id, task})
-
-    # Emit task distribution telemetry
-    emit_agent_event(
-      coordinator_agent,
-      :task_distribution,
-      %{
-        tasks_distributed: 1
-      },
-      %{
-        target_agent: worker_agent,
-        task_id: task.id,
-        task_type: Map.get(task, :type, :unknown)
-      }
-    )
-
-    :ok
+    # Use supervised coordination instead of raw send()
+    JidoFoundation.CoordinationManager.distribute_task(coordinator_agent, worker_agent, task)
   catch
     kind, reason ->
       Logger.warning("Task distribution failed: #{kind} #{inspect(reason)}")
@@ -787,25 +755,8 @@ defmodule JidoFoundation.Bridge do
       Bridge.delegate_task(supervisor_agent, manager_agent, task)
   """
   def delegate_task(delegator_agent, delegate_agent, task) do
-    # Send delegation message
-    send(delegate_agent, {:mabeam_task, task.id, task})
-
-    # Emit delegation telemetry
-    emit_agent_event(
-      delegator_agent,
-      :task_delegation,
-      %{
-        tasks_delegated: 1
-      },
-      %{
-        delegate_agent: delegate_agent,
-        task_id: task.id,
-        task_type: Map.get(task, :type, :unknown),
-        delegation_level: :hierarchical
-      }
-    )
-
-    :ok
+    # Use supervised coordination instead of raw send()
+    JidoFoundation.CoordinationManager.delegate_task(delegator_agent, delegate_agent, task)
   catch
     kind, reason ->
       Logger.warning("Task delegation failed: #{kind} #{inspect(reason)}")
@@ -827,12 +778,10 @@ defmodule JidoFoundation.Bridge do
       })
   """
   def create_coordination_context(agents, opts \\ []) do
-    coordination_id = System.unique_integer()
     coordination_type = Keyword.get(opts, :coordination_type, :general)
     timeout = Keyword.get(opts, :timeout, 30_000)
 
     context = %{
-      id: coordination_id,
       type: coordination_type,
       agents: agents,
       created_at: DateTime.utc_now(),
@@ -840,24 +789,11 @@ defmodule JidoFoundation.Bridge do
       status: :active
     }
 
-    # Notify all agents of the coordination context
-    Enum.each(agents, fn agent ->
-      try do
-        send(agent, {:mabeam_coordination_context, coordination_id, context})
-      catch
-        # Ignore errors for dead agents
-        _, _ -> :ok
-      end
-    end)
-
-    # Emit context creation telemetry
-    :telemetry.execute(
-      [:jido, :coordination, :context_created],
-      %{agent_count: length(agents)},
-      %{coordination_id: coordination_id, coordination_type: coordination_type}
-    )
-
-    {:ok, context}
+    # Use supervised coordination instead of raw send()
+    case JidoFoundation.CoordinationManager.create_coordination_context(agents, context) do
+      :ok -> {:ok, context}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @doc """

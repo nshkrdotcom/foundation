@@ -45,7 +45,10 @@ defmodule JidoSystem.Application do
       {Registry, keys: :unique, name: JidoFoundation.MonitorRegistry},
 
       # Bridge agent monitoring supervisor (OTP compliant replacement for unsupervised processes)
-      JidoFoundation.MonitorSupervisor
+      JidoFoundation.MonitorSupervisor,
+
+      # Agent coordination manager (OTP compliant replacement for raw message passing)
+      JidoFoundation.CoordinationManager
     ]
 
     opts = [
