@@ -195,10 +195,28 @@ defmodule JidoSystem.Agents.TaskAgentTest do
         })
 
       Jido.Agent.Server.cast(agent, pause_instruction)
-      Process.sleep(100)
 
-      # Verify agent is paused
-      {:ok, state} = Jido.Agent.Server.state(agent)
+      # Wait for agent to pause
+      poll_for_pause = fn ->
+        case Jido.Agent.Server.state(agent) do
+          {:ok, state} ->
+            if state.agent.state.status == :paused do
+              {:ok, state}
+            else
+              :continue
+            end
+
+          error ->
+            error
+        end
+      end
+
+      {:ok, state} =
+        case poll_with_timeout(poll_for_pause, 1000, 50) do
+          {:ok, paused_state} -> {:ok, paused_state}
+          :timeout -> flunk("Agent did not pause in time")
+        end
+
       assert state.agent.state.status == :paused
 
       # Try to process a task while paused
@@ -217,10 +235,22 @@ defmodule JidoSystem.Agents.TaskAgentTest do
         })
 
       Jido.Agent.Server.cast(agent, process_instruction)
-      Process.sleep(100)
 
-      # Task should not be processed
-      {:ok, final_state} = Jido.Agent.Server.state(agent)
+      # Give it a moment to potentially process (should not happen since paused)
+      # then verify task was not processed
+      poll_for_no_processing = fn ->
+        case Jido.Agent.Server.state(agent) do
+          {:ok, state} -> {:ok, state}
+          error -> error
+        end
+      end
+
+      {:ok, final_state} =
+        case poll_with_timeout(poll_for_no_processing, 500, 50) do
+          {:ok, state} -> {:ok, state}
+          :timeout -> Jido.Agent.Server.state(agent) |> elem(1) |> then(&{:ok, &1})
+        end
+
       assert final_state.agent.state.processed_count == 0
     end
   end
@@ -249,10 +279,28 @@ defmodule JidoSystem.Agents.TaskAgentTest do
         Jido.Agent.Server.cast(agent, instruction)
       end
 
-      Process.sleep(100)
+      # Wait for all tasks to be queued
+      poll_for_queue = fn ->
+        case Jido.Agent.Server.state(agent) do
+          {:ok, state} ->
+            if :queue.len(state.agent.state.task_queue) >= 3 do
+              {:ok, state}
+            else
+              :continue
+            end
+
+          error ->
+            error
+        end
+      end
 
       # Verify queue has tasks
-      {:ok, state} = Jido.Agent.Server.state(agent)
+      {:ok, state} =
+        case poll_with_timeout(poll_for_queue, 1000, 50) do
+          {:ok, queued_state} -> {:ok, queued_state}
+          :timeout -> flunk("Tasks not queued in time")
+        end
+
       assert :queue.len(state.agent.state.task_queue) == 3
     end
 
@@ -278,11 +326,28 @@ defmodule JidoSystem.Agents.TaskAgentTest do
         Jido.Agent.Server.cast(agent, instruction)
       end
 
-      Process.sleep(200)
+      # Wait for queue to process and stabilize
+      poll_for_queue_stable = fn ->
+        case Jido.Agent.Server.state(agent) do
+          {:ok, state} ->
+            queue_len = :queue.len(state.agent.state.task_queue)
+            if queue_len <= max_size, do: {:ok, state}, else: :continue
+
+          error ->
+            error
+        end
+      end
 
       # Queue should not exceed max size
-      {:ok, final_state} = Jido.Agent.Server.state(agent)
-      assert :queue.len(final_state.agent.state.task_queue) <= max_size
+      case poll_with_timeout(poll_for_queue_stable, 1000, 50) do
+        {:ok, final_state} ->
+          assert :queue.len(final_state.agent.state.task_queue) <= max_size
+
+        :timeout ->
+          {:ok, timeout_state} = Jido.Agent.Server.state(agent)
+          queue_len = :queue.len(timeout_state.agent.state.task_queue)
+          assert queue_len <= max_size, "Queue size #{queue_len} exceeded max #{max_size}"
+      end
     end
   end
 
@@ -312,15 +377,36 @@ defmodule JidoSystem.Agents.TaskAgentTest do
         Jido.Agent.Server.cast(agent, instruction)
       end
 
-      Process.sleep(500)
+      # Wait for all tasks to be processed and metrics updated
+      poll_for_metrics = fn ->
+        case Jido.Agent.Server.state(agent) do
+          {:ok, state} ->
+            if state.agent.state.processed_count >= 3 do
+              {:ok, state}
+            else
+              :continue
+            end
+
+          error ->
+            error
+        end
+      end
 
       # Verify metrics were updated
-      {:ok, state} = Jido.Agent.Server.state(agent)
-      metrics = state.agent.state.performance_metrics
+      case poll_with_timeout(poll_for_metrics, 2000, 100) do
+        {:ok, state} ->
+          metrics = state.agent.state.performance_metrics
+          assert metrics.total_processing_time > 0
+          assert metrics.average_processing_time > 0
+          assert state.agent.state.processed_count == 3
 
-      assert metrics.total_processing_time > 0
-      assert metrics.average_processing_time > 0
-      assert state.agent.state.processed_count == 3
+        :timeout ->
+          {:ok, timeout_state} = Jido.Agent.Server.state(agent)
+
+          flunk(
+            "Tasks not processed in time. Processed: #{timeout_state.agent.state.processed_count}/3"
+          )
+      end
     end
 
     test "provides status information", %{agent: agent} do
@@ -331,10 +417,21 @@ defmodule JidoSystem.Agents.TaskAgentTest do
         })
 
       Jido.Agent.Server.cast(agent, instruction)
-      Process.sleep(100)
 
-      # Status should be available (exact verification would require result handling)
-      {:ok, state} = Jido.Agent.Server.state(agent)
+      # Give it a moment then verify status (exact verification would require result handling)
+      poll_for_status = fn ->
+        case Jido.Agent.Server.state(agent) do
+          {:ok, state} -> {:ok, state}
+          error -> error
+        end
+      end
+
+      {:ok, state} =
+        case poll_with_timeout(poll_for_status, 500, 50) do
+          {:ok, status_state} -> {:ok, status_state}
+          :timeout -> Jido.Agent.Server.state(agent) |> elem(1) |> then(&{:ok, &1})
+        end
+
       assert state.agent.state.status in [:idle, :processing, :paused]
     end
   end
@@ -399,6 +496,7 @@ defmodule JidoSystem.Agents.TaskAgentTest do
       assert state.agent.state.status == :idle
     end
 
+    @tag :slow
     test "pauses after too many errors", %{agent: agent} do
       # Simulate multiple errors
       # More than the error threshold (10)

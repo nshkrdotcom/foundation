@@ -14,6 +14,7 @@ defmodule Foundation.ErrorHandlerTest do
       assert result == {:ok, :success}
     end
 
+    @tag :slow
     test "retries transient errors" do
       counter = :counters.new(1, [])
 
@@ -50,6 +51,7 @@ defmodule Foundation.ErrorHandlerTest do
       assert :counters.get(counter, 1) == 1
     end
 
+    @tag :slow
     test "respects max retries" do
       counter = :counters.new(1, [])
 
@@ -254,6 +256,7 @@ defmodule Foundation.ErrorHandlerTest do
       :telemetry.detach("test-success")
     end
 
+    @tag :slow
     test "emits retry telemetry" do
       :telemetry.attach(
         "test-retry",

@@ -64,8 +64,10 @@ defmodule JidoSystem.Application do
     # Note: This must be determined at compile time since Mix is not available at runtime
     {max_restarts, max_seconds} =
       case Application.get_env(:foundation, :environment, :prod) do
-        :test -> {100, 10}  # Allow many restarts in tests
-        _ -> {3, 5}         # Production limits
+        # Allow many restarts in tests
+        :test -> {100, 10}
+        # Production limits
+        _ -> {3, 5}
       end
 
     opts = [

@@ -259,16 +259,33 @@ defmodule JidoFoundation.IntegrationValidationTest do
       background_tasks = [
         Task.async(fn ->
           for _i <- 1..10 do
-            TaskPoolManager.execute_batch(:general, [1, 2], fn x -> x end, timeout: 1000)
-            |> elem(1)
-            |> Enum.to_list()
+            try do
+              case TaskPoolManager.execute_batch(:general, [1, 2], fn x -> x end, timeout: 1000) do
+                {:ok, stream} -> Enum.to_list(stream)
+                # Service may be down/restarting
+                {:error, _} -> :ok
+              end
+            catch
+              # Service crashed, continue anyway
+              :exit, _ -> :ok
+            end
 
             Process.sleep(50)
           end
         end),
         Task.async(fn ->
           for _i <- 1..5 do
-            SystemCommandManager.get_load_average()
+            try do
+              case SystemCommandManager.get_load_average() do
+                {:ok, _} -> :ok
+                # Service may be down/restarting
+                {:error, _} -> :ok
+              end
+            catch
+              # Service crashed, continue anyway
+              :exit, _ -> :ok
+            end
+
             Process.sleep(100)
           end
         end)

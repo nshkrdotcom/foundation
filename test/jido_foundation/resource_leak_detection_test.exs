@@ -13,6 +13,7 @@ defmodule JidoFoundation.ResourceLeakDetectionTest do
   import Foundation.AsyncTestHelpers
 
   @moduletag :resource_testing
+  @moduletag :slow
   @moduletag timeout: 60_000
 
   defmodule ResourceMonitor do
