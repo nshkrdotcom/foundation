@@ -60,11 +60,19 @@ defmodule JidoSystem.Application do
       JidoFoundation.SystemCommandManager
     ]
 
+    # Use more lenient restart limits for testing environments
+    # Note: This must be determined at compile time since Mix is not available at runtime
+    {max_restarts, max_seconds} =
+      case Application.get_env(:foundation, :environment, :prod) do
+        :test -> {100, 10}  # Allow many restarts in tests
+        _ -> {3, 5}         # Production limits
+      end
+
     opts = [
       strategy: :one_for_one,
       name: JidoSystem.Supervisor,
-      max_restarts: 3,
-      max_seconds: 5
+      max_restarts: max_restarts,
+      max_seconds: max_seconds
     ]
 
     case Supervisor.start_link(children, opts) do

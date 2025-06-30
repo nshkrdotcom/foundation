@@ -14,6 +14,28 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
     SystemCommandManager
   }
 
+  import Foundation.AsyncTestHelpers
+
+  # Setup helper to ensure services are running
+  defp ensure_service_running(service_name, timeout \\ 5000) do
+    case Process.whereis(service_name) do
+      pid when is_pid(pid) ->
+        pid
+
+      nil ->
+        # Wait for the service to restart
+        wait_for(
+          fn ->
+            case Process.whereis(service_name) do
+              pid when is_pid(pid) -> pid
+              nil -> nil
+            end
+          end,
+          timeout
+        )
+    end
+  end
+
   @moduletag :supervision_testing
   @moduletag timeout: 30_000
 
@@ -43,8 +65,8 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
 
   describe "JidoFoundation.TaskPoolManager crash recovery" do
     test "TaskPoolManager restarts after crash and maintains functionality" do
-      # Get initial TaskPoolManager pid
-      initial_pid = Process.whereis(JidoFoundation.TaskPoolManager)
+      # Ensure TaskPoolManager is running and get its pid
+      initial_pid = ensure_service_running(JidoFoundation.TaskPoolManager)
       assert is_pid(initial_pid), "TaskPoolManager should be running"
 
       # Verify it's working before crash
@@ -129,7 +151,7 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
 
   describe "JidoFoundation.SystemCommandManager crash recovery" do
     test "SystemCommandManager restarts after crash and maintains functionality" do
-      initial_pid = Process.whereis(JidoFoundation.SystemCommandManager)
+      initial_pid = ensure_service_running(JidoFoundation.SystemCommandManager)
       assert is_pid(initial_pid), "SystemCommandManager should be running"
 
       # Test functionality before crash
@@ -181,7 +203,7 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
 
   describe "JidoFoundation.CoordinationManager crash recovery" do
     test "CoordinationManager restarts after crash and maintains functionality" do
-      initial_pid = Process.whereis(JidoFoundation.CoordinationManager)
+      initial_pid = ensure_service_running(JidoFoundation.CoordinationManager)
       assert is_pid(initial_pid), "CoordinationManager should be running"
 
       # Kill the process
@@ -203,7 +225,7 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
 
   describe "JidoFoundation.SchedulerManager crash recovery" do
     test "SchedulerManager restarts after crash and maintains functionality" do
-      initial_pid = Process.whereis(JidoFoundation.SchedulerManager)
+      initial_pid = ensure_service_running(JidoFoundation.SchedulerManager)
       assert is_pid(initial_pid), "SchedulerManager should be running"
 
       # Kill the process

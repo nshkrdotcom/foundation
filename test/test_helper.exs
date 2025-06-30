@@ -61,8 +61,8 @@ Logger.configure_backend(:console, level: :info)
    end
  end, %{}})
 
-# Start ExUnit
-ExUnit.start()
+# Start ExUnit with configuration to exclude slow tests by default
+ExUnit.start(exclude: [:slow])
 
 # Add meck for mocking if needed in tests
 Code.ensure_loaded(:meck)

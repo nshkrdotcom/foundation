@@ -395,7 +395,9 @@ defmodule JidoFoundation.TaskPoolManager do
 
     # First, try to stop any existing supervisor with this name
     case Process.whereis(supervisor_name) do
-      nil -> :ok
+      nil ->
+        :ok
+
       pid when is_pid(pid) ->
         try do
           DynamicSupervisor.stop(pid, :shutdown, 1000)
@@ -415,7 +417,9 @@ defmodule JidoFoundation.TaskPoolManager do
 
         # Clean up any existing Task.Supervisor with this name
         case Process.whereis(task_supervisor_name) do
-          nil -> :ok
+          nil ->
+            :ok
+
           pid when is_pid(pid) ->
             try do
               Supervisor.stop(pid, :shutdown, 1000)

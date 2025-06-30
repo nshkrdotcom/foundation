@@ -189,11 +189,12 @@ defmodule JidoFoundation.ResourceLeakDetectionTest do
         _task_refs =
           for i <- 1..5 do
             case TaskPoolManager.execute_task(:general, fn ->
-              # Quick computation instead of sleep
-              i * 100
-            end) do
+                   # Quick computation instead of sleep
+                   i * 100
+                 end) do
               {:ok, task} -> task
-              {:error, _} -> nil  # Pool not available
+              # Pool not available
+              {:error, _} -> nil
             end
           end
 
@@ -205,14 +206,21 @@ defmodule JidoFoundation.ResourceLeakDetectionTest do
         wait_for(fn -> Process.whereis(JidoFoundation.TaskPoolManager) end, 3000)
 
         # Wait for service restart instead of trying to await dead tasks
-        new_pid = wait_for(fn ->
-          case Process.whereis(JidoFoundation.TaskPoolManager) do
-            ^task_pool_pid -> nil  # Still old PID
-            nil -> nil  # Process dead
-            pid when is_pid(pid) -> pid  # New PID
-          end
-        end, 3000)
-        
+        new_pid =
+          wait_for(
+            fn ->
+              case Process.whereis(JidoFoundation.TaskPoolManager) do
+                # Still old PID
+                ^task_pool_pid -> nil
+                # Process dead
+                nil -> nil
+                # New PID
+                pid when is_pid(pid) -> pid
+              end
+            end,
+            3000
+          )
+
         assert is_pid(new_pid)
         assert new_pid != task_pool_pid
       end
@@ -220,13 +228,16 @@ defmodule JidoFoundation.ResourceLeakDetectionTest do
       # Cleanup and check
       :erlang.garbage_collect()
       # Wait for cleanup to complete
-      wait_for(fn -> 
-        # Verify system is stable by checking service responsiveness
-        case TaskPoolManager.get_all_stats() do
-          stats when is_map(stats) -> true
-          _ -> nil
-        end
-      end, 2000)
+      wait_for(
+        fn ->
+          # Verify system is stable by checking service responsiveness
+          case TaskPoolManager.get_all_stats() do
+            stats when is_map(stats) -> true
+            _ -> nil
+          end
+        end,
+        2000
+      )
 
       final_snapshot = ResourceMonitor.snapshot()
 
@@ -271,17 +282,23 @@ defmodule JidoFoundation.ResourceLeakDetectionTest do
 
       :erlang.garbage_collect()
       # Wait for cleanup instead of sleep
-      wait_for(fn -> 
-        case TaskPoolManager.get_all_stats() do
-          stats when is_map(stats) -> true
-          _ -> nil
-        end
-      end, 1000)
+      wait_for(
+        fn ->
+          case TaskPoolManager.get_all_stats() do
+            stats when is_map(stats) -> true
+            _ -> nil
+          end
+        end,
+        1000
+      )
 
       final_snapshot = ResourceMonitor.snapshot()
-      leak_results = ResourceMonitor.compare_snapshots(initial, final_snapshot, %{
-        process_count: 50  # Higher tolerance for pool creation test  
-      })
+
+      leak_results =
+        ResourceMonitor.compare_snapshots(initial, final_snapshot, %{
+          # Higher tolerance for pool creation test  
+          process_count: 50
+        })
 
       refute leak_results.has_leaks, "Resource leaks detected: #{inspect(leak_results.details)}"
     end
@@ -293,7 +310,8 @@ defmodule JidoFoundation.ResourceLeakDetectionTest do
       for _i <- 1..50 do
         case SystemCommandManager.get_load_average() do
           {:ok, _load} -> :ok
-          {:error, _} -> :ok  # Command may not be available
+          # Command may not be available
+          {:error, _} -> :ok
         end
 
         # Test memory info as well
@@ -308,13 +326,16 @@ defmodule JidoFoundation.ResourceLeakDetectionTest do
 
       :erlang.garbage_collect()
       # Wait for any async cleanup to complete
-      wait_for(fn -> 
-        # Check that command manager is still responsive
-        case SystemCommandManager.get_stats() do
-          stats when is_map(stats) -> true
-          _ -> nil
-        end
-      end, 1000)
+      wait_for(
+        fn ->
+          # Check that command manager is still responsive
+          case SystemCommandManager.get_stats() do
+            stats when is_map(stats) -> true
+            _ -> nil
+          end
+        end,
+        1000
+      )
 
       final_snapshot = ResourceMonitor.snapshot()
       leak_results = ResourceMonitor.compare_snapshots(initial, final_snapshot)
@@ -329,7 +350,8 @@ defmodule JidoFoundation.ResourceLeakDetectionTest do
         for _i <- 1..5 do
           case SystemCommandManager.get_load_average() do
             {:ok, _load} -> :ok
-            {:error, _} -> :ok  # Command may not be available
+            # Command may not be available
+            {:error, _} -> :ok
           end
         end
 
@@ -499,6 +521,7 @@ defmodule JidoFoundation.ResourceLeakDetectionTest do
                   nil ->
                     acc
                 end
+
               nil ->
                 # Process is dead
                 acc

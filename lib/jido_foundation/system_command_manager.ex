@@ -333,14 +333,31 @@ defmodule JidoFoundation.SystemCommandManager do
     if command_ref do
       case Map.get(state.active_commands, command_ref) do
         %{from: from} ->
-          GenServer.reply(from, {:error, {:process_exit, reason}})
+          # Only treat as error if process didn't exit normally
+          # Normal exits usually mean the command completed successfully
+          case reason do
+            :normal ->
+              # Process completed normally, likely already sent result
+              # Don't reply with error, just clean up
+              :ok
+
+            _other_reason ->
+              # Process crashed or was killed, this is an actual error
+              GenServer.reply(from, {:error, {:process_exit, reason}})
+          end
 
         _ ->
           :ok
       end
 
       new_active_commands = Map.delete(state.active_commands, command_ref)
-      new_stats = Map.update!(state.stats, :commands_failed, &(&1 + 1))
+
+      # Only increment failed count for abnormal exits
+      new_stats =
+        case reason do
+          :normal -> state.stats
+          _other -> Map.update!(state.stats, :commands_failed, &(&1 + 1))
+        end
 
       new_state = %{
         state
@@ -384,6 +401,8 @@ defmodule JidoFoundation.SystemCommandManager do
       command_ref = make_ref()
 
       # Spawn supervised command execution
+      manager_pid = self()
+
       cmd_pid =
         spawn_link(fn ->
           result =
@@ -394,7 +413,7 @@ defmodule JidoFoundation.SystemCommandManager do
                 {:error, {kind, reason}}
             end
 
-          send(self(), {:command_result, command_ref, {:ok, result}, cache_key, cache_ttl})
+          send(manager_pid, {:command_result, command_ref, {:ok, result}, cache_key, cache_ttl})
         end)
 
       # Monitor the command process

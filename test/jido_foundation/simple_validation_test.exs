@@ -88,24 +88,34 @@ defmodule JidoFoundation.SimpleValidationTest do
       Process.exit(initial_pid, :kill)
 
       # Wait for restart using proper async helpers
-      new_pid = wait_for(fn ->
-        case Process.whereis(JidoFoundation.TaskPoolManager) do
-          ^initial_pid -> nil  # Still the old PID
-          nil -> nil  # Process dead
-          pid when is_pid(pid) -> pid  # New PID
-        end
-      end, 5000)
-      
+      new_pid =
+        wait_for(
+          fn ->
+            case Process.whereis(JidoFoundation.TaskPoolManager) do
+              # Still the old PID
+              ^initial_pid -> nil
+              # Process dead
+              nil -> nil
+              # New PID
+              pid when is_pid(pid) -> pid
+            end
+          end,
+          5000
+        )
+
       assert is_pid(new_pid)
       assert new_pid != initial_pid
 
       # Wait for general pool to be ready
-      wait_for(fn ->
-        case TaskPoolManager.get_pool_stats(:general) do
-          {:ok, _stats} -> true
-          {:error, _} -> nil
-        end
-      end, 3000)
+      wait_for(
+        fn ->
+          case TaskPoolManager.get_pool_stats(:general) do
+            {:ok, _stats} -> true
+            {:error, _} -> nil
+          end
+        end,
+        3000
+      )
 
       # Verify it's functional
       stats = TaskPoolManager.get_all_stats()
@@ -123,13 +133,20 @@ defmodule JidoFoundation.SimpleValidationTest do
       Process.exit(initial_pid, :kill)
 
       # Wait for restart using proper async helpers
-      new_pid = wait_for(fn ->
-        case Process.whereis(JidoFoundation.SystemCommandManager) do
-          ^initial_pid -> nil  # Still the old PID
-          nil -> nil  # Process dead
-          pid when is_pid(pid) -> pid  # New PID
-        end
-      end, 5000)
+      new_pid =
+        wait_for(
+          fn ->
+            case Process.whereis(JidoFoundation.SystemCommandManager) do
+              # Still the old PID
+              ^initial_pid -> nil
+              # Process dead
+              nil -> nil
+              # New PID
+              pid when is_pid(pid) -> pid
+            end
+          end,
+          5000
+        )
 
       assert is_pid(new_pid)
       assert new_pid != initial_pid
