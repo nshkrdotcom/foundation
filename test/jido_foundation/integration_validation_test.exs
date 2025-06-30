@@ -12,13 +12,11 @@ defmodule JidoFoundation.IntegrationValidationTest do
   alias JidoFoundation.{
     TaskPoolManager,
     SystemCommandManager,
-    CoordinationManager,
-    SchedulerManager,
     Bridge
   }
 
-  @tag :integration_testing
-  @tag timeout: 60_000
+  @moduletag :integration_testing
+  @moduletag timeout: 60_000
 
   describe "Cross-supervisor integration" do
     test "Bridge integrates properly with all Foundation services" do
@@ -178,7 +176,7 @@ defmodule JidoFoundation.IntegrationValidationTest do
           # Simulate monitoring data processing
           %{
             value: value,
-            status: if value > 1.0, do: :warning, else: :ok,
+            status: (if value > 1.0, do: :warning, else: :ok),
             timestamp: DateTime.utc_now()
           }
         end,
