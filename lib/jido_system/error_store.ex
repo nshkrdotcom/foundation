@@ -188,7 +188,7 @@ defmodule JidoSystem.ErrorStore do
         Map.get(new_history, agent_id, []) != []
       end)
 
-    # Schedule next cleanup  
+    # Schedule next cleanup
     # 1 minute
     cleanup_interval = 60_000
     timer = Process.send_after(self(), :cleanup, cleanup_interval)

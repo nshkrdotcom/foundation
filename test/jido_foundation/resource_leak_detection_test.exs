@@ -297,7 +297,7 @@ defmodule JidoFoundation.ResourceLeakDetectionTest do
 
       leak_results =
         ResourceMonitor.compare_snapshots(initial, final_snapshot, %{
-          # Higher tolerance for pool creation test  
+          # Higher tolerance for pool creation test
           process_count: 50
         })
 

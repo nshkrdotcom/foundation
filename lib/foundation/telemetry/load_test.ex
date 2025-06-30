@@ -19,7 +19,7 @@ defmodule Foundation.Telemetry.LoadTest do
 
       defmodule MyLoadTest do
         use Foundation.Telemetry.LoadTest
-        
+
         @impl true
         def scenarios do
           [
@@ -42,9 +42,9 @@ defmodule Foundation.Telemetry.LoadTest do
           ]
         end
       end
-      
+
       # Run the load test
-      Foundation.Telemetry.LoadTest.run(MyLoadTest, 
+      Foundation.Telemetry.LoadTest.run(MyLoadTest,
         duration: :timer.seconds(60),
         concurrency: 100,
         ramp_up: :timer.seconds(10)
@@ -169,7 +169,7 @@ defmodule Foundation.Telemetry.LoadTest do
   ## Example
 
       Foundation.Telemetry.LoadTest.run_simple(
-        fn _ctx -> 
+        fn _ctx ->
           # Your test code here
           :ok
         end,

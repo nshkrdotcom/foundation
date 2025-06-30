@@ -17,11 +17,11 @@ defmodule Foundation.TelemetryTestHelpers do
   ## Example Usage
 
       use Foundation.TelemetryTestHelpers
-      
+
       test "service emits lifecycle events" do
         with_telemetry_capture do
           {:ok, _pid} = MyService.start_link()
-          
+
           assert_telemetry_event [:foundation, :service, :started],
             %{startup_time: _},
             %{service: MyService}
@@ -48,13 +48,13 @@ defmodule Foundation.TelemetryTestHelpers do
   ## Options
     - `:events` - List of event patterns to capture (default: all)
     - `:timeout` - Maximum time to wait for events
-    
+
   ## Example
 
       {events, result} = with_telemetry_capture events: [[:foundation, :_, :_]] do
         MyService.perform_operation()
       end
-      
+
       assert length(events) == 3
   """
   defmacro with_telemetry_capture(opts \\ [], do: block) do
@@ -242,7 +242,7 @@ defmodule Foundation.TelemetryTestHelpers do
         %{error_count: count} when count > 5,
         %{service: :payment_gateway},
         timeout: 1000 do
-          
+
         CircuitBreaker.trip(:payment_gateway)
       end
   """
@@ -391,7 +391,7 @@ defmodule Foundation.TelemetryTestHelpers do
         [:foundation, :task, :checkpoint],
         [:foundation, :task, :completed]
       ], timeout: 3000
-      
+
       assert length(events) == 3
   """
   def wait_for_telemetry_events(event_patterns, opts \\ []) do
@@ -564,7 +564,7 @@ defmodule Foundation.TelemetryTestHelpers do
       metrics = measure_telemetry_performance [:foundation, :db, :query] do
         Database.complex_query()
       end
-      
+
       assert metrics.duration < 100_000 # microseconds
       assert metrics.count == 1
   """

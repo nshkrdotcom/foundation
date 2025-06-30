@@ -27,8 +27,8 @@ defmodule JidoFoundation.CoordinationManager do
 
       # Route a coordination message (supervised)
       JidoFoundation.CoordinationManager.coordinate_agents(
-        sender_pid, 
-        receiver_pid, 
+        sender_pid,
+        receiver_pid,
         %{action: :collaborate, data: %{}}
       )
 
@@ -80,7 +80,7 @@ defmodule JidoFoundation.CoordinationManager do
   ## Parameters
 
   - `sender_agent` - PID of the sending agent
-  - `receiver_agent` - PID of the receiving agent  
+  - `receiver_agent` - PID of the receiving agent
   - `message` - Coordination message payload
 
   ## Returns

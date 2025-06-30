@@ -9,7 +9,7 @@ defmodule Foundation.Telemetry.Span do
   ## Usage
 
       import Foundation.Telemetry.Span
-      
+
       with_span :cache_operation, %{cache_key: "user:123"} do
         # Your code here
         {:ok, result}
@@ -41,7 +41,7 @@ defmodule Foundation.Telemetry.Span do
       with_span :database_query, %{query: "SELECT * FROM users"} do
         Database.query("SELECT * FROM users")
       end
-      
+
       # With explicit status
       with_span :api_call, %{endpoint: "/users"} do
         case HTTP.get("/users") do

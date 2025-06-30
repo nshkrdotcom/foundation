@@ -1,5 +1,5 @@
 # Telemetry Performance Comparison Script
-# 
+#
 # This script compares the performance of telemetry-based tests
 # vs traditional Process.sleep-based tests
 

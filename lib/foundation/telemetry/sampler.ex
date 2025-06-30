@@ -20,13 +20,13 @@ defmodule Foundation.Telemetry.Sampler do
         enabled: true,
         default_strategy: :random,
         default_rate: 0.1,  # Sample 10% by default
-        
+
         event_configs: [
           {[:foundation, :cache, :get, :stop], strategy: :random, rate: 0.01},  # 1% for high-volume
           {[:foundation, :span, :stop], strategy: :adaptive, target_rate: 1000},  # Max 1000/sec
           {[:foundation, :load_test, :scenario, :stop], strategy: :rate_limited, max_per_second: 5000}
         ]
-      
+
       # Or configure at runtime
       Foundation.Telemetry.Sampler.configure_event(
         [:my_app, :high_volume, :event],

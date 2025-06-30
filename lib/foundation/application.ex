@@ -35,7 +35,7 @@ defmodule Foundation.Application do
 
     # Foundation supervision tree with service layer architecture
     children = [
-      # Task supervisor for Foundation async operations  
+      # Task supervisor for Foundation async operations
       {Task.Supervisor, name: Foundation.TaskSupervisor},
 
       # Performance monitor for metrics collection

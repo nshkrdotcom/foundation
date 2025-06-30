@@ -190,7 +190,7 @@ defmodule JidoSystem.Agents.TaskAgent do
               # Increment error count for failed task processing
               error_count =
                 case error_details do
-                  # Count validation failures  
+                  # Count validation failures
                   {:validation_failed, _} -> updated_agent.state.error_count + 1
                   # Count unsupported task types
                   {:unsupported_task_type, _} -> updated_agent.state.error_count + 1
@@ -205,7 +205,7 @@ defmodule JidoSystem.Agents.TaskAgent do
                   current_task: nil
               }
 
-              # If we have too many errors, pause processing  
+              # If we have too many errors, pause processing
               if new_state_base.error_count >= 10 do
                 Logger.warning("TaskAgent #{agent.id} has too many errors, pausing")
                 %{new_state_base | status: :paused}

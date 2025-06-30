@@ -9,20 +9,20 @@ defmodule Foundation.Telemetry.SampledEvents do
 
       defmodule MyModule do
         use Foundation.Telemetry.SampledEvents, prefix: [:my_app]
-        
+
         def process_request(request) do
           emit_start(:request_processing, %{request_id: request.id})
-          
+
           result = do_processing(request)
-          
-          emit_stop(:request_processing, 
+
+          emit_stop(:request_processing,
             %{request_id: request.id},
             %{status: :success}
           )
-          
+
           result
         end
-        
+
         def batch_operation(items) do
           # Use span for automatic start/stop
           span :batch_processing, %{batch_size: length(items)} do
@@ -68,7 +68,7 @@ defmodule Foundation.Telemetry.SampledEvents do
 
       start_time = System.monotonic_time()
       # ... do work ...
-      emit_stop(:operation, 
+      emit_stop(:operation,
         %{duration: System.monotonic_time() - start_time},
         %{user_id: 123, status: :success}
       )
@@ -87,7 +87,7 @@ defmodule Foundation.Telemetry.SampledEvents do
 
   ## Example
 
-      emit_event(:cache_hit, 
+      emit_event(:cache_hit,
         %{latency: 150},
         %{key: "user:123", hit: true}
       )

@@ -18,7 +18,7 @@ defmodule JidoSystem.Application do
 
       Foundation.Supervisor
       ├── Foundation.Services.Supervisor
-      ├── MABEAM.Supervisor  
+      ├── MABEAM.Supervisor
       └── JidoSystem.Supervisor  # This module
           ├── JidoSystem.AgentSupervisor (DynamicSupervisor)
           ├── JidoSystem.ErrorStore
