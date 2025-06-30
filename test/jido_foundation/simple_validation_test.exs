@@ -9,6 +9,9 @@ defmodule JidoFoundation.SimpleValidationTest do
   require Logger
 
   alias JidoFoundation.{TaskPoolManager, SystemCommandManager}
+  import Foundation.AsyncTestHelpers
+
+  # Remove broken setup that causes infinite waits
 
   describe "Basic service availability" do
     test "All Foundation services are running and registered" do
@@ -84,17 +87,32 @@ defmodule JidoFoundation.SimpleValidationTest do
       # Kill the process
       Process.exit(initial_pid, :kill)
 
-      # Wait for restart
-      Process.sleep(500)
-
-      # Verify it restarted
-      new_pid = Process.whereis(JidoFoundation.TaskPoolManager)
+      # Wait for restart using proper async helpers
+      new_pid = wait_for(fn ->
+        case Process.whereis(JidoFoundation.TaskPoolManager) do
+          ^initial_pid -> nil  # Still the old PID
+          nil -> nil  # Process dead
+          pid when is_pid(pid) -> pid  # New PID
+        end
+      end, 5000)
+      
       assert is_pid(new_pid)
       assert new_pid != initial_pid
+
+      # Wait for general pool to be ready
+      wait_for(fn ->
+        case TaskPoolManager.get_pool_stats(:general) do
+          {:ok, _stats} -> true
+          {:error, _} -> nil
+        end
+      end, 3000)
 
       # Verify it's functional
       stats = TaskPoolManager.get_all_stats()
       assert is_map(stats)
+
+      # Verify general pool is available
+      {:ok, _general_stats} = TaskPoolManager.get_pool_stats(:general)
     end
 
     test "SystemCommandManager restarts after being killed" do
@@ -104,11 +122,15 @@ defmodule JidoFoundation.SimpleValidationTest do
       # Kill the process
       Process.exit(initial_pid, :kill)
 
-      # Wait for restart
-      Process.sleep(500)
+      # Wait for restart using proper async helpers
+      new_pid = wait_for(fn ->
+        case Process.whereis(JidoFoundation.SystemCommandManager) do
+          ^initial_pid -> nil  # Still the old PID
+          nil -> nil  # Process dead
+          pid when is_pid(pid) -> pid  # New PID
+        end
+      end, 5000)
 
-      # Verify it restarted
-      new_pid = Process.whereis(JidoFoundation.SystemCommandManager)
       assert is_pid(new_pid)
       assert new_pid != initial_pid
 
@@ -165,6 +187,7 @@ defmodule JidoFoundation.SimpleValidationTest do
               {:ok, length(stream_results)}
 
             {:error, reason} ->
+              Logger.warning("TaskPoolManager operation failed: #{inspect(reason)}")
               {:error, reason}
           end
         end

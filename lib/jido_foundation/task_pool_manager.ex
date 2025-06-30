@@ -393,6 +393,17 @@ defmodule JidoFoundation.TaskPoolManager do
   defp start_pool_supervisor(pool_name, _config) do
     supervisor_name = :"TaskPool_#{pool_name}_Supervisor"
 
+    # First, try to stop any existing supervisor with this name
+    case Process.whereis(supervisor_name) do
+      nil -> :ok
+      pid when is_pid(pid) ->
+        try do
+          DynamicSupervisor.stop(pid, :shutdown, 1000)
+        catch
+          _, _ -> Process.exit(pid, :kill)
+        end
+    end
+
     DynamicSupervisor.start_link(
       strategy: :one_for_one,
       name: supervisor_name
@@ -401,6 +412,17 @@ defmodule JidoFoundation.TaskPoolManager do
       {:ok, supervisor_pid} ->
         # Start the actual Task.Supervisor under the DynamicSupervisor
         task_supervisor_name = :"TaskSupervisor_#{pool_name}"
+
+        # Clean up any existing Task.Supervisor with this name
+        case Process.whereis(task_supervisor_name) do
+          nil -> :ok
+          pid when is_pid(pid) ->
+            try do
+              Supervisor.stop(pid, :shutdown, 1000)
+            catch
+              _, _ -> Process.exit(pid, :kill)
+            end
+        end
 
         child_spec = {Task.Supervisor, name: task_supervisor_name}
 
