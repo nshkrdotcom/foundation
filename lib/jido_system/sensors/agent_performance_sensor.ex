@@ -293,7 +293,7 @@ defmodule JidoSystem.Sensors.AgentPerformanceSensor do
         status: Keyword.get(process_info, :status, :unknown),
 
         # Performance indicators
-        is_responsive: is_process_responsive(pid),
+        is_responsive: process_responsive?(pid),
         uptime: calculate_agent_uptime(metadata),
 
         # Derived metrics
@@ -332,7 +332,7 @@ defmodule JidoSystem.Sensors.AgentPerformanceSensor do
     end
   end
 
-  defp is_process_responsive(pid) do
+  defp process_responsive?(pid) do
     try do
       # Simple responsiveness check
       ref = Process.monitor(pid)

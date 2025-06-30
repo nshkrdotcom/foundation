@@ -169,9 +169,7 @@ defmodule JidoFoundation.SchedulerManager do
   @impl true
   def handle_call({:register_periodic, agent_pid, schedule_id, interval, message}, _from, state) do
     # Check if agent is alive
-    unless Process.alive?(agent_pid) do
-      {:reply, {:error, :agent_not_alive}, state}
-    else
+    if Process.alive?(agent_pid) do
       # Monitor agent if not already monitored
       new_state = ensure_monitored(agent_pid, state)
 
@@ -211,6 +209,8 @@ defmodule JidoFoundation.SchedulerManager do
       )
 
       {:reply, :ok, final_state}
+    else
+      {:reply, {:error, :agent_not_alive}, state}
     end
   end
 

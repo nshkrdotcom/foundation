@@ -193,9 +193,7 @@ defmodule JidoFoundation.SystemCommandManager do
   @impl true
   def handle_call({:execute_command, command, args, opts}, from, state) do
     # Check if command is allowed
-    if command not in state.config.allowed_commands do
-      {:reply, {:error, {:command_not_allowed, command}}, state}
-    else
+    if command in state.config.allowed_commands do
       timeout = Keyword.get(opts, :timeout, state.config.default_timeout)
       cache_ttl = Keyword.get(opts, :cache_ttl, state.config.cache_ttl)
       use_cache = Keyword.get(opts, :use_cache, true)
@@ -217,6 +215,8 @@ defmodule JidoFoundation.SystemCommandManager do
       else
         execute_command_async(command, args, cache_key, cache_ttl, timeout, from, state)
       end
+    else
+      {:reply, {:error, {:command_not_allowed, command}}, state}
     end
   end
 

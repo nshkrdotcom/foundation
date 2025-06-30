@@ -438,7 +438,7 @@ defmodule Foundation.Telemetry.LoadTest.Collector do
 
   defp format_scenario_summary(scenarios) do
     scenarios
-    |> Enum.map(fn {name, stats} ->
+    |> Enum.map_join("\n", fn {name, stats} ->
       """
       - #{name}:
         Requests: #{stats.total_requests}
@@ -448,6 +448,5 @@ defmodule Foundation.Telemetry.LoadTest.Collector do
         P95 Latency: #{stats.latency.p95_us}μs
       """
     end)
-    |> Enum.join("\n")
   end
 end

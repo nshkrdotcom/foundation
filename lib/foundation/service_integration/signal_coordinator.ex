@@ -499,7 +499,7 @@ defmodule Foundation.ServiceIntegration.SignalCoordinator do
 
     # Check for signal bus overload
     issues =
-      if is_signal_bus_overloaded?() do
+      if signal_bus_overloaded?() do
         [{:signal_bus_overload, "Signal bus message queue is large"} | issues]
       else
         issues
@@ -524,7 +524,7 @@ defmodule Foundation.ServiceIntegration.SignalCoordinator do
     end
   end
 
-  defp is_signal_bus_overloaded? do
+  defp signal_bus_overloaded? do
     case Process.whereis(Foundation.Services.SignalBus) do
       nil ->
         false
