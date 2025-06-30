@@ -52,7 +52,7 @@ defmodule JidoSystem.Agents.FoundationAgent do
         {:ok, Jido.Agent.t()} | {:error, term()}
       
       @spec on_error(Jido.Agent.t(), term()) :: 
-        {:ok, Jido.Agent.t(), list()} | {:error, term()}
+        {:ok, Jido.Agent.t()} | {:error, term()}
       
       @spec shutdown(term(), term()) :: 
         {:ok, term()} | {:error, term()}
@@ -232,7 +232,7 @@ defmodule JidoSystem.Agents.FoundationAgent do
 
         # Attempt recovery by resetting to idle state
         new_state = Map.put(agent.state, :status, :recovering)
-        {:ok, %{agent | state: new_state}, []}
+        {:ok, %{agent | state: new_state}}
       end
 
       @impl true

@@ -114,9 +114,6 @@ defmodule JidoSystem.Agents.TaskAgent do
           new_state = %{agent.state | status: :processing}
           {:ok, %{updated_agent | state: new_state}}
         end
-
-      error ->
-        error
     end
   end
 
@@ -193,16 +190,13 @@ defmodule JidoSystem.Agents.TaskAgent do
           end
 
         {:ok, %{updated_agent | state: new_state}}
-
-      error ->
-        error
     end
   end
 
   @impl true
   def on_error(agent, error) do
     case super(agent, error) do
-      {:ok, updated_agent, directives} ->
+      {:ok, updated_agent} ->
         # Additional task-specific error handling
         # Don't increment error count for certain expected errors
         should_count_error =
@@ -224,7 +218,7 @@ defmodule JidoSystem.Agents.TaskAgent do
         if new_state.error_count >= 10 and should_count_error do
           Logger.warning("TaskAgent #{agent.id} has too many errors, pausing")
           paused_state = %{new_state | status: :paused}
-          {:ok, %{updated_agent | state: paused_state}, directives}
+          {:ok, %{updated_agent | state: paused_state}}
         else
           # Set status to idle after error handling
           final_state =
@@ -235,11 +229,8 @@ defmodule JidoSystem.Agents.TaskAgent do
               new_state
             end
 
-          {:ok, %{updated_agent | state: final_state}, directives}
+          {:ok, %{updated_agent | state: final_state}}
         end
-
-      error ->
-        error
     end
   end
 

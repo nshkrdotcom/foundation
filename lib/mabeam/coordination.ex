@@ -69,7 +69,7 @@ defmodule MABEAM.Coordination do
       {:ok, agents} ->
         participant_ids = Enum.map(agents, fn {id, _pid, _metadata} -> id end)
 
-        Logger.info(
+        Logger.warning(
           "Starting #{coordination_type} coordination with #{length(participant_ids)} #{capability} agents"
         )
 
