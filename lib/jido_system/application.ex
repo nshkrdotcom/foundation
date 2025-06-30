@@ -51,7 +51,13 @@ defmodule JidoSystem.Application do
       JidoFoundation.CoordinationManager,
 
       # Scheduler manager (OTP compliant replacement for agent self-scheduling)
-      JidoFoundation.SchedulerManager
+      JidoFoundation.SchedulerManager,
+
+      # Task pool manager (OTP compliant replacement for Task.async_stream)
+      JidoFoundation.TaskPoolManager,
+
+      # System command manager (OTP compliant replacement for direct System.cmd usage)
+      JidoFoundation.SystemCommandManager
     ]
 
     opts = [

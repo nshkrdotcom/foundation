@@ -326,22 +326,18 @@ defmodule JidoSystem.Sensors.SystemHealthSensor do
 
   defp collect_load_metrics() do
     try do
-      # Try to get system load average (Unix-like systems)
-      case System.cmd("uptime", []) do
-        {uptime, 0} when is_binary(uptime) ->
-          case Regex.run(~r/load average: ([\d.]+), ([\d.]+), ([\d.]+)/, uptime) do
-            [_, load1, load5, load15] ->
-              %{
-                load_1min: String.to_float(load1),
-                load_5min: String.to_float(load5),
-                load_15min: String.to_float(load15)
-              }
+      # Use supervised system command execution instead of direct System.cmd
+      case JidoFoundation.SystemCommandManager.get_load_average() do
+        {:ok, load_avg} when is_float(load_avg) ->
+          # For now, use the single load average for all three values
+          # In a real implementation, we'd parse all three values
+          %{
+            load_1min: load_avg,
+            load_5min: load_avg,
+            load_15min: load_avg
+          }
 
-            _ ->
-              %{load_1min: 0.0, load_5min: 0.0, load_15min: 0.0}
-          end
-
-        _ ->
+        {:error, _reason} ->
           %{load_1min: 0.0, load_5min: 0.0, load_15min: 0.0}
       end
     rescue

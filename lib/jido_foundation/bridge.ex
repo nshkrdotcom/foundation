@@ -891,22 +891,33 @@ defmodule JidoFoundation.Bridge do
   def distributed_execute(capability, operation_fun, opts \\ [])
       when is_function(operation_fun, 1) do
     max_concurrency = Keyword.get(opts, :max_concurrency, System.schedulers_online())
+    timeout = Keyword.get(opts, :timeout, 30_000)
 
     with {:ok, agents} <- find_agents_by_capability(capability, opts) do
       agent_pids = Enum.map(agents, fn {_key, pid, _metadata} -> pid end)
 
-      results =
-        agent_pids
-        |> Task.async_stream(operation_fun,
-          max_concurrency: max_concurrency,
-          on_timeout: :kill_task
-        )
-        |> Enum.map(fn
-          {:ok, result} -> {:ok, result}
-          {:exit, reason} -> {:error, reason}
-        end)
+      # Use supervised task pool instead of Task.async_stream
+      case JidoFoundation.TaskPoolManager.execute_batch(
+        :agent_operations,
+        agent_pids,
+        operation_fun,
+        max_concurrency: max_concurrency,
+        timeout: timeout,
+        on_timeout: :kill_task
+      ) do
+        {:ok, stream} ->
+          results =
+            stream
+            |> Enum.map(fn
+              {:ok, result} -> {:ok, result}
+              {:exit, reason} -> {:error, reason}
+            end)
 
-      {:ok, results}
+          {:ok, results}
+
+        {:error, reason} ->
+          {:error, reason}
+      end
     end
   end
 end

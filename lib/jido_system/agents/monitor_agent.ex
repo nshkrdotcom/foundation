@@ -451,15 +451,12 @@ defmodule JidoSystem.Agents.MonitorAgent do
   end
 
   defp get_load_average() do
-    case System.cmd("uptime", []) do
-      {uptime, 0} when is_binary(uptime) ->
-        # Simple parsing - would need more robust implementation
-        case Regex.run(~r/load average: ([\d.]+)/, uptime) do
-          [_, load] -> String.to_float(load)
-          _ -> 0.0
-        end
+    # Use supervised system command execution instead of direct System.cmd
+    case JidoFoundation.SystemCommandManager.get_load_average() do
+      {:ok, load_avg} when is_float(load_avg) ->
+        load_avg
 
-      _ ->
+      {:error, _reason} ->
         0.0
     end
   rescue
