@@ -16,11 +16,8 @@ defmodule JidoSystem.Actions.UpdateErrorCount do
   require Logger
 
   @impl true
-  def run(params, context) do
+  def run(params, _context) do
     increment = params.increment
-    agent_id = Map.get(context, :agent_id, "unknown")
-    
-    Logger.warning("*** UpdateErrorCount action incrementing error count by #{increment} for agent #{agent_id}")
     
     # Return increment instruction to be processed by TaskAgent.on_after_run
     # The actual error count calculation happens in the agent's business logic

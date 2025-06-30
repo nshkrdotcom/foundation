@@ -120,8 +120,6 @@ defmodule JidoSystem.Agents.TaskAgent do
 
   @impl true
   def on_after_run(agent, result, directives) do
-    Logger.warning("*** TaskAgent.on_after_run called with result type: #{inspect(result, limit: 100)}")
-    
     case super(agent, result, directives) do
       {:ok, updated_agent} ->
         # Update task-specific metrics based on result
@@ -170,8 +168,6 @@ defmodule JidoSystem.Agents.TaskAgent do
               # Handle UpdateErrorCount result - increment error count and potentially pause
               current_count = updated_agent.state.error_count
               new_count = current_count + increment
-              Logger.warning("*** TaskAgent.on_after_run incrementing error count from #{current_count} to #{new_count}")
-              
               new_state_base = %{
                 updated_agent.state
                 | error_count: new_count,
@@ -237,10 +233,7 @@ defmodule JidoSystem.Agents.TaskAgent do
               end
 
               error_count = if should_count_error do
-                current_count = updated_agent.state.error_count
-                new_count = current_count + 1
-                Logger.warning("*** TaskAgent.on_after_run incrementing error count from #{current_count} to #{new_count} for #{error_type}")
-                new_count
+                updated_agent.state.error_count + 1
               else
                 updated_agent.state.error_count
               end
@@ -287,8 +280,6 @@ defmodule JidoSystem.Agents.TaskAgent do
 
   @impl true
   def on_error(agent, error) do
-    Logger.warning("*** TaskAgent.on_error called with error: #{inspect(error, limit: 100)}")
-    
     # Handle error counting as business logic through action flow, not supervision callbacks
     should_count_error =
       case error do
@@ -307,23 +298,18 @@ defmodule JidoSystem.Agents.TaskAgent do
         Process.sleep(100) # Let error processing complete
         
         try do
-          Logger.warning("*** Task process sending UpdateErrorCount to #{inspect(agent_pid)}")
-          
           instruction = Jido.Instruction.new!(%{
             action: JidoSystem.Actions.UpdateErrorCount,
             params: %{increment: 1}
           })
           
-          Logger.warning("*** Task process casting UpdateErrorCount instruction")
           Jido.Agent.Server.cast(agent_pid, instruction)
-          Logger.warning("*** Task process cast completed successfully")
         rescue
-          e ->
-            Logger.warning("*** Task process failed: #{inspect(e)}")
+          _e ->
+            # Silently handle cast failures - error counting is non-critical
+            :ok
         end
       end)
-      
-      Logger.warning("*** Started Task process for error count update")
     end
     
     # on_error is for cleanup and telemetry only, not state mutations
@@ -547,112 +533,5 @@ defmodule JidoSystem.Agents.TaskAgent do
     end
   end
 
-  @impl true  
-  def handle_cast({:continue_error_count_update}, state) do
-    Logger.warning("*** TaskAgent.handle_cast processing error count update")
-    current_agent = state.agent
-    
-    case Map.get(current_agent.state, :pending_error_count) do
-      nil ->
-        Logger.warning("*** No pending error count found")
-        {:noreply, state}
-        
-      new_count ->
-        Logger.warning("*** Processing pending error count: #{new_count}")
-        
-        # Update error count and check if we should pause
-        new_agent_state = %{current_agent.state | 
-          error_count: new_count, 
-          current_task: nil,
-          pending_error_count: nil  # Clear the pending count
-        }
-        
-        # If we have too many errors, pause processing
-        final_agent_state = if new_count >= 10 do
-          Logger.warning("TaskAgent #{current_agent.id} has too many errors (#{new_count}), pausing")
-          %{new_agent_state | status: :paused}
-        else
-          %{new_agent_state | status: :idle}
-        end
-        
-        updated_agent = %{current_agent | state: final_agent_state}
-        new_server_state = %{state | agent: updated_agent}
-        Logger.warning("*** TaskAgent.handle_cast completed, new error_count: #{updated_agent.state.error_count}")
-        {:noreply, new_server_state}
-    end
-  end
-
-  def handle_info({:trigger_error_count_continue}, state) do
-    Logger.warning("*** TaskAgent.handle_info triggered for error count continue")
-    
-    # Use proper GenServer continue pattern for state management
-    {:noreply, state, {:continue, :update_error_count}}
-  end
-
-  @impl true
-  def handle_continue(:update_error_count, state) do
-    Logger.warning("*** TaskAgent.handle_continue processing error count update")
-    current_agent = state.agent
-    
-    case Map.get(current_agent.state, :pending_error_count) do
-      nil ->
-        Logger.warning("*** No pending error count found")
-        {:noreply, state}
-        
-      new_count ->
-        Logger.warning("*** Processing pending error count: #{new_count}")
-        
-        # Update error count and check if we should pause
-        new_agent_state = %{current_agent.state | 
-          error_count: new_count, 
-          current_task: nil,
-          pending_error_count: nil  # Clear the pending count
-        }
-        
-        # If we have too many errors, pause processing
-        final_agent_state = if new_count >= 10 do
-          Logger.warning("TaskAgent #{current_agent.id} has too many errors (#{new_count}), pausing")
-          %{new_agent_state | status: :paused}
-        else
-          %{new_agent_state | status: :idle}
-        end
-        
-        updated_agent = %{current_agent | state: final_agent_state}
-        new_server_state = %{state | agent: updated_agent}
-        Logger.warning("*** TaskAgent.handle_continue completed, new error_count: #{updated_agent.state.error_count}")
-        {:noreply, new_server_state}
-    end
-  end
-
-  def handle_info({:update_error_count, new_count}, state) do
-    Logger.warning("*** TaskAgent.handle_info updating error count to #{new_count}, current: #{state.agent.state.error_count}")
-    current_agent = state.agent
-    
-    # Update error count and check if we should pause
-    new_agent_state = %{current_agent.state | error_count: new_count, current_task: nil}
-    
-    # If we have too many errors, pause processing
-    final_agent_state = if new_count >= 10 do
-      Logger.warning("TaskAgent #{current_agent.id} has too many errors (#{new_count}), pausing")
-      %{new_agent_state | status: :paused}
-    else
-      %{new_agent_state | status: :idle}
-    end
-    
-    updated_agent = %{current_agent | state: final_agent_state}
-    new_server_state = %{state | agent: updated_agent}
-    Logger.warning("*** TaskAgent.handle_info completed, new error_count: #{updated_agent.state.error_count}")
-    {:noreply, new_server_state}
-  end
-
-  def handle_cast(msg, state) do
-    Logger.warning("*** TaskAgent.handle_cast called with msg: #{inspect(msg, limit: 50)}")
-    {:noreply, state}
-  end
-
-  def handle_info(msg, state) do
-    Logger.warning("*** TaskAgent.handle_info called with msg: #{inspect(msg, limit: 50)}")
-    {:noreply, state}
-  end
 
 end
