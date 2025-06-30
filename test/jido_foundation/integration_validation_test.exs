@@ -51,7 +51,8 @@ defmodule JidoFoundation.IntegrationValidationTest do
       # Test distributed execution with empty agent list (should handle gracefully)
       {:ok, results} = Bridge.distributed_execute(:nonexistent_capability, mock_operation)
       assert is_list(results)
-      assert Enum.empty?(results)  # No agents with that capability
+      # No agents with that capability
+      assert Enum.empty?(results)
     end
 
     test "All services communicate through proper supervision channels" do
@@ -70,17 +71,20 @@ defmodule JidoFoundation.IntegrationValidationTest do
         # Verify it's properly supervised by checking its supervisor
         case Process.info(pid, :links) do
           {:links, links} ->
-            supervisor_links = Enum.filter(links, fn linked_pid ->
-              case Process.info(linked_pid, :dictionary) do
-                {:dictionary, dict} ->
-                  Keyword.has_key?(dict, :"$ancestors") or 
-                  Keyword.has_key?(dict, :"$initial_call")
-                nil -> false
-              end
-            end)
-            
+            supervisor_links =
+              Enum.filter(links, fn linked_pid ->
+                case Process.info(linked_pid, :dictionary) do
+                  {:dictionary, dict} ->
+                    Keyword.has_key?(dict, :"$ancestors") or
+                      Keyword.has_key?(dict, :"$initial_call")
+
+                  nil ->
+                    false
+                end
+              end)
+
             assert length(supervisor_links) > 0, "#{service} should have supervisor links"
-          
+
           nil ->
             flunk("Could not get process info for #{service}")
         end
@@ -104,8 +108,11 @@ defmodule JidoFoundation.IntegrationValidationTest do
       Process.sleep(200)
 
       # Verify other services are still alive
-      assert Process.alive?(system_cmd_pid), "SystemCommandManager should survive TaskPoolManager crash"
-      assert Process.alive?(coordination_pid), "CoordinationManager should survive TaskPoolManager crash"
+      assert Process.alive?(system_cmd_pid),
+             "SystemCommandManager should survive TaskPoolManager crash"
+
+      assert Process.alive?(coordination_pid),
+             "CoordinationManager should survive TaskPoolManager crash"
 
       # Verify TaskPoolManager restarted
       new_task_pool_pid = Process.whereis(JidoFoundation.TaskPoolManager)
@@ -121,36 +128,41 @@ defmodule JidoFoundation.IntegrationValidationTest do
       # Test SystemCommandManager under load
       # Try to overwhelm it with many concurrent requests
       concurrent_requests = 20
-      
-      tasks = for i <- 1..concurrent_requests do
-        Task.async(fn ->
-          case SystemCommandManager.execute_command("uptime", [], timeout: 1000) do
-            {:ok, result} -> {:success, i, result}
-            {:error, :too_many_concurrent_commands} -> {:limited, i}
-            {:error, reason} -> {:error, i, reason}
-          end
-        end)
-      end
+
+      tasks =
+        for i <- 1..concurrent_requests do
+          Task.async(fn ->
+            case SystemCommandManager.execute_command("uptime", [], timeout: 1000) do
+              {:ok, result} -> {:success, i, result}
+              {:error, :too_many_concurrent_commands} -> {:limited, i}
+              {:error, reason} -> {:error, i, reason}
+            end
+          end)
+        end
 
       results = Task.await_many(tasks, 5000)
-      
+
       # Should have some successful requests
-      success_count = Enum.count(results, fn 
-        {:success, _, _} -> true
-        _ -> false
-      end)
-      
+      success_count =
+        Enum.count(results, fn
+          {:success, _, _} -> true
+          _ -> false
+        end)
+
       # Should have proper rate limiting
-      limited_count = Enum.count(results, fn
-        {:limited, _} -> true
-        _ -> false
-      end)
+      limited_count =
+        Enum.count(results, fn
+          {:limited, _} -> true
+          _ -> false
+        end)
 
       assert success_count > 0, "Should have some successful requests"
-      
+
       # If we hit limits, that's proper backpressure
       if limited_count > 0 do
-        Logger.info("Rate limiting working: #{limited_count} requests limited out of #{concurrent_requests}")
+        Logger.info(
+          "Rate limiting working: #{limited_count} requests limited out of #{concurrent_requests}"
+        )
       end
 
       # Verify service is still functional after load
@@ -161,37 +173,39 @@ defmodule JidoFoundation.IntegrationValidationTest do
   describe "End-to-end workflow validation" do
     test "Complete monitoring workflow through all services" do
       # Simulate a complete monitoring workflow that uses multiple services
-      
+
       # 1. Start monitoring data collection (uses SystemCommandManager)
       {:ok, load_avg} = SystemCommandManager.get_load_average()
       assert is_float(load_avg)
 
       # 2. Process the data through task pools
       processing_data = [load_avg, load_avg * 1.1, load_avg * 0.9]
-      
-      {:ok, stream} = TaskPoolManager.execute_batch(
-        :monitoring,
-        processing_data,
-        fn value ->
-          # Simulate monitoring data processing
-          %{
-            value: value,
-            status: (if value > 1.0, do: :warning, else: :ok),
-            timestamp: DateTime.utc_now()
-          }
-        end,
-        timeout: 5000
-      )
+
+      {:ok, stream} =
+        TaskPoolManager.execute_batch(
+          :monitoring,
+          processing_data,
+          fn value ->
+            # Simulate monitoring data processing
+            %{
+              value: value,
+              status: if(value > 1.0, do: :warning, else: :ok),
+              timestamp: DateTime.utc_now()
+            }
+          end,
+          timeout: 5000
+        )
 
       processed_results = Enum.to_list(stream)
       assert length(processed_results) == 3
 
       # 3. Emit signals based on results
       for {:ok, result} <- processed_results do
-        signal_type = case result.status do
-          :warning -> "monitoring.alert.warning"
-          :ok -> "monitoring.status.ok"
-        end
+        signal_type =
+          case result.status do
+            :warning -> "monitoring.alert.warning"
+            :ok -> "monitoring.status.ok"
+          end
 
         signal = %{
           type: signal_type,
@@ -212,17 +226,18 @@ defmodule JidoFoundation.IntegrationValidationTest do
 
     test "Error recovery workflow across all services" do
       # Test that the system can recover from a complex failure scenario
-      
+
       # 1. Start operations across multiple services
       background_tasks = [
         Task.async(fn ->
           for _i <- 1..10 do
             TaskPoolManager.execute_batch(:general, [1, 2], fn x -> x end, timeout: 1000)
-            |> elem(1) |> Enum.to_list()
+            |> elem(1)
+            |> Enum.to_list()
+
             Process.sleep(50)
           end
         end),
-        
         Task.async(fn ->
           for _i <- 1..5 do
             SystemCommandManager.get_load_average()
@@ -231,7 +246,8 @@ defmodule JidoFoundation.IntegrationValidationTest do
         end)
       ]
 
-      Process.sleep(200)  # Let operations start
+      # Let operations start
+      Process.sleep(200)
 
       # 2. Cause failures
       task_pool_pid = Process.whereis(JidoFoundation.TaskPoolManager)
@@ -262,7 +278,8 @@ defmodule JidoFoundation.IntegrationValidationTest do
         try do
           Task.await(task, 2000)
         catch
-          :exit, _ -> :ok  # Some may have failed due to service restarts
+          # Some may have failed due to service restarts
+          :exit, _ -> :ok
         end
       end
     end
@@ -287,7 +304,7 @@ defmodule JidoFoundation.IntegrationValidationTest do
       # Create a pool with specific configuration
       pool_name = :test_config_pool
       config = %{max_concurrency: 7, timeout: 3000}
-      
+
       assert :ok = TaskPoolManager.create_pool(pool_name, config)
       {:ok, pool_stats} = TaskPoolManager.get_pool_stats(pool_name)
       assert pool_stats.max_concurrency == 7
@@ -311,9 +328,10 @@ defmodule JidoFoundation.IntegrationValidationTest do
         JidoFoundation.SchedulerManager
       ]
 
-      pids_before = for service <- services_before do
-        {service, Process.whereis(service)}
-      end
+      pids_before =
+        for service <- services_before do
+          {service, Process.whereis(service)}
+        end
 
       # All should be registered
       for {service, pid} <- pids_before do
@@ -323,13 +341,14 @@ defmodule JidoFoundation.IntegrationValidationTest do
       # Kill half the services
       Process.exit(Process.whereis(JidoFoundation.TaskPoolManager), :kill)
       Process.exit(Process.whereis(JidoFoundation.SystemCommandManager), :kill)
-      
+
       Process.sleep(300)
 
       # Verify service discovery still works
-      pids_after = for service <- services_before do
-        {service, Process.whereis(service)}
-      end
+      pids_after =
+        for service <- services_before do
+          {service, Process.whereis(service)}
+        end
 
       for {service, pid} <- pids_after do
         assert is_pid(pid), "#{service} should be re-registered after restart"
@@ -338,7 +357,7 @@ defmodule JidoFoundation.IntegrationValidationTest do
       # Verify the restarted services have new pids
       {_, old_task_pool_pid} = List.keyfind(pids_before, JidoFoundation.TaskPoolManager, 0)
       {_, new_task_pool_pid} = List.keyfind(pids_after, JidoFoundation.TaskPoolManager, 0)
-      
+
       assert old_task_pool_pid != new_task_pool_pid, "TaskPoolManager should have new pid"
     end
   end
@@ -357,26 +376,30 @@ defmodule JidoFoundation.IntegrationValidationTest do
       end
 
       # Submit work to all pools simultaneously
-      pool_tasks = for {pool_name, _config} <- pool_configs do
-        Task.async(fn ->
-          start_time = System.monotonic_time(:millisecond)
-          
-          {:ok, stream} = TaskPoolManager.execute_batch(
-            pool_name,
-            1..20,  # 20 tasks per pool
-            fn x ->
-              Process.sleep(50)  # Simulate work
-              x * 10
-            end,
-            timeout: 5000
-          )
+      pool_tasks =
+        for {pool_name, _config} <- pool_configs do
+          Task.async(fn ->
+            start_time = System.monotonic_time(:millisecond)
 
-          results = Enum.to_list(stream)
-          end_time = System.monotonic_time(:millisecond)
-          
-          {pool_name, length(results), end_time - start_time}
-        end)
-      end
+            {:ok, stream} =
+              TaskPoolManager.execute_batch(
+                pool_name,
+                # 20 tasks per pool
+                1..20,
+                fn x ->
+                  # Simulate work
+                  Process.sleep(50)
+                  x * 10
+                end,
+                timeout: 5000
+              )
+
+            results = Enum.to_list(stream)
+            end_time = System.monotonic_time(:millisecond)
+
+            {pool_name, length(results), end_time - start_time}
+          end)
+        end
 
       # Wait for all pools to complete
       pool_results = Task.await_many(pool_tasks, 10000)
@@ -391,9 +414,10 @@ defmodule JidoFoundation.IntegrationValidationTest do
       durations = Enum.map(pool_results, fn {_, _, duration} -> duration end)
       max_duration = Enum.max(durations)
       min_duration = Enum.min(durations)
-      
+
       # Higher concurrency pools should be at least somewhat faster
-      assert max_duration - min_duration < 5000, "Pool performance should vary with concurrency settings"
+      assert max_duration - min_duration < 5000,
+             "Pool performance should vary with concurrency settings"
     end
 
     test "System handles resource exhaustion gracefully" do
@@ -406,22 +430,26 @@ defmodule JidoFoundation.IntegrationValidationTest do
       end
 
       # Submit many concurrent intensive operations
-      {:ok, stream} = TaskPoolManager.execute_batch(
-        :general,
-        1..100,  # Many tasks
-        intensive_operation,
-        max_concurrency: 20,  # High concurrency
-        timeout: 10000
-      )
+      {:ok, stream} =
+        TaskPoolManager.execute_batch(
+          :general,
+          # Many tasks
+          1..100,
+          intensive_operation,
+          # High concurrency
+          max_concurrency: 20,
+          timeout: 10000
+        )
 
       # Should handle the load without crashing
       results = Enum.to_list(stream)
-      
+
       # Most should succeed
-      success_count = Enum.count(results, fn
-        {:ok, _} -> true
-        _ -> false
-      end)
+      success_count =
+        Enum.count(results, fn
+          {:ok, _} -> true
+          _ -> false
+        end)
 
       assert success_count > 50, "Most operations should succeed even under load"
 

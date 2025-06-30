@@ -1,7 +1,7 @@
 defmodule JidoFoundation.SimpleValidationTest do
   @moduledoc """
   Simple validation tests to verify basic OTP compliance.
-  
+
   These tests focus on basic functionality rather than complex scenarios.
   """
 
@@ -30,25 +30,28 @@ defmodule JidoFoundation.SimpleValidationTest do
       # Test basic stats
       stats = TaskPoolManager.get_all_stats()
       assert is_map(stats)
-      
+
       # Test simple batch operation
       case TaskPoolManager.execute_batch(
-        :general,
-        [1, 2, 3],
-        fn x -> x * 2 end,
-        timeout: 5000
-      ) do
+             :general,
+             [1, 2, 3],
+             fn x -> x * 2 end,
+             timeout: 5000
+           ) do
         {:ok, stream} ->
           results = Enum.to_list(stream)
           assert length(results) == 3
-          
+
           # Check we got expected results
-          success_results = Enum.filter(results, fn 
-            {:ok, _} -> true
-            _ -> false
-          end)
-          assert length(success_results) >= 2  # Allow for some failures
-          
+          success_results =
+            Enum.filter(results, fn
+              {:ok, _} -> true
+              _ -> false
+            end)
+
+          # Allow for some failures
+          assert length(success_results) >= 2
+
         {:error, reason} ->
           flunk("TaskPoolManager batch execution failed: #{inspect(reason)}")
       end
@@ -59,14 +62,14 @@ defmodule JidoFoundation.SimpleValidationTest do
       stats = SystemCommandManager.get_stats()
       assert is_map(stats)
       assert Map.has_key?(stats, :commands_executed)
-      
+
       # Test load average (may fail on some systems)
       case SystemCommandManager.get_load_average() do
-        {:ok, load_avg} -> 
+        {:ok, load_avg} ->
           assert is_float(load_avg)
           assert load_avg >= 0.0
-          
-        {:error, _reason} -> 
+
+        {:error, _reason} ->
           # This is ok, uptime command may not be available
           :ok
       end
@@ -122,11 +125,11 @@ defmodule JidoFoundation.SimpleValidationTest do
       # Do some work
       for _i <- 1..5 do
         case TaskPoolManager.execute_batch(
-          :general,
-          [1, 2],
-          fn x -> x end,
-          timeout: 1000
-        ) do
+               :general,
+               [1, 2],
+               fn x -> x end,
+               timeout: 1000
+             ) do
           {:ok, stream} -> Enum.to_list(stream)
           {:error, _} -> :ok
         end
@@ -139,7 +142,8 @@ defmodule JidoFoundation.SimpleValidationTest do
       diff = final_count - initial_count
 
       # Should not leak significant processes
-      assert diff < 20, "Process count grew too much: #{initial_count} -> #{final_count} (diff: #{diff})"
+      assert diff < 20,
+             "Process count grew too much: #{initial_count} -> #{final_count} (diff: #{diff})"
     end
   end
 
@@ -147,29 +151,33 @@ defmodule JidoFoundation.SimpleValidationTest do
     test "TaskPoolManager can handle multiple operations" do
       start_time = System.monotonic_time(:millisecond)
 
-      results = for _i <- 1..5 do  # Reduced to be less aggressive
-        case TaskPoolManager.execute_batch(
-          :general,
-          [1, 2, 3],
-          fn x -> x * 2 end,
-          timeout: 2000
-        ) do
-          {:ok, stream} -> 
-            stream_results = Enum.to_list(stream)
-            {:ok, length(stream_results)}
-          {:error, reason} -> 
-            {:error, reason}
+      # Reduced to be less aggressive
+      results =
+        for _i <- 1..5 do
+          case TaskPoolManager.execute_batch(
+                 :general,
+                 [1, 2, 3],
+                 fn x -> x * 2 end,
+                 timeout: 2000
+               ) do
+            {:ok, stream} ->
+              stream_results = Enum.to_list(stream)
+              {:ok, length(stream_results)}
+
+            {:error, reason} ->
+              {:error, reason}
+          end
         end
-      end
 
       end_time = System.monotonic_time(:millisecond)
       duration = end_time - start_time
 
       # Check that most operations succeeded
-      successful = Enum.count(results, fn 
-        {:ok, _} -> true
-        _ -> false
-      end)
+      successful =
+        Enum.count(results, fn
+          {:ok, _} -> true
+          _ -> false
+        end)
 
       assert successful >= 3, "Most operations should succeed (#{successful}/5)"
       assert duration < 30_000, "Operations should complete in reasonable time (#{duration}ms)"
