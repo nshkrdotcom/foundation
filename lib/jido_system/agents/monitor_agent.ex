@@ -117,9 +117,6 @@ defmodule JidoSystem.Agents.MonitorAgent do
         subscribe_to_telemetry_events()
 
         {:ok, initialized_server_state}
-
-      error ->
-        error
     end
   end
 
@@ -137,9 +134,6 @@ defmodule JidoSystem.Agents.MonitorAgent do
         else
           {:ok, updated_agent}
         end
-
-      error ->
-        error
     end
   end
 

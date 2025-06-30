@@ -132,6 +132,12 @@ defmodule JidoSystem.Sensors.SystemHealthSensor do
 
   @impl true
   def deliver_signal(state) do
+    {:ok, signal, _new_state} = deliver_signal_with_state(state)
+    {:ok, signal}
+  end
+
+  # Public API for testing that returns state
+  def deliver_signal_with_state(state) do
     try do
       # Collect current system metrics
       current_metrics = collect_system_metrics()
@@ -693,10 +699,7 @@ defmodule JidoSystem.Sensors.SystemHealthSensor do
 
   # Handle periodic collection messages
   def handle_info(:collect_metrics, state) do
-    # Trigger signal delivery
-    {:ok, signal, new_state} = deliver_signal(state)
-
-    # Deliver the signal
+    {:ok, signal, new_state} = deliver_signal_with_state(state)
     Jido.Signal.Dispatch.dispatch(signal, state.target)
     {:noreply, new_state}
   end

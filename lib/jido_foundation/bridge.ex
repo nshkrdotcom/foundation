@@ -228,15 +228,6 @@ defmodule JidoFoundation.Bridge do
           )
 
           error
-
-        # Handle unexpected return formats
-        other ->
-          Logger.warning("Jido action returned unexpected format via Bridge",
-            action: action_module,
-            result: inspect(other)
-          )
-
-          {:error, {:unexpected_return_format, other}}
       end
     rescue
       error ->

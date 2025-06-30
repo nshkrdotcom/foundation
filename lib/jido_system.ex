@@ -631,9 +631,6 @@ defmodule JidoSystem do
           {id, ^pid, _metadata} -> id
           _ -> inspect(pid)
         end
-
-      _ ->
-        inspect(pid)
     end
   end
 

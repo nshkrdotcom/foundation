@@ -2,6 +2,38 @@ defmodule MABEAM.CoordinationTest do
   # Using registry isolation mode for MABEAM Coordination tests with meck contamination prevention
   use Foundation.UnifiedTestFoundation, :registry
 
+  setup do
+    # Ensure clean meck state before each test
+    try do
+      :meck.unload(MABEAM.Discovery)
+    catch
+      :error, {:not_mocked, MABEAM.Discovery} -> :ok
+    end
+
+    try do
+      :meck.unload(Foundation)
+    catch
+      :error, {:not_mocked, Foundation} -> :ok
+    end
+
+    # Ensure cleanup after test completes (even on crash)
+    on_exit(fn ->
+      try do
+        :meck.unload(MABEAM.Discovery)
+      catch
+        :error, {:not_mocked, MABEAM.Discovery} -> :ok
+      end
+
+      try do
+        :meck.unload(Foundation)
+      catch
+        :error, {:not_mocked, Foundation} -> :ok
+      end
+    end)
+
+    :ok
+  end
+
   # Mock Foundation and Discovery for testing coordination logic
   defmodule MockFoundation do
     def start_consensus(participants, proposal, timeout, _impl) do

@@ -96,6 +96,12 @@ defmodule JidoSystem.Sensors.AgentPerformanceSensor do
 
   @impl true
   def deliver_signal(state) do
+    {:ok, signal, _new_state} = deliver_signal_with_state(state)
+    {:ok, signal}
+  end
+
+  # Public API for testing that returns state
+  def deliver_signal_with_state(state) do
     try do
       # Collect current agent performance data
       current_agent_data = collect_agent_performance_data()
@@ -693,7 +699,7 @@ defmodule JidoSystem.Sensors.AgentPerformanceSensor do
 
   # Handle periodic analysis
   def handle_info(:analyze_performance, state) do
-    {:ok, signal, new_state} = deliver_signal(state)
+    {:ok, signal, new_state} = deliver_signal_with_state(state)
     Jido.Signal.Dispatch.dispatch(signal, state.target)
     {:noreply, new_state}
   end

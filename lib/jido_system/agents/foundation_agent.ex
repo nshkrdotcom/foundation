@@ -40,6 +40,23 @@ defmodule JidoSystem.Agents.FoundationAgent do
 
       require Logger
 
+      # Override specs for Foundation-specific behavior modifications
+      # These specs match the actual 3-tuple returns our implementations use
+      @spec mount(term(), keyword()) :: 
+        {:ok, term()} | {:error, term()}
+      
+      @spec on_before_run(Jido.Agent.t()) :: 
+        {:ok, Jido.Agent.t()} | {:error, term()}
+      
+      @spec on_after_run(Jido.Agent.t(), term(), list()) :: 
+        {:ok, Jido.Agent.t(), list()} | {:error, term()}
+      
+      @spec on_error(Jido.Agent.t(), term()) :: 
+        {:ok, Jido.Agent.t(), list()} | {:error, term()}
+      
+      @spec shutdown(term(), term()) :: 
+        {:ok, term()} | {:error, term()}
+
       @impl true
       def mount(server_state, opts) do
         Logger.info("FoundationAgent mount called for agent #{server_state.agent.id}")
@@ -49,7 +66,7 @@ defmodule JidoSystem.Agents.FoundationAgent do
 
           # Register with Foundation Registry
           # Get capabilities from agent metadata or defaults
-          capabilities = get_default_capabilities()
+          capabilities = get_default_capabilities(agent.__struct__)
 
           metadata = %{
             agent_type: agent.__struct__.__agent_metadata__().name,
@@ -192,7 +209,7 @@ defmodule JidoSystem.Agents.FoundationAgent do
             )
         end
 
-        {:ok, agent}
+        {:ok, agent, []}
       end
 
       @impl true
@@ -242,6 +259,7 @@ defmodule JidoSystem.Agents.FoundationAgent do
       end
 
       # Helper function to emit custom events
+      @spec emit_event(Jido.Agent.t(), atom(), map(), map()) :: :ok
       def emit_event(agent, event_type, measurements \\ %{}, metadata \\ %{}) do
         Bridge.emit_agent_event(
           self(),
@@ -252,6 +270,7 @@ defmodule JidoSystem.Agents.FoundationAgent do
       end
 
       # Helper function to coordinate with other agents via MABEAM
+      @spec coordinate_with_agents(Jido.Agent.t(), term(), keyword()) :: {:ok, String.t()}
       def coordinate_with_agents(agent, task, options \\ []) do
         # For now, implement simple coordination without calling Bridge
         # In a full implementation, this would use MABEAM coordination services
@@ -262,8 +281,9 @@ defmodule JidoSystem.Agents.FoundationAgent do
       end
 
       # Helper function to get default capabilities
-      defp get_default_capabilities() do
-        case __MODULE__ do
+      @spec get_default_capabilities(module()) :: [atom()]
+      defp get_default_capabilities(agent_module) do
+        case agent_module do
           JidoSystem.Agents.TaskAgent ->
             [:task_processing, :validation, :queue_management]
 

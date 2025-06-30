@@ -96,7 +96,7 @@ defmodule JidoSystem.Sensors.SystemHealthSensorTest do
     end
 
     test "collects comprehensive system metrics", %{sensor_state: state} do
-      {:ok, signal, new_state} = SystemHealthSensor.deliver_signal(state)
+      {:ok, signal, new_state} = SystemHealthSensor.deliver_signal_with_state(state)
 
       assert %Signal{} = signal
       assert signal.type =~ "system.health."
@@ -123,7 +123,7 @@ defmodule JidoSystem.Sensors.SystemHealthSensorTest do
       # Collect metrics multiple times
       state =
         Enum.reduce(1..15, initial_state, fn _i, acc_state ->
-          {:ok, _signal, new_state} = SystemHealthSensor.deliver_signal(acc_state)
+          {:ok, _signal, new_state} = SystemHealthSensor.deliver_signal_with_state(acc_state)
           new_state
         end)
 
@@ -137,7 +137,7 @@ defmodule JidoSystem.Sensors.SystemHealthSensorTest do
       # In a real scenario, we might mock system calls to fail
 
       # The deliver_signal should handle errors and create error signals
-      {:ok, signal, _new_state} = SystemHealthSensor.deliver_signal(state)
+      {:ok, signal, _new_state} = SystemHealthSensor.deliver_signal_with_state(state)
 
       # Should still produce a signal even if some metrics fail
       assert %Signal{} = signal
@@ -165,7 +165,7 @@ defmodule JidoSystem.Sensors.SystemHealthSensorTest do
     end
 
     test "analyzes normal system health correctly", %{sensor_state: state} do
-      result = SystemHealthSensor.deliver_signal(state)
+      result = SystemHealthSensor.deliver_signal_with_state(state)
       assert match?({:ok, %Signal{}, _state}, result)
 
       {:ok, signal, _new_state} = result
@@ -196,7 +196,7 @@ defmodule JidoSystem.Sensors.SystemHealthSensorTest do
           }
       }
 
-      {:ok, signal, _new_state} = SystemHealthSensor.deliver_signal(low_threshold_state)
+      {:ok, signal, _new_state} = SystemHealthSensor.deliver_signal_with_state(low_threshold_state)
 
       # Should detect violations with such low thresholds
       assert signal.data.status in [:warning, :critical, :emergency]
@@ -205,7 +205,7 @@ defmodule JidoSystem.Sensors.SystemHealthSensorTest do
     end
 
     test "generates appropriate recommendations", %{sensor_state: state} do
-      {:ok, signal, _new_state} = SystemHealthSensor.deliver_signal(state)
+      {:ok, signal, _new_state} = SystemHealthSensor.deliver_signal_with_state(state)
 
       assert is_list(signal.data.recommendations)
       assert length(signal.data.recommendations) > 0
@@ -221,13 +221,13 @@ defmodule JidoSystem.Sensors.SystemHealthSensorTest do
       # Collect enough metrics to enable trend analysis
       state =
         Enum.reduce(1..10, initial_state, fn _i, acc_state ->
-          {:ok, _signal, new_state} = SystemHealthSensor.deliver_signal(acc_state)
+          {:ok, _signal, new_state} = SystemHealthSensor.deliver_signal_with_state(acc_state)
           # Small delay to ensure different timestamps
           Process.sleep(10)
           new_state
         end)
 
-      {:ok, signal, _final_state} = SystemHealthSensor.deliver_signal(state)
+      {:ok, signal, _final_state} = SystemHealthSensor.deliver_signal_with_state(state)
 
       # Should include trend analysis
       if Map.has_key?(signal.data, :trends) do
@@ -261,11 +261,11 @@ defmodule JidoSystem.Sensors.SystemHealthSensorTest do
       # Build up some history first
       state_with_history =
         Enum.reduce(1..15, state, fn _i, acc_state ->
-          {:ok, _signal, new_state} = SystemHealthSensor.deliver_signal(acc_state)
+          {:ok, _signal, new_state} = SystemHealthSensor.deliver_signal_with_state(acc_state)
           new_state
         end)
 
-      {:ok, signal, _new_state} = SystemHealthSensor.deliver_signal(state_with_history)
+      {:ok, signal, _new_state} = SystemHealthSensor.deliver_signal_with_state(state_with_history)
 
       # Check that anomaly detection is working
       assert is_list(signal.data.anomalies)
@@ -275,7 +275,7 @@ defmodule JidoSystem.Sensors.SystemHealthSensorTest do
     test "skips anomaly detection when disabled", %{sensor_state: initial_state} do
       disabled_state = %{initial_state | enable_anomaly_detection: false}
 
-      {:ok, signal, _new_state} = SystemHealthSensor.deliver_signal(disabled_state)
+      {:ok, signal, _new_state} = SystemHealthSensor.deliver_signal_with_state(disabled_state)
 
       # Should still work but without anomaly detection
       assert is_list(signal.data.anomalies)
@@ -299,7 +299,7 @@ defmodule JidoSystem.Sensors.SystemHealthSensorTest do
     end
 
     test "generates signals with correct structure", %{sensor_state: state} do
-      {:ok, signal, _new_state} = SystemHealthSensor.deliver_signal(state)
+      {:ok, signal, _new_state} = SystemHealthSensor.deliver_signal_with_state(state)
 
       # Verify signal structure
       assert %Signal{type: type, data: data} = signal
@@ -325,7 +325,7 @@ defmodule JidoSystem.Sensors.SystemHealthSensorTest do
     end
 
     test "includes sensor metadata in signals", %{sensor_state: state} do
-      {:ok, signal, _new_state} = SystemHealthSensor.deliver_signal(state)
+      {:ok, signal, _new_state} = SystemHealthSensor.deliver_signal_with_state(state)
 
       # Check for sensor-specific metadata
       assert signal.data.sensor_id == state.id
@@ -334,7 +334,7 @@ defmodule JidoSystem.Sensors.SystemHealthSensorTest do
     end
 
     test "generates different signal types based on health status", %{sensor_state: state} do
-      {:ok, signal, _new_state} = SystemHealthSensor.deliver_signal(state)
+      {:ok, signal, _new_state} = SystemHealthSensor.deliver_signal_with_state(state)
 
       # Should generate type based on health status
       valid_types = [
@@ -400,7 +400,7 @@ defmodule JidoSystem.Sensors.SystemHealthSensorTest do
       # The deliver_signal function should handle errors internally
       # and produce error signals when necessary
 
-      result = SystemHealthSensor.deliver_signal(state)
+      result = SystemHealthSensor.deliver_signal_with_state(state)
 
       # Should always return a result, even if there are errors
       assert match?({:ok, %Signal{}, _state}, result)
@@ -411,7 +411,7 @@ defmodule JidoSystem.Sensors.SystemHealthSensorTest do
       # This would require mocking system functions to fail
       # For now, verify that the function handles errors gracefully
 
-      {:ok, signal, _new_state} = SystemHealthSensor.deliver_signal(state)
+      {:ok, signal, _new_state} = SystemHealthSensor.deliver_signal_with_state(state)
 
       # Should produce a valid signal even with potential errors
       assert %Signal{} = signal

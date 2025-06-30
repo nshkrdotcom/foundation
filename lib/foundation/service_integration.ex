@@ -39,7 +39,9 @@ defmodule Foundation.ServiceIntegration do
   Returns a complete overview of the Foundation Service Integration status
   including service health, contract validation, and dependency information.
   """
-  @spec integration_status() :: {:ok, map()} | {:error, term()}
+  @spec integration_status() :: 
+    {:ok, map()} | 
+    {:error, {:integration_status_exception, Exception.t()}}
   def integration_status do
     start_time = System.monotonic_time()
 
@@ -87,7 +89,10 @@ defmodule Foundation.ServiceIntegration do
   Performs system-wide integration validation including contract compliance,
   service availability, and dependency resolution.
   """
-  @spec validate_service_integration() :: {:ok, map()} | {:error, term()}
+  @spec validate_service_integration() :: 
+    {:ok, map()} | 
+    {:error, {:contract_validation_failed, term()}} |
+    {:error, {:validation_exception, Exception.t()}}
   def validate_service_integration do
     try do
       # Use the working ContractValidator

@@ -86,9 +86,7 @@ defmodule JidoSystem.Agents.TaskAgent do
       {:ok, initialized_server_state} ->
         agent = initialized_server_state.agent
 
-        Logger.info(
-          "TaskAgent #{agent.id} mounted with capabilities: #{inspect(get_default_capabilities())}"
-        )
+        Logger.info("TaskAgent #{agent.id} mounted successfully")
 
         # Schedule periodic queue processing
         schedule_queue_processing()
@@ -125,7 +123,7 @@ defmodule JidoSystem.Agents.TaskAgent do
   @impl true
   def on_after_run(agent, result, directives) do
     case super(agent, result, directives) do
-      {:ok, updated_agent} ->
+      {:ok, updated_agent, _directives} ->
         # Update task-specific metrics based on result
         # Note: State modifications like queue updates and status changes are now handled by directives
         new_state =
@@ -194,7 +192,7 @@ defmodule JidoSystem.Agents.TaskAgent do
               %{updated_agent.state | status: :idle, current_task: nil}
           end
 
-        {:ok, %{updated_agent | state: new_state}}
+        {:ok, %{updated_agent | state: new_state}, []}
 
       error ->
         error
@@ -247,6 +245,8 @@ defmodule JidoSystem.Agents.TaskAgent do
 
   # Custom action implementations
 
+  @spec handle_process_task(Jido.Agent.t(), map()) :: 
+    {:ok, term(), Jido.Agent.t()} | {:error, term()}
   def handle_process_task(agent, task_params) do
     try do
       start_time = System.monotonic_time(:microsecond)
@@ -311,6 +311,8 @@ defmodule JidoSystem.Agents.TaskAgent do
     end
   end
 
+  @spec handle_queue_task(Jido.Agent.t(), map()) :: 
+    {:ok, term(), Jido.Agent.t()} | {:error, term()}
   def handle_queue_task(agent, task_params) do
     if :queue.len(agent.state.task_queue) >= agent.state.max_queue_size do
       emit_event(agent, :queue_full, %{queue_size: :queue.len(agent.state.task_queue)}, %{})
@@ -334,6 +336,8 @@ defmodule JidoSystem.Agents.TaskAgent do
     end
   end
 
+  @spec handle_get_status(Jido.Agent.t(), term()) :: 
+    {:ok, map(), Jido.Agent.t()}
   def handle_get_status(agent, _params) do
     status = %{
       status: agent.state.status,
@@ -349,6 +353,8 @@ defmodule JidoSystem.Agents.TaskAgent do
     {:ok, status, agent}
   end
 
+  @spec handle_pause_processing(Jido.Agent.t(), map()) :: 
+    {:ok, map(), Jido.Agent.t()}
   def handle_pause_processing(agent, params) do
     new_state = %{agent.state | status: :paused}
     emit_event(agent, :processing_paused, %{}, %{})
@@ -362,6 +368,8 @@ defmodule JidoSystem.Agents.TaskAgent do
      }, %{agent | state: new_state}}
   end
 
+  @spec handle_resume_processing(Jido.Agent.t(), term()) :: 
+    {:ok, atom(), Jido.Agent.t()}
   def handle_resume_processing(agent, _params) do
     new_state = %{agent.state | status: :idle}
     emit_event(agent, :processing_resumed, %{}, %{})
@@ -374,10 +382,12 @@ defmodule JidoSystem.Agents.TaskAgent do
 
   # Private helper functions
 
+  @spec schedule_queue_processing() :: reference()
   defp schedule_queue_processing() do
     Process.send_after(self(), :process_queue, 1000)
   end
 
+  @spec enqueue_with_priority(:queue.queue(), term(), atom()) :: :queue.queue()
   defp enqueue_with_priority(queue, task, :high) do
     # For simplicity, just add to front for high priority
     :queue.in_r(task, queue)
@@ -387,6 +397,7 @@ defmodule JidoSystem.Agents.TaskAgent do
     :queue.in(task, queue)
   end
 
+  @spec update_performance_metrics(map(), integer(), term()) :: map()
   defp update_performance_metrics(metrics, processing_time, task) do
     new_total = metrics.total_processing_time + processing_time
     new_count = (metrics[:task_count] || 0) + 1

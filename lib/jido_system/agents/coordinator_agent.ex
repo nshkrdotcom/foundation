@@ -122,9 +122,6 @@ defmodule JidoSystem.Agents.CoordinatorAgent do
         schedule_workflow_monitoring()
 
         {:ok, initialized_server_state}
-
-      error ->
-        error
     end
   end
 
@@ -148,14 +145,13 @@ defmodule JidoSystem.Agents.CoordinatorAgent do
         else
           {:ok, updated_agent}
         end
-
-      error ->
-        error
     end
   end
 
   # Action Handlers
 
+  @spec handle_register_agents(Jido.Agent.t(), map()) :: 
+    {:ok, map(), Jido.Agent.t()} | {:error, term()}
   def handle_register_agents(agent, %{agents: agents}) when is_list(agents) do
     try do
       # Validate and register each agent

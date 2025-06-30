@@ -35,29 +35,14 @@ config :foundation,
     performance_monitoring: false
   ]
 
-# Configure test logging - allow info for tests that check logs but suppress Jido notices
+# Configure test logging - suppress info logs to reduce noise
 config :logger,
-  level: :info,  # Allow info logs for capture_log tests
+  level: :warning,  # Only show warnings and errors during tests
   backends: [:console]
 
 config :logger, :console,
   format: "[$level] $message\n",
   metadata: []
-
-# Suppress notice logs from Jido modules
-config :logger,
-  compile_time_purge_matching: [
-    [level_lower_than: :warning, module: Jido],
-    [level_lower_than: :warning, module: JidoSystem],
-    [function: "Executing"]
-  ]
-
-# Also suppress all notice level logs during tests
-config :logger,
-  level: :info,
-  compile_time_purge_matching: [
-    [level: :notice]
-  ]
 
 # Also configure Jido modules directly to reduce verbosity
 config :jido, log_level: :warning
