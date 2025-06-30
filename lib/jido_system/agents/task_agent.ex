@@ -123,7 +123,7 @@ defmodule JidoSystem.Agents.TaskAgent do
   @impl true
   def on_after_run(agent, result, directives) do
     case super(agent, result, directives) do
-      {:ok, updated_agent, _directives} ->
+      {:ok, updated_agent} ->
         # Update task-specific metrics based on result
         # Note: State modifications like queue updates and status changes are now handled by directives
         new_state =
@@ -192,7 +192,7 @@ defmodule JidoSystem.Agents.TaskAgent do
               %{updated_agent.state | status: :idle, current_task: nil}
           end
 
-        {:ok, %{updated_agent | state: new_state}, []}
+        {:ok, %{updated_agent | state: new_state}}
 
       error ->
         error

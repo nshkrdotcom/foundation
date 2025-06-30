@@ -49,7 +49,7 @@ defmodule JidoSystem.Agents.FoundationAgent do
         {:ok, Jido.Agent.t()} | {:error, term()}
       
       @spec on_after_run(Jido.Agent.t(), term(), list()) :: 
-        {:ok, Jido.Agent.t(), list()} | {:error, term()}
+        {:ok, Jido.Agent.t()} | {:error, term()}
       
       @spec on_error(Jido.Agent.t(), term()) :: 
         {:ok, Jido.Agent.t(), list()} | {:error, term()}
@@ -209,7 +209,7 @@ defmodule JidoSystem.Agents.FoundationAgent do
             )
         end
 
-        {:ok, agent, []}
+        {:ok, agent}
       end
 
       @impl true
