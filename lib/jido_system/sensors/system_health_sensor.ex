@@ -163,6 +163,8 @@ defmodule JidoSystem.Sensors.SystemHealthSensor do
   # Public API for testing that returns state
   def deliver_signal_with_state(state) do
     try do
+      start_time = System.monotonic_time()
+
       # Collect current system metrics
       current_metrics = collect_system_metrics()
 
@@ -193,6 +195,22 @@ defmodule JidoSystem.Sensors.SystemHealthSensor do
 
       # Schedule next collection
       schedule_collection(state.collection_interval)
+
+      # Emit telemetry for health analysis completion
+      :telemetry.execute(
+        [:jido_system, :health_sensor, :analysis_completed],
+        %{
+          duration: System.monotonic_time() - start_time,
+          memory_usage_percent: get_in(current_metrics, [:memory, :usage_percent]) || 0,
+          process_count: get_in(current_metrics, [:processes, :count]) || 0,
+          timestamp: System.system_time()
+        },
+        %{
+          sensor_id: state.id,
+          health_status: health_status,
+          signal_type: signal.type
+        }
+      )
 
       Logger.debug("System health signal generated",
         status: health_status,

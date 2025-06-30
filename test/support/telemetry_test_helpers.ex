@@ -170,7 +170,11 @@ defmodule Foundation.TelemetryTestHelpers do
       [:foundation, :cache, :cleanup],
       [:foundation, :cache, :started],
       [:foundation, :cache, :error],
-      [:foundation, :signal_bus, :health_check]
+      [:foundation, :signal_bus, :health_check],
+      [:foundation, :resource_manager, :acquired],
+      [:foundation, :resource_manager, :released],
+      [:foundation, :resource_manager, :denied],
+      [:foundation, :resource_manager, :cleanup]
     ]
   end
 
@@ -643,4 +647,113 @@ defmodule Foundation.TelemetryTestHelpers do
   end
 
   defp match_metadata?(_metadata, _expected), do: true
+
+  # Additional helpers for resource and timing scenarios
+
+  @doc """
+  Waits for a condition to become true, checking periodically.
+
+  ## Example
+
+      assert wait_for_condition(fn ->
+        Process.info(pid, :memory)[:memory] < 1000
+      end, timeout: 1000, interval: 50)
+  """
+  def wait_for_condition(condition_fn, opts \\ []) do
+    timeout = Keyword.get(opts, :timeout, @default_timeout)
+    interval = Keyword.get(opts, :interval, @poll_interval)
+    deadline = System.monotonic_time(:millisecond) + timeout
+
+    do_wait_for_condition(condition_fn, deadline, interval)
+  end
+
+  defp do_wait_for_condition(condition_fn, deadline, interval) do
+    if condition_fn.() do
+      true
+    else
+      now = System.monotonic_time(:millisecond)
+
+      if now < deadline do
+        Process.sleep(interval)
+        do_wait_for_condition(condition_fn, deadline, interval)
+      else
+        false
+      end
+    end
+  end
+
+  @doc """
+  Asserts that a condition eventually becomes true.
+
+  ## Example
+
+      assert_eventually fn ->
+        length(Agent.get(agent, & &1)) == 10
+      end, timeout: 2000, message: "Agent should have 10 items"
+  """
+  defmacro assert_eventually(condition, opts \\ []) do
+    quote do
+      timeout = Keyword.get(unquote(opts), :timeout, 5000)
+      message = Keyword.get(unquote(opts), :message, "Condition did not become true within timeout")
+
+      unless Foundation.TelemetryTestHelpers.wait_for_condition(
+               unquote(condition),
+               timeout: timeout
+             ) do
+        flunk(message)
+      end
+    end
+  end
+
+  @doc """
+  Waits for garbage collection to complete by monitoring memory changes.
+
+  ## Example
+
+      wait_for_gc_completion()
+  """
+  def wait_for_gc_completion(opts \\ []) do
+    timeout = Keyword.get(opts, :timeout, 1000)
+    initial_memory = :erlang.memory(:total)
+
+    # Force GC
+    :erlang.garbage_collect()
+
+    # Wait for memory to stabilize
+    wait_for_condition(
+      fn ->
+        current_memory = :erlang.memory(:total)
+        # Less than 1% change
+        abs(current_memory - initial_memory) < initial_memory * 0.01
+      end,
+      timeout: timeout,
+      interval: 50
+    )
+  end
+
+  @doc """
+  Waits for resource manager cleanup cycle.
+
+  ## Example
+
+      wait_for_resource_cleanup()
+  """
+  def wait_for_resource_cleanup(opts \\ []) do
+    timeout = Keyword.get(opts, :timeout, 2000)
+
+    # Force a cleanup if possible
+    if Process.whereis(Foundation.ResourceManager) do
+      try do
+        Foundation.ResourceManager.force_cleanup()
+      catch
+        _, _ -> :ok
+      end
+    end
+
+    # Wait for cleanup telemetry event
+    wait_for_telemetry_event(
+      [:foundation, :resource_manager, :cleanup],
+      timeout: timeout
+    )
+  end
 end

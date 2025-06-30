@@ -127,6 +127,8 @@ defmodule JidoSystem.Sensors.AgentPerformanceSensor do
   # Public API for testing that returns state
   def deliver_signal_with_state(state) do
     try do
+      start_time = System.monotonic_time()
+
       # Collect current agent performance data
       current_agent_data = collect_agent_performance_data()
 
@@ -150,6 +152,21 @@ defmodule JidoSystem.Sensors.AgentPerformanceSensor do
 
       # Schedule next analysis
       schedule_analysis(state.monitoring_interval)
+
+      # Emit telemetry for performance analysis completion
+      :telemetry.execute(
+        [:jido_system, :performance_sensor, :analysis_completed],
+        %{
+          duration: System.monotonic_time() - start_time,
+          agents_analyzed: map_size(updated_metrics),
+          issues_detected: count_performance_issues(performance_analysis),
+          timestamp: System.system_time()
+        },
+        %{
+          sensor_id: state.id,
+          signal_type: signal.type
+        }
+      )
 
       Logger.debug("Agent performance signal generated",
         agents_analyzed: map_size(updated_metrics),
@@ -245,6 +262,8 @@ defmodule JidoSystem.Sensors.AgentPerformanceSensor do
 
   defp collect_single_agent_data(agent_id, pid, metadata) do
     try do
+      start_time = System.monotonic_time()
+
       # Get process info
       process_info =
         Process.info(pid, [
@@ -260,7 +279,7 @@ defmodule JidoSystem.Sensors.AgentPerformanceSensor do
       agent_type = Map.get(metadata, :agent_type, "unknown")
       capabilities = Map.get(metadata, :capabilities, [])
 
-      %{
+      result = %{
         agent_id: agent_id,
         agent_type: agent_type,
         pid: pid,
@@ -281,6 +300,24 @@ defmodule JidoSystem.Sensors.AgentPerformanceSensor do
         memory_mb: Keyword.get(process_info, :memory, 0) / 1024 / 1024,
         queue_status: classify_queue_status(Keyword.get(process_info, :message_queue_len, 0))
       }
+
+      # Emit telemetry for agent data collection
+      :telemetry.execute(
+        [:jido_system, :performance_sensor, :agent_data_collected],
+        %{
+          duration: System.monotonic_time() - start_time,
+          memory_mb: result.memory_mb,
+          queue_length: result.message_queue_length,
+          timestamp: System.system_time()
+        },
+        %{
+          agent_id: agent_id,
+          agent_type: agent_type,
+          is_responsive: result.is_responsive
+        }
+      )
+
+      result
     rescue
       e ->
         Logger.debug("Failed to collect data for agent #{agent_id}", error: inspect(e))

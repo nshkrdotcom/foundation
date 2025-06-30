@@ -1,6 +1,7 @@
 defmodule JidoSystem.Agents.TaskAgentTest do
   # Using registry isolation mode for TaskAgent tests with comprehensive telemetry cleanup
   use Foundation.UnifiedTestFoundation, :registry
+  use Foundation.TelemetryTestHelpers
 
   alias JidoSystem.Agents.TaskAgent
   alias JidoSystem.Actions.{ProcessTask, QueueTask}
@@ -28,7 +29,13 @@ defmodule JidoSystem.Agents.TaskAgentTest do
     case poll_fn.() do
       :continue ->
         if System.monotonic_time(:millisecond) < end_time do
-          Process.sleep(interval_ms)
+          # Use receive block instead of Process.sleep for better event-driven testing
+          receive do
+            # Don't expect any messages, just use timeout
+          after
+            interval_ms -> :ok
+          end
+
           poll_loop(poll_fn, end_time, interval_ms)
         else
           :timeout

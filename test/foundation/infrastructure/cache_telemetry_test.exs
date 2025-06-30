@@ -44,15 +44,25 @@ defmodule Foundation.Infrastructure.CacheTelemetryTest do
       assert metadata.reason == :not_found
     end
 
-    test "emits miss event when key expired", %{cache: cache} do
-      Cache.put(:expiring_key, "value", cache: cache, ttl: 10)
-      Process.sleep(20)
+    test "emits miss event when key expired", %{cache: _cache} do
+      # Create a cache with fast cleanup for this test
+      {:ok, fast_cache} =
+        Cache.start_link(
+          name: :"cache_expiry_test_#{System.unique_integer()}",
+          cleanup_interval: 200
+        )
+
+      Cache.put(:expiring_key, "value", cache: fast_cache, ttl: 10)
+
+      # Wait just slightly longer than TTL to ensure expiry
+      # This is the minimal sleep needed for time-based expiry
+      :timer.sleep(15)
 
       {_event, _measurements, metadata, result} =
         assert_telemetry_event [:foundation, :cache, :miss],
                                %{},
                                %{key: :expiring_key, reason: :expired} do
-          Cache.get(:expiring_key, :expired, cache: cache)
+          Cache.get(:expiring_key, :expired, cache: fast_cache)
         end
 
       assert result == :expired
@@ -139,13 +149,15 @@ defmodule Foundation.Infrastructure.CacheTelemetryTest do
       Cache.put(:exp2, "value2", cache: cleanup_cache, ttl: 10)
       Cache.put(:permanent, "value3", cache: cleanup_cache)
 
-      # Wait for cleanup to trigger
-      assert_telemetry_event [:foundation, :cache, :cleanup],
-                             %{expired_count: 2},
-                             %{},
-                             timeout: 100 do
-        Process.sleep(60)
-      end
+      # Wait for cleanup to trigger - the cleanup interval is 50ms
+      # and entries expire after 10ms, so cleanup should find them
+      {:ok, {_event, measurements, _metadata}} =
+        wait_for_telemetry_event(
+          [:foundation, :cache, :cleanup],
+          timeout: 100
+        )
+
+      assert measurements.expired_count == 2
     end
 
     test "emits error event on invalid operations", %{cache: cache} do

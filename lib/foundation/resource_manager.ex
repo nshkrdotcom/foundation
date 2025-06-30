@@ -38,6 +38,7 @@ defmodule Foundation.ResourceManager do
 
   use GenServer
   require Logger
+  alias Foundation.Telemetry
 
   @default_limits %{
     max_memory_mb: 1024,
@@ -150,6 +151,8 @@ defmodule Foundation.ResourceManager do
   end
 
   def handle_call({:acquire_resource, resource_type, metadata}, _from, state) do
+    start_time = System.monotonic_time()
+
     case check_resource_availability(state, resource_type, metadata) do
       :ok ->
         token = generate_token(resource_type, metadata)
@@ -159,6 +162,20 @@ defmodule Foundation.ResourceManager do
         # Check if we need to enter backpressure
         updated_state = update_backpressure_state(new_state)
 
+        # Emit telemetry for successful acquisition
+        Telemetry.emit(
+          [:foundation, :resource_manager, :acquired],
+          %{
+            duration: System.monotonic_time() - start_time,
+            active_tokens: map_size(new_usage.active_tokens),
+            memory_mb: new_usage.memory_mb
+          },
+          Map.merge(metadata, %{
+            resource_type: resource_type,
+            token_id: token.id
+          })
+        )
+
         {:reply, {:ok, token}, updated_state}
 
       {:error, reason} = error ->
@@ -167,6 +184,18 @@ defmodule Foundation.ResourceManager do
           reason: reason,
           current_usage: state.current_usage
         })
+
+        # Emit telemetry for failed acquisition
+        Telemetry.emit(
+          [:foundation, :resource_manager, :denied],
+          %{
+            duration: System.monotonic_time() - start_time
+          },
+          Map.merge(metadata, %{
+            resource_type: resource_type,
+            reason: reason
+          })
+        )
 
         {:reply, error, state}
     end
@@ -188,11 +217,26 @@ defmodule Foundation.ResourceManager do
   end
 
   def handle_cast({:release_resource, token}, state) do
+    start_time = System.monotonic_time()
     new_usage = remove_token(state.current_usage, token)
     new_state = %{state | current_usage: new_usage}
 
     # Check if we can exit backpressure
     updated_state = update_backpressure_state(new_state)
+
+    # Emit telemetry for resource release
+    Telemetry.emit(
+      [:foundation, :resource_manager, :released],
+      %{
+        duration: System.monotonic_time() - start_time,
+        active_tokens: map_size(new_usage.active_tokens),
+        memory_mb: new_usage.memory_mb
+      },
+      %{
+        token_id: token.id,
+        resource_type: Map.get(token, :resource_type, Map.get(token, :type))
+      }
+    )
 
     {:noreply, updated_state}
   end
@@ -341,11 +385,13 @@ defmodule Foundation.ResourceManager do
   end
 
   defp perform_cleanup(state) do
+    start_time = System.monotonic_time()
     Logger.debug("ResourceManager performing cleanup cycle")
 
     # Clean up expired tokens
     now = System.monotonic_time(:millisecond)
     tokens = Map.get(state.current_usage, :active_tokens, %{})
+    initial_token_count = map_size(tokens)
 
     # Remove tokens older than 5 minutes
     active_tokens =
@@ -357,9 +403,25 @@ defmodule Foundation.ResourceManager do
         end
       end)
 
+    expired_count = initial_token_count - map_size(active_tokens)
+
     # Re-measure usage
     measured_state = measure_current_usage(state)
     updated_usage = Map.put(measured_state.current_usage, :active_tokens, active_tokens)
+
+    # Emit telemetry event for cleanup completion
+    Telemetry.emit(
+      [:foundation, :resource_manager, :cleanup],
+      %{
+        duration: System.monotonic_time() - start_time,
+        expired_tokens: expired_count,
+        active_tokens: map_size(active_tokens),
+        memory_mb: measured_state.current_usage.memory_mb
+      },
+      %{
+        timestamp: System.system_time()
+      }
+    )
 
     %{measured_state | current_usage: updated_usage}
     |> update_backpressure_state()

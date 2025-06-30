@@ -7,6 +7,7 @@ defmodule JidoFoundation.PerformanceBenchmarkTest do
   """
 
   use ExUnit.Case, async: false
+  use Foundation.TelemetryTestHelpers
   require Logger
 
   alias JidoFoundation.{TaskPoolManager, SystemCommandManager}
@@ -484,8 +485,13 @@ defmodule JidoFoundation.PerformanceBenchmarkTest do
         Enum.to_list(stream)
       end
 
-      # Wait for cleanup
-      Process.sleep(500)
+      # Wait for processes to terminate and resource cleanup
+      wait_for_gc_completion(timeout: 1000)
+
+      # Also wait for any resource manager cleanup if running
+      if Process.whereis(Foundation.ResourceManager) do
+        wait_for_resource_cleanup(timeout: 1000)
+      end
 
       final_process_count = :erlang.system_info(:process_count)
       process_growth = final_process_count - initial_process_count

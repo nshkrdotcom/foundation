@@ -7,6 +7,7 @@ defmodule JidoFoundation.ResourceLeakDetectionTest do
   """
 
   use ExUnit.Case, async: false
+  use Foundation.TelemetryTestHelpers
   require Logger
 
   alias JidoFoundation.{TaskPoolManager, SystemCommandManager}
@@ -132,14 +133,13 @@ defmodule JidoFoundation.ResourceLeakDetectionTest do
     # Take initial resource snapshot
     initial_snapshot = ResourceMonitor.snapshot()
 
-    # Clean up any existing test data
-    :erlang.garbage_collect()
-    Process.sleep(100)
+    # Clean up any existing test data and wait for GC to complete
+    wait_for_gc_completion()
 
     on_exit(fn ->
       # Final cleanup and leak check
-      :erlang.garbage_collect()
-      Process.sleep(200)
+      wait_for_gc_completion(timeout: 500)
+      wait_for_resource_cleanup(timeout: 500)
 
       final_snapshot = ResourceMonitor.snapshot()
       leak_results = ResourceMonitor.compare_snapshots(initial_snapshot, final_snapshot)
@@ -175,7 +175,7 @@ defmodule JidoFoundation.ResourceLeakDetectionTest do
 
       # Force garbage collection
       :erlang.garbage_collect()
-      Process.sleep(100)
+      wait_for_gc_completion(timeout: 200)
 
       # Check for leaks
       final_snapshot = ResourceMonitor.snapshot()
@@ -361,11 +361,11 @@ defmodule JidoFoundation.ResourceLeakDetectionTest do
           SystemCommandManager.clear_cache()
         end
 
-        Process.sleep(50)
+        wait_for_gc_completion(timeout: 100)
       end
 
       :erlang.garbage_collect()
-      Process.sleep(100)
+      wait_for_gc_completion(timeout: 200)
 
       final_snapshot = ResourceMonitor.snapshot()
       leak_results = ResourceMonitor.compare_snapshots(initial, final_snapshot)
@@ -386,7 +386,7 @@ defmodule JidoFoundation.ResourceLeakDetectionTest do
             Process.exit(cmd_manager_pid, :kill)
 
             # Wait for restart
-            Process.sleep(300)
+            wait_for_gc_completion(timeout: 500)
 
             # Verify restart
             new_pid = Process.whereis(JidoFoundation.SystemCommandManager)
@@ -396,7 +396,7 @@ defmodule JidoFoundation.ResourceLeakDetectionTest do
       end
 
       :erlang.garbage_collect()
-      Process.sleep(500)
+      wait_for_gc_completion(timeout: 700)
 
       final_snapshot = ResourceMonitor.snapshot()
 
@@ -457,7 +457,7 @@ defmodule JidoFoundation.ResourceLeakDetectionTest do
 
       # Final cleanup
       :erlang.garbage_collect()
-      Process.sleep(1000)
+      wait_for_gc_completion(timeout: 1200)
 
       final_snapshot = ResourceMonitor.snapshot()
 
@@ -490,11 +490,11 @@ defmodule JidoFoundation.ResourceLeakDetectionTest do
       for _i <- 1..10 do
         # SystemCommandManager uses timeouts for commands
         {:ok, _load} = SystemCommandManager.get_load_average()
-        Process.sleep(50)
+        wait_for_gc_completion(timeout: 100)
       end
 
       # Wait for timers to expire
-      Process.sleep(500)
+      wait_for_gc_completion(timeout: 700)
 
       final_timer_count = count_active_timers()
 

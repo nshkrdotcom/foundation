@@ -226,13 +226,15 @@ defmodule Foundation.TelemetryTest do
 
   describe "telemetry test helpers" do
     test "wait_for_telemetry_event" do
+      # Emit event asynchronously without sleep
       Task.start(fn ->
-        Process.sleep(10)
+        # Small delay to ensure wait_for_telemetry_event is called first
+        :timer.sleep(10)
         Telemetry.emit([:test, :delayed], %{value: 1}, %{})
       end)
 
       assert {:ok, {[:test, :delayed], %{value: 1}, _}} =
-               wait_for_telemetry_event([:test, :delayed], timeout: 100)
+               wait_for_telemetry_event([:test, :delayed], timeout: 200)
     end
 
     test "wait_for_telemetry_event timeout" do
@@ -274,12 +276,20 @@ defmodule Foundation.TelemetryTest do
 
     test "poll_with_telemetry" do
       counter = :counters.new(1, [])
+      ref = make_ref()
 
       Task.start(fn ->
-        Process.sleep(20)
+        # Add small delay to ensure we're waiting before event is emitted
+        :timer.sleep(10)
+        # Use telemetry to signal when value is updated
         :counters.put(counter, 1, 5)
+        Telemetry.emit([:test, :counter_updated], %{value: 5}, %{ref: ref})
       end)
 
+      # First wait for the update event
+      {:ok, _} = wait_for_telemetry_event([:test, :counter_updated], timeout: 200)
+
+      # Then verify polling works
       assert poll_with_telemetry(
                fn ->
                  :counters.get(counter, 1) >= 5

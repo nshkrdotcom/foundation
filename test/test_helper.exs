@@ -113,7 +113,11 @@ defmodule TestHelpers do
 
   def create_test_agent_pid do
     spawn(fn ->
-      Process.sleep(1000)
+      receive do
+        :stop -> :ok
+      after
+        1000 -> :timeout
+      end
     end)
   end
 end

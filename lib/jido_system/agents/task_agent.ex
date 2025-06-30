@@ -315,6 +315,18 @@ defmodule JidoSystem.Agents.TaskAgent do
   def handle_process_task(agent, task_params) do
     try do
       start_time = System.monotonic_time(:microsecond)
+      task_id = Map.get(task_params, :task_id, Map.get(task_params, :id))
+
+      # Emit task started event
+      :telemetry.execute(
+        [:jido_system, :task, :started],
+        %{timestamp: System.system_time()},
+        %{
+          task_id: task_id,
+          task_type: Map.get(task_params, :task_type),
+          agent_id: agent.id
+        }
+      )
 
       # Create validate task instruction
       _validate_instruction =
@@ -336,8 +348,39 @@ defmodule JidoSystem.Agents.TaskAgent do
           # Process the task using Jido.Exec for consistent execution
           result =
             case Jido.Exec.run(ProcessTask, validated_task, %{agent_id: agent.id}) do
-              {:ok, task_result} -> task_result
-              {:error, _} = error -> error
+              {:ok, task_result} ->
+                # Emit task completed event
+                end_time = System.monotonic_time(:microsecond)
+                processing_time = end_time - start_time
+
+                :telemetry.execute(
+                  [:jido_system, :task, :completed],
+                  %{
+                    duration: processing_time,
+                    timestamp: System.system_time()
+                  },
+                  %{
+                    task_id: task_id,
+                    result: :success,
+                    agent_id: agent.id
+                  }
+                )
+
+                task_result
+
+              {:error, error_reason} = error ->
+                # Emit task failed event
+                :telemetry.execute(
+                  [:jido_system, :task, :failed],
+                  %{timestamp: System.system_time()},
+                  %{
+                    task_id: task_id,
+                    error: error_reason,
+                    agent_id: agent.id
+                  }
+                )
+
+                error
             end
 
           # Update performance metrics
@@ -366,11 +409,35 @@ defmodule JidoSystem.Agents.TaskAgent do
           {:ok, result, %{agent | state: new_state}}
 
         {:error, reason} ->
+          # Emit task failed event for validation failure
+          :telemetry.execute(
+            [:jido_system, :task, :failed],
+            %{timestamp: System.system_time()},
+            %{
+              task_id: task_id,
+              error: {:validation_failed, reason},
+              agent_id: agent.id
+            }
+          )
+
           emit_event(agent, :task_validation_failed, %{}, %{reason: reason})
           {:error, {:validation_failed, reason}}
       end
     rescue
       e ->
+        # Emit task failed event for processing error
+        task_id = Map.get(task_params, :task_id, Map.get(task_params, :id))
+
+        :telemetry.execute(
+          [:jido_system, :task, :failed],
+          %{timestamp: System.system_time()},
+          %{
+            task_id: task_id,
+            error: {:processing_error, e},
+            agent_id: agent.id
+          }
+        )
+
         emit_event(agent, :task_processing_error, %{}, %{error: inspect(e)})
         {:error, {:processing_error, e}}
     end
