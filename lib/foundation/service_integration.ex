@@ -29,6 +29,7 @@ defmodule Foundation.ServiceIntegration do
       :ok = Foundation.ServiceIntegration.shutdown_services_gracefully([:my_service])
   """
 
+  alias Foundation.ServiceIntegration.DependencyManager
   require Logger
 
   # Use full module names to avoid compilation dependency issues
@@ -59,7 +60,7 @@ defmodule Foundation.ServiceIntegration do
           dependency_management: dependency_status,
           integration_components: %{
             contract_validator: process_status(Foundation.ServiceIntegration.ContractValidator),
-            dependency_manager: process_status(Foundation.ServiceIntegration.DependencyManager),
+            dependency_manager: process_status(DependencyManager),
             health_checker: process_status(Foundation.ServiceIntegration.HealthChecker)
           }
         }
@@ -148,9 +149,7 @@ defmodule Foundation.ServiceIntegration do
     # Use DependencyManager for proper ordering
     case ensure_dependency_manager_running() do
       {:ok, _pid} ->
-        case Foundation.ServiceIntegration.DependencyManager.start_services_in_dependency_order(
-               services
-             ) do
+        case DependencyManager.start_services_in_dependency_order(services) do
           :ok -> :ok
           {:error, reason} -> {:error, reason}
         end
@@ -199,7 +198,7 @@ defmodule Foundation.ServiceIntegration do
     Logger.info("Shutting down services gracefully", services: services)
 
     # For now, shut down services in reverse order
-    # TODO: Integrate with DependencyManager when implemented
+    # TO DO: Integrate with DependencyManager when implemented
     reverse_services = Enum.reverse(services)
 
     results =

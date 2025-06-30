@@ -74,7 +74,11 @@
         {Credo.Check.Warning.UnusedRegexOperation, []},
         {Credo.Check.Warning.UnusedStringOperation, []},
         {Credo.Check.Warning.UnusedTupleOperation, []},
-        {Credo.Check.Warning.UnsafeExec, []}
+        {Credo.Check.Warning.UnsafeExec, []},
+        
+        # Disable logger metadata check - we use structured logging
+        # and don't want to pollute the logger config with 50+ keys
+        {Credo.Check.Warning.MissedMetadataKeyInLoggerConfig, false}
       ]
     },
     %{
@@ -150,7 +154,11 @@
         {Credo.Check.Warning.UnusedRegexOperation, []},
         {Credo.Check.Warning.UnusedStringOperation, []},
         {Credo.Check.Warning.UnusedTupleOperation, []},
-        {Credo.Check.Warning.UnsafeExec, []}
+        {Credo.Check.Warning.UnsafeExec, []},
+        
+        # Disable logger metadata check - we use structured logging
+        # and don't want to pollute the logger config with 50+ keys
+        {Credo.Check.Warning.MissedMetadataKeyInLoggerConfig, false}
       ]
     }
   ]

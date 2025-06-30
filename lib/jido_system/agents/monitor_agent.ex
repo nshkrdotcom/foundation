@@ -352,7 +352,7 @@ defmodule JidoSystem.Agents.MonitorAgent do
 
   # Private helper functions
 
-  defp register_with_scheduler() do
+  defp register_with_scheduler do
     # Register periodic operations with the supervised scheduler
     JidoFoundation.SchedulerManager.register_periodic(
       self(),
@@ -371,12 +371,12 @@ defmodule JidoSystem.Agents.MonitorAgent do
     )
   end
 
-  defp unregister_from_scheduler() do
+  defp unregister_from_scheduler do
     # Unregister all periodic operations when stopping
     JidoFoundation.SchedulerManager.unregister_agent(self())
   end
 
-  defp subscribe_to_telemetry_events() do
+  defp subscribe_to_telemetry_events do
     events = [
       [:jido_system, :agent, :started],
       [:jido_system, :agent, :terminated],
@@ -399,7 +399,7 @@ defmodule JidoSystem.Agents.MonitorAgent do
     GenServer.cast(pid, {:telemetry_event, event, measurements, metadata})
   end
 
-  defp collect_system_metrics() do
+  defp collect_system_metrics do
     %{
       memory: :erlang.memory(),
       system_info: %{
@@ -442,7 +442,7 @@ defmodule JidoSystem.Agents.MonitorAgent do
     }
   end
 
-  defp collect_foundation_metrics() do
+  defp collect_foundation_metrics do
     %{
       registry_count: Registry.count(Foundation.Registry),
       telemetry_handlers: length(:telemetry.list_handlers([])),
@@ -450,7 +450,7 @@ defmodule JidoSystem.Agents.MonitorAgent do
     }
   end
 
-  defp get_load_average() do
+  defp get_load_average do
     # Use supervised system command execution instead of direct System.cmd
     case JidoFoundation.SystemCommandManager.get_load_average() do
       {:ok, load_avg} when is_float(load_avg) ->
@@ -463,7 +463,7 @@ defmodule JidoSystem.Agents.MonitorAgent do
     _ -> 0.0
   end
 
-  defp get_scheduler_utilization() do
+  defp get_scheduler_utilization do
     try do
       schedulers = :erlang.system_info(:logical_processors)
 
@@ -489,7 +489,7 @@ defmodule JidoSystem.Agents.MonitorAgent do
     end
   end
 
-  defp count_supervisor_children() do
+  defp count_supervisor_children do
     try do
       case Process.whereis(Foundation.Supervisor) do
         pid when is_pid(pid) ->

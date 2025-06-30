@@ -273,7 +273,7 @@ defmodule JidoSystem.Sensors.SystemHealthSensor do
     Process.send_after(self(), :collect_metrics, interval)
   end
 
-  defp collect_system_metrics() do
+  defp collect_system_metrics do
     %{
       timestamp: DateTime.utc_now(),
 
@@ -297,7 +297,7 @@ defmodule JidoSystem.Sensors.SystemHealthSensor do
     }
   end
 
-  defp collect_memory_metrics() do
+  defp collect_memory_metrics do
     memory_info = :erlang.memory()
 
     %{
@@ -311,7 +311,7 @@ defmodule JidoSystem.Sensors.SystemHealthSensor do
     }
   end
 
-  defp collect_process_metrics() do
+  defp collect_process_metrics do
     %{
       count: :erlang.system_info(:process_count),
       limit: :erlang.system_info(:process_limit),
@@ -321,7 +321,7 @@ defmodule JidoSystem.Sensors.SystemHealthSensor do
     }
   end
 
-  defp collect_system_info() do
+  defp collect_system_info do
     %{
       schedulers: :erlang.system_info(:schedulers),
       scheduler_utilization: get_scheduler_utilization(),
@@ -332,7 +332,7 @@ defmodule JidoSystem.Sensors.SystemHealthSensor do
     }
   end
 
-  defp collect_vm_metrics() do
+  defp collect_vm_metrics do
     %{
       uptime: :erlang.statistics(:wall_clock) |> elem(0),
       reductions: :erlang.statistics(:reductions) |> elem(0),
@@ -342,7 +342,7 @@ defmodule JidoSystem.Sensors.SystemHealthSensor do
     }
   end
 
-  defp collect_load_metrics() do
+  defp collect_load_metrics do
     try do
       # Use supervised system command execution instead of direct System.cmd
       case JidoFoundation.SystemCommandManager.get_load_average() do
@@ -364,7 +364,7 @@ defmodule JidoSystem.Sensors.SystemHealthSensor do
     end
   end
 
-  defp collect_registry_metrics() do
+  defp collect_registry_metrics do
     try do
       %{
         foundation_registry_count: Registry.count(Foundation.Registry),
@@ -392,7 +392,7 @@ defmodule JidoSystem.Sensors.SystemHealthSensor do
     end
   end
 
-  defp get_message_queue_stats() do
+  defp get_message_queue_stats do
     try do
       processes = Process.list()
 
@@ -419,7 +419,7 @@ defmodule JidoSystem.Sensors.SystemHealthSensor do
     end
   end
 
-  defp get_scheduler_utilization() do
+  defp get_scheduler_utilization do
     try do
       # Use :erlang.statistics/1 instead of :scheduler.utilization/1
       case :erlang.statistics(:scheduler_wall_time) do

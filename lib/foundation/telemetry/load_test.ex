@@ -225,7 +225,7 @@ defmodule Foundation.Telemetry.LoadTest do
         module.scenarios()
       end
 
-    if length(scenarios) == 0 do
+    if Enum.empty?(scenarios) do
       Logger.error("Setup test with empty scenarios! Module: #{inspect(module)}")
     else
       Logger.debug(

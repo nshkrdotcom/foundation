@@ -18,7 +18,7 @@ defmodule JidoSystem.Agents.TaskAgentTest do
     :ok
   end
 
-  # TODO: Move to shared test utilities once Foundation telemetry system is complete
+  # TO DO: Move to shared test utilities once Foundation telemetry system is complete
   # Utility function for polling with timeout instead of fixed sleeps
   defp poll_with_timeout(poll_fn, timeout_ms, interval_ms) do
     end_time = System.monotonic_time(:millisecond) + timeout_ms
@@ -59,7 +59,7 @@ defmodule JidoSystem.Agents.TaskAgentTest do
       assert Process.alive?(pid), "Agent died unexpectedly"
 
       # For now, skip registry check due to agent lifecycle issue
-      # TODO: Fix agent lifecycle so it doesn't die immediately after startup
+      # TO DO: Fix agent lifecycle so it doesn't die immediately after startup
       # Verify that we can at least communicate with the agent
       case GenServer.whereis(pid) do
         nil -> flunk("Agent process not found")
@@ -157,7 +157,7 @@ defmodule JidoSystem.Agents.TaskAgentTest do
 
       Jido.Agent.Server.cast(agent, instruction)
 
-      # TODO: Replace with proper telemetry-based synchronization once Foundation telemetry system is built out
+      # TO DO: Replace with proper telemetry-based synchronization once Foundation telemetry system is built out
       # This polling approach is a temporary workaround for async agent error processing
       poll_for_error_count = fn ->
         case Jido.Agent.Server.state(agent) do
@@ -471,7 +471,7 @@ defmodule JidoSystem.Agents.TaskAgentTest do
       # Agent should handle the error and continue operating
       assert Process.alive?(agent)
 
-      # TODO: Replace with proper telemetry-based synchronization once Foundation telemetry system is built out
+      # TO DO: Replace with proper telemetry-based synchronization once Foundation telemetry system is built out
       poll_for_error_count = fn ->
         case Jido.Agent.Server.state(agent) do
           {:ok, state} when state.agent.state.error_count > 0 ->
@@ -525,7 +525,7 @@ defmodule JidoSystem.Agents.TaskAgentTest do
         Jido.Agent.Server.cast(agent, instruction)
       end
 
-      # TODO: Replace with proper telemetry-based synchronization once Foundation telemetry system is built out
+      # TO DO: Replace with proper telemetry-based synchronization once Foundation telemetry system is built out
       poll_for_pause = fn ->
         case Jido.Agent.Server.state(agent) do
           {:ok, state} when state.agent.state.error_count >= 10 ->

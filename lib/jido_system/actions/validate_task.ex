@@ -197,17 +197,17 @@ defmodule JidoSystem.Actions.ValidateTask do
 
     # Required fields validation
     errors =
-      if not Map.has_key?(task, :id) or not is_binary(task.id) do
-        ["Missing or invalid task ID" | errors]
-      else
+      if Map.has_key?(task, :id) or not is_binary(task.id) do
         errors
+      else
+        ["Missing or invalid task ID" | errors]
       end
 
     errors =
-      if not Map.has_key?(task, :type) or not is_atom(task.type) do
-        ["Missing or invalid task type" | errors]
-      else
+      if Map.has_key?(task, :type) or not is_atom(task.type) do
         errors
+      else
+        ["Missing or invalid task type" | errors]
       end
 
     # Input validation
@@ -343,25 +343,25 @@ defmodule JidoSystem.Actions.ValidateTask do
   defp validate_data_processing_task(input_data, errors, warnings) do
     # Check for required data processing fields
     errors =
-      if not Map.has_key?(input_data, :source) do
-        ["Data processing requires 'source' field" | errors]
-      else
+      if Map.has_key?(input_data, :source) do
         errors
+      else
+        ["Data processing requires 'source' field" | errors]
       end
 
     # Check for optional but recommended fields
     warnings =
-      if not Map.has_key?(input_data, :format) do
-        ["Consider specifying data format for better processing" | warnings]
-      else
+      if Map.has_key?(input_data, :format) do
         warnings
+      else
+        ["Consider specifying data format for better processing" | warnings]
       end
 
     warnings =
-      if not Map.has_key?(input_data, :validation_rules) do
-        ["Consider adding validation rules for data quality" | warnings]
-      else
+      if Map.has_key?(input_data, :validation_rules) do
         warnings
+      else
+        ["Consider adding validation rules for data quality" | warnings]
       end
 
     {errors, warnings}
@@ -370,17 +370,17 @@ defmodule JidoSystem.Actions.ValidateTask do
   defp validate_validation_task(input_data, errors, warnings) do
     # Check for validation-specific requirements
     errors =
-      if not Map.has_key?(input_data, :data) do
-        ["Validation task requires 'data' field" | errors]
-      else
+      if Map.has_key?(input_data, :data) do
         errors
+      else
+        ["Validation task requires 'data' field" | errors]
       end
 
     warnings =
-      if not Map.has_key?(input_data, :schema) do
-        ["Consider providing validation schema" | warnings]
-      else
+      if Map.has_key?(input_data, :schema) do
         warnings
+      else
+        ["Consider providing validation schema" | warnings]
       end
 
     {errors, warnings}
@@ -389,17 +389,17 @@ defmodule JidoSystem.Actions.ValidateTask do
   defp validate_transformation_task(input_data, errors, warnings) do
     # Check transformation requirements
     errors =
-      if not Map.has_key?(input_data, :transformations) do
-        ["Transformation task requires 'transformations' field" | errors]
-      else
+      if Map.has_key?(input_data, :transformations) do
         errors
+      else
+        ["Transformation task requires 'transformations' field" | errors]
       end
 
     errors =
-      if not Map.has_key?(input_data, :target_format) do
-        ["Transformation task requires 'target_format' field" | errors]
-      else
+      if Map.has_key?(input_data, :target_format) do
         errors
+      else
+        ["Transformation task requires 'target_format' field" | errors]
       end
 
     {errors, warnings}
@@ -408,17 +408,17 @@ defmodule JidoSystem.Actions.ValidateTask do
   defp validate_analysis_task(input_data, errors, warnings) do
     # Check analysis requirements
     errors =
-      if not Map.has_key?(input_data, :analysis_type) do
-        ["Analysis task requires 'analysis_type' field" | errors]
-      else
+      if Map.has_key?(input_data, :analysis_type) do
         errors
+      else
+        ["Analysis task requires 'analysis_type' field" | errors]
       end
 
     warnings =
-      if not Map.has_key?(input_data, :parameters) do
-        ["Consider providing analysis parameters" | warnings]
-      else
+      if Map.has_key?(input_data, :parameters) do
         warnings
+      else
+        ["Consider providing analysis parameters" | warnings]
       end
 
     {errors, warnings}
@@ -427,17 +427,17 @@ defmodule JidoSystem.Actions.ValidateTask do
   defp validate_notification_task(input_data, errors, warnings) do
     # Check notification requirements
     errors =
-      if not Map.has_key?(input_data, :recipients) do
-        ["Notification task requires 'recipients' field" | errors]
-      else
+      if Map.has_key?(input_data, :recipients) do
         errors
+      else
+        ["Notification task requires 'recipients' field" | errors]
       end
 
     errors =
-      if not Map.has_key?(input_data, :message) do
-        ["Notification task requires 'message' field" | errors]
-      else
+      if Map.has_key?(input_data, :message) do
         errors
+      else
+        ["Notification task requires 'message' field" | errors]
       end
 
     {errors, warnings}
@@ -646,7 +646,7 @@ defmodule JidoSystem.Actions.ValidateTask do
     "task_validation:#{task_hash}:#{rules_hash}"
   end
 
-  defp generate_validation_id() do
+  defp generate_validation_id do
     "val_#{System.unique_integer()}_#{DateTime.utc_now() |> DateTime.to_unix()}"
   end
 

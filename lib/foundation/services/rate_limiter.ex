@@ -218,7 +218,7 @@ defmodule Foundation.Services.RateLimiter do
         start_time = System.monotonic_time(:millisecond)
 
         # Use simple in-memory rate limiting for now
-        # TODO: Replace with proper Hammer integration when API is clarified
+        # TO DO: Replace with proper Hammer integration when API is clarified
         limiter_key = {limiter_id, identifier}
         current_time = System.monotonic_time(:millisecond)
 
@@ -456,7 +456,7 @@ defmodule Foundation.Services.RateLimiter do
   end
 
   # Simple in-memory rate limiting implementation
-  # TODO: Replace with distributed solution for production use
+  # TO DO: Replace with distributed solution for production use
 
   defp get_rate_limit_bucket(limiter_key, limiter_config, current_time) do
     # Calculate window start

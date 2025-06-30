@@ -1,4 +1,6 @@
 defmodule Foundation.Telemetry.SampledEvents do
+  alias Foundation.Telemetry.Sampler
+
   @moduledoc """
   Convenience module for emitting sampled telemetry events.
 
@@ -57,7 +59,7 @@ defmodule Foundation.Telemetry.SampledEvents do
     quote do
       event = __telemetry_prefix__() ++ [unquote(event_name), :start]
       measurements = %{timestamp: System.system_time()}
-      Foundation.Telemetry.Sampler.execute(event, measurements, unquote(metadata))
+      Sampler.execute(event, measurements, unquote(metadata))
     end
   end
 
@@ -182,13 +184,13 @@ defmodule Foundation.Telemetry.SampledEvents do
         # First time
         Process.put({:telemetry_dedup, key}, now)
         event = prefix ++ [event_name]
-        Foundation.Telemetry.Sampler.execute(event, measurements, metadata)
+        Sampler.execute(event, measurements, metadata)
 
       last_emit when now - last_emit >= interval_ms ->
         # Enough time has passed
         Process.put({:telemetry_dedup, key}, now)
         event = prefix ++ [event_name]
-        Foundation.Telemetry.Sampler.execute(event, measurements, metadata)
+        Sampler.execute(event, measurements, metadata)
 
       _ ->
         # Too soon, skip

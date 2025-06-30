@@ -359,8 +359,8 @@ defmodule Foundation.UnifiedTestFoundation do
     %{
       test_id: test_id,
       timestamp: System.system_time(:microsecond),
-      processes: Process.registered() |> Enum.filter(&is_test_process?(&1, test_id)),
-      telemetry: :telemetry.list_handlers([]) |> Enum.filter(&is_test_handler?(&1, test_id)),
+      processes: Process.registered() |> Enum.filter(&test_process?(&1, test_id)),
+      telemetry: :telemetry.list_handlers([]) |> Enum.filter(&test_handler?(&1, test_id)),
       ets: :ets.all() |> length(),
       memory: :erlang.memory()
     }
@@ -442,7 +442,7 @@ defmodule Foundation.UnifiedTestFoundation do
   def cleanup_test_telemetry_handlers(test_id) do
     try do
       :telemetry.list_handlers([])
-      |> Enum.filter(&is_test_handler?(&1, test_id))
+      |> Enum.filter(&test_handler?(&1, test_id))
       |> Enum.each(fn handler ->
         :telemetry.detach(handler.id)
       end)
@@ -524,15 +524,15 @@ defmodule Foundation.UnifiedTestFoundation do
 
   defp module_config_for_mode(_), do: quote(do: nil)
 
-  defp is_test_process?(process_name, test_id) when is_atom(process_name) do
+  defp test_process?(process_name, test_id) when is_atom(process_name) do
     process_name
     |> to_string()
     |> String.contains?("test_#{test_id}")
   end
 
-  defp is_test_process?(_, _), do: false
+  defp test_process?(_, _), do: false
 
-  defp is_test_handler?(handler, test_id) do
+  defp test_handler?(handler, test_id) do
     handler.id
     |> to_string()
     |> String.contains?("test_#{test_id}")
@@ -635,7 +635,7 @@ defmodule Foundation.UnifiedTestFoundation do
   def cleanup_sia_telemetry_handlers(test_id) do
     try do
       :telemetry.list_handlers([])
-      |> Enum.filter(&is_sia_test_handler?(&1, test_id))
+      |> Enum.filter(&sia_test_handler?(&1, test_id))
       |> Enum.each(fn handler ->
         :telemetry.detach(handler.id)
       end)
@@ -644,7 +644,7 @@ defmodule Foundation.UnifiedTestFoundation do
     end
   end
 
-  defp is_sia_test_handler?(handler, test_id) do
+  defp sia_test_handler?(handler, test_id) do
     handler_id = to_string(handler.id)
 
     String.contains?(handler_id, "test_#{test_id}") and

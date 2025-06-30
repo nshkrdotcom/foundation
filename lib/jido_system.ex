@@ -358,7 +358,7 @@ defmodule JidoSystem do
       # - performance_metrics: System performance data
   """
   @spec get_system_status() :: {:ok, map()} | {:error, term()}
-  def get_system_status() do
+  def get_system_status do
     try do
       # Get agent information
       agent_entries = Registry.select(Foundation.Registry, [{{:_, :_, :_}, [], [:"$_"]}])
@@ -432,7 +432,7 @@ defmodule JidoSystem do
       # ]
   """
   @spec list_agent_types() :: [map()]
-  def list_agent_types() do
+  def list_agent_types do
     Enum.map(@agent_types, fn {type, module} ->
       capabilities =
         try do
@@ -466,7 +466,7 @@ defmodule JidoSystem do
       sensor_types = JidoSystem.list_sensor_types()
   """
   @spec list_sensor_types() :: [map()]
-  def list_sensor_types() do
+  def list_sensor_types do
     Enum.map(@sensor_types, fn {type, module} ->
       %{
         type: type,
@@ -520,7 +520,7 @@ defmodule JidoSystem do
 
   # Private helper functions
 
-  defp ensure_foundation_started() do
+  defp ensure_foundation_started do
     case Process.whereis(Foundation.Supervisor) do
       nil ->
         # Foundation not started, try to start it
@@ -613,7 +613,7 @@ defmodule JidoSystem do
 
   defp build_sensor_config(_sensor_type, _thresholds), do: []
 
-  defp default_thresholds() do
+  defp default_thresholds do
     %{
       cpu_usage: 80,
       memory_usage: 85,
@@ -636,7 +636,7 @@ defmodule JidoSystem do
 
   defp get_agent_id(id), do: id
 
-  defp count_active_sensors() do
+  defp count_active_sensors do
     # Simplified sensor counting
     # In a real implementation, we'd track sensor processes
     0
@@ -657,7 +657,7 @@ defmodule JidoSystem do
     end
   end
 
-  defp get_system_uptime() do
+  defp get_system_uptime do
     # Get system uptime (simplified)
     {uptime_ms, _} = :erlang.statistics(:wall_clock)
     # Convert to seconds
@@ -698,7 +698,7 @@ defmodule JidoSystem do
     end
   end
 
-  defp get_foundation_version() do
+  defp get_foundation_version do
     # Get Foundation application version
     case Application.spec(:foundation, :vsn) do
       nil -> "unknown"

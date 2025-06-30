@@ -515,7 +515,7 @@ defmodule JidoSystem.Agents.TaskAgent do
   # Private helper functions
 
   @spec schedule_queue_processing() :: reference()
-  defp schedule_queue_processing() do
+  defp schedule_queue_processing do
     Process.send_after(self(), :process_queue, 1000)
   end
 

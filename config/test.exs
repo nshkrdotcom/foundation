@@ -42,7 +42,12 @@ config :logger,
 
 config :logger, :console,
   format: "[$level] $message\n",
-  metadata: []
+  metadata: [
+    # Include minimal metadata for tests
+    :module,
+    :function,
+    :line
+  ]
 
 # Also configure Jido modules directly to reduce verbosity
 config :jido, log_level: :warning

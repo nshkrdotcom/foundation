@@ -18,7 +18,20 @@ config :logger,
 # For even better error formatting
 config :logger, :console,
   format: "\n$time [$level] $metadata\n$message\n",
-  metadata: [:module, :function, :line]
+  metadata: [
+    :module,
+    :function,
+    :line,
+    # Common metadata keys used throughout the application
+    :agent_id,
+    :error,
+    :pid,
+    :reason,
+    :sensor_id,
+    :service,
+    :signal_id,
+    :task_id
+  ]
 
 
 

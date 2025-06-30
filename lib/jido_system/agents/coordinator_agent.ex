@@ -414,7 +414,7 @@ defmodule JidoSystem.Agents.CoordinatorAgent do
 
   # Private helper functions
 
-  defp register_with_scheduler() do
+  defp register_with_scheduler do
     # Register periodic operations with the supervised scheduler
     JidoFoundation.SchedulerManager.register_periodic(
       self(),
@@ -433,7 +433,7 @@ defmodule JidoSystem.Agents.CoordinatorAgent do
     )
   end
 
-  defp unregister_from_scheduler() do
+  defp unregister_from_scheduler do
     # Unregister all periodic operations when stopping
     JidoFoundation.SchedulerManager.unregister_agent(self())
   end
@@ -475,7 +475,7 @@ defmodule JidoSystem.Agents.CoordinatorAgent do
   defp validate_task(%{action: action}) when is_atom(action), do: true
   defp validate_task(_), do: false
 
-  defp generate_execution_id() do
+  defp generate_execution_id do
     "exec_#{System.unique_integer()}_#{DateTime.utc_now() |> DateTime.to_unix()}"
   end
 

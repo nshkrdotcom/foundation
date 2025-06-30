@@ -178,7 +178,7 @@ defmodule Foundation.Telemetry.LoadTest.Coordinator do
       telemetry_prefix: state.context.opts[:telemetry_prefix]
     }
 
-    if length(state.scenario_distribution) == 0 do
+    if Enum.empty?(state.scenario_distribution) do
       Logger.error("Coordinator starting worker with empty scenario distribution!")
     end
 
@@ -189,7 +189,7 @@ defmodule Foundation.Telemetry.LoadTest.Coordinator do
   end
 
   defp build_scenario_distribution(scenarios) do
-    if length(scenarios) == 0 do
+    if Enum.empty?(scenarios) do
       Logger.error("Building distribution with empty scenarios!")
       []
     else

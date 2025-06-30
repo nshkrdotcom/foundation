@@ -36,6 +36,7 @@ defmodule Foundation.ServiceIntegration.ContractValidator do
   """
 
   use GenServer
+  alias Foundation.Services
   require Logger
 
   # Removed unused alias to fix compilation issues
@@ -331,10 +332,10 @@ defmodule Foundation.ServiceIntegration.ContractValidator do
   defp validate_foundation_contracts do
     # Validate core Foundation services have proper contracts
     foundation_services = [
-      Foundation.Services.RetryService,
-      Foundation.Services.ConnectionManager,
-      Foundation.Services.RateLimiter,
-      Foundation.Services.SignalBus
+      Services.RetryService,
+      Services.ConnectionManager,
+      Services.RateLimiter,
+      Services.SignalBus
     ]
 
     violations =

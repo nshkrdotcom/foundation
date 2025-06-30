@@ -1,4 +1,6 @@
 defmodule JidoFoundation.Bridge do
+  alias Jido.Signal.Bus
+
   @moduledoc """
   Minimal surgical integration bridge between Jido agents and Foundation infrastructure.
 
@@ -417,10 +419,10 @@ defmodule JidoFoundation.Bridge do
   """
   def start_signal_bus(opts \\ []) do
     name = Keyword.get(opts, :name, :foundation_signal_bus)
-    middleware = Keyword.get(opts, :middleware, [{Jido.Signal.Bus.Middleware.Logger, []}])
+    middleware = Keyword.get(opts, :middleware, [{Bus.Middleware.Logger, []}])
 
     # Start Jido Signal Bus with Foundation-specific configuration
-    Jido.Signal.Bus.start_link(
+    Bus.start_link(
       [
         name: name,
         middleware: middleware
@@ -460,7 +462,7 @@ defmodule JidoFoundation.Bridge do
 
     subscription_opts = Keyword.merge(dispatch_opts, Keyword.drop(opts, [:bus]))
 
-    Jido.Signal.Bus.subscribe(bus_name, signal_path, subscription_opts)
+    Bus.subscribe(bus_name, signal_path, subscription_opts)
   end
 
   @doc """
@@ -473,7 +475,7 @@ defmodule JidoFoundation.Bridge do
   """
   def unsubscribe_from_signals(subscription_id, opts \\ []) do
     bus_name = Keyword.get(opts, :bus, :foundation_signal_bus)
-    Jido.Signal.Bus.unsubscribe(bus_name, subscription_id)
+    Bus.unsubscribe(bus_name, subscription_id)
   end
 
   @doc """
@@ -491,7 +493,7 @@ defmodule JidoFoundation.Bridge do
     bus_name = Keyword.get(opts, :bus, :foundation_signal_bus)
     start_timestamp = Keyword.get(opts, :since, 0)
 
-    Jido.Signal.Bus.replay(bus_name, path, start_timestamp, opts)
+    Bus.replay(bus_name, path, start_timestamp, opts)
   end
 
   @doc """

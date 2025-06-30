@@ -98,7 +98,7 @@ defmodule Foundation.PerformanceOptimizer do
 
     high_risk_files =
       all_files
-      |> Enum.filter(&is_high_risk_file?/1)
+      |> Enum.filter(&high_risk_file?/1)
 
     unmigrated_high_risk =
       high_risk_files
@@ -120,11 +120,11 @@ defmodule Foundation.PerformanceOptimizer do
 
     high_resource_files =
       test_files
-      |> Enum.filter(&is_high_resource_file?/1)
+      |> Enum.filter(&high_resource_file?/1)
 
     concurrent_unsafe_files =
       test_files
-      |> Enum.filter(&is_concurrent_unsafe?/1)
+      |> Enum.filter(&concurrent_unsafe?/1)
 
     %{
       total_files: length(test_files),
@@ -187,7 +187,7 @@ defmodule Foundation.PerformanceOptimizer do
     }
   end
 
-  defp is_high_risk_file?(file) do
+  defp high_risk_file?(file) do
     content = File.read!(file)
 
     String.contains?(content, "async: false") or
@@ -197,7 +197,7 @@ defmodule Foundation.PerformanceOptimizer do
       String.contains?(content, "Process.register")
   end
 
-  defp is_high_resource_file?(file) do
+  defp high_resource_file?(file) do
     content = File.read!(file)
 
     String.contains?(content, "ResourceManager") or
@@ -207,7 +207,7 @@ defmodule Foundation.PerformanceOptimizer do
       String.contains?(content, ":ets.new")
   end
 
-  defp is_concurrent_unsafe?(file) do
+  defp concurrent_unsafe?(file) do
     content = File.read!(file)
 
     String.contains?(content, "async: false") or
@@ -246,7 +246,7 @@ defmodule Foundation.PerformanceOptimizer do
 
     risky_files =
       files
-      |> Enum.filter(&is_high_risk_file?/1)
+      |> Enum.filter(&high_risk_file?/1)
 
     risk_score = length(risky_files) / total_files * 100
     Float.round(risk_score, 1)

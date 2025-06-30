@@ -218,7 +218,7 @@ defmodule JidoSystem.Sensors.AgentPerformanceSensor do
     Process.send_after(self(), :analyze_performance, interval)
   end
 
-  defp subscribe_to_agent_events() do
+  defp subscribe_to_agent_events do
     events = [
       [:jido_system, :agent, :started],
       [:jido_system, :agent, :terminated],
@@ -237,7 +237,7 @@ defmodule JidoSystem.Sensors.AgentPerformanceSensor do
     GenServer.cast(pid, {:telemetry_event, event, measurements, metadata})
   end
 
-  defp collect_agent_performance_data() do
+  defp collect_agent_performance_data do
     try do
       # Get all registered agents from Foundation Registry
       registry_entries = Registry.select(Foundation.Registry, [{{:_, :_, :_}, [], [:"$_"]}])
@@ -546,7 +546,7 @@ defmodule JidoSystem.Sensors.AgentPerformanceSensor do
 
   defp classify_performance_level(issues, stats, _trends) do
     cond do
-      length(issues) == 0 and stats.responsiveness_rate > 0.95 ->
+      Enum.empty?(issues) and stats.responsiveness_rate > 0.95 ->
         :optimal
 
       length(issues) <= 1 and stats.responsiveness_rate > 0.9 ->

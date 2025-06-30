@@ -37,7 +37,7 @@ defmodule Foundation.Telemetry.LoadTest.Worker do
     }
 
     # Debug logging
-    if length(config.scenario_distribution) == 0 do
+    if Enum.empty?(config.scenario_distribution) do
       Logger.error("Worker initialized with empty scenario distribution!")
     else
       Logger.debug(
