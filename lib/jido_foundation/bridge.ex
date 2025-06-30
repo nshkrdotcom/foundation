@@ -252,23 +252,20 @@ defmodule JidoFoundation.Bridge do
   Sets up monitoring for a Jido agent.
 
   Automatically updates Foundation registry when agent health changes.
+  
+  This function now uses proper OTP supervision via JidoFoundation.MonitorSupervisor
+  instead of spawning unsupervised processes.
   """
   def setup_monitoring(agent_pid, opts \\ []) do
-    health_check = Keyword.get(opts, :health_check, &default_health_check/1)
-    interval = Keyword.get(opts, :health_check_interval, 30_000)
-    registry = Keyword.get(opts, :registry)
-
-    # Start a supervised monitoring process
-    monitor_pid =
-      Foundation.TaskHelper.spawn_supervised(fn ->
-        Process.flag(:trap_exit, true)
-        monitor_agent_health(agent_pid, health_check, interval, registry)
-      end)
-
-    # Store monitor PID in process dictionary for testing
-    Process.put({:monitor, agent_pid}, monitor_pid)
-
-    :ok
+    # Use the new supervised monitoring system
+    case JidoFoundation.MonitorSupervisor.start_monitoring(agent_pid, opts) do
+      {:ok, _monitor_pid} ->
+        :ok
+      
+      {:error, reason} ->
+        Logger.error("Failed to start monitoring for agent #{inspect(agent_pid)}: #{inspect(reason)}")
+        {:error, reason}
+    end
   end
 
   # Resource management integration
@@ -383,60 +380,19 @@ defmodule JidoFoundation.Bridge do
     Map.merge(base_metadata, custom_metadata)
   end
 
-  defp default_health_check(agent_pid) do
-    # Simple process alive check
-    if Process.alive?(agent_pid) do
-      :healthy
-    else
-      :unhealthy
-    end
+  # REMOVED: default_health_check/1 - moved to JidoFoundation.AgentMonitor.default_health_check/1
+
+  @doc """
+  Stops monitoring for a Jido agent.
+  
+  This cleanly terminates the supervised monitoring process.
+  """
+  def stop_monitoring(agent_pid) when is_pid(agent_pid) do
+    JidoFoundation.MonitorSupervisor.stop_monitoring(agent_pid)
   end
 
-  defp monitor_agent_health(agent_pid, health_check, interval, registry) do
-    Process.monitor(agent_pid)
-
-    receive do
-      {:DOWN, _ref, :process, ^agent_pid, _reason} ->
-        # Agent died, update status and stop monitoring
-        try do
-          update_agent_metadata(agent_pid, %{health_status: :unhealthy}, registry: registry)
-        catch
-          _, _ -> :ok
-        end
-
-        :ok
-
-      {:EXIT, _pid, _reason} ->
-        # Monitor process being terminated
-        :ok
-    after
-      interval ->
-        # Periodic health check
-        case health_check.(agent_pid) do
-          :healthy ->
-            try do
-              update_agent_metadata(agent_pid, %{health_status: :healthy}, registry: registry)
-            catch
-              _, _ -> :ok
-            end
-
-            monitor_agent_health(agent_pid, health_check, interval, registry)
-
-          status when status in [:degraded, :unhealthy] ->
-            try do
-              update_agent_metadata(agent_pid, %{health_status: status}, registry: registry)
-            catch
-              _, _ -> :ok
-            end
-
-            monitor_agent_health(agent_pid, health_check, interval, registry)
-
-          _ ->
-            # Invalid status, continue monitoring
-            monitor_agent_health(agent_pid, health_check, interval, registry)
-        end
-    end
-  end
+  # REMOVED: monitor_agent_health/4 - replaced by JidoFoundation.AgentMonitor GenServer
+  # This eliminates the unsupervised recursive receive loop that violated OTP principles
 
   # Signal integration and routing functions
 

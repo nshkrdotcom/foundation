@@ -39,7 +39,13 @@ defmodule JidoSystem.Application do
       JidoSystem.ErrorStore,
 
       # Agent health monitoring
-      JidoSystem.HealthMonitor
+      JidoSystem.HealthMonitor,
+
+      # Registry for Bridge agent monitoring
+      {Registry, keys: :unique, name: JidoFoundation.MonitorRegistry},
+
+      # Bridge agent monitoring supervisor (OTP compliant replacement for unsupervised processes)
+      JidoFoundation.MonitorSupervisor
     ]
 
     opts = [
