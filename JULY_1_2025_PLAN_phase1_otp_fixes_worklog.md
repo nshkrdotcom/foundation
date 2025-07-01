@@ -1010,3 +1010,150 @@ Phase 2 successfully transformed the Foundation test suite from sleep-based sync
 - Testing the async test helpers themselves
 
 The test suite is now faster, more reliable, and serves as a reference implementation for proper async testing patterns in Elixir/OTP systems.
+
+---
+
+## 2025-07-01 - Comprehensive OTP Audit of lib/ Directory
+
+### Starting Comprehensive Audit
+- All Phase 1 OTP fixes completed
+- All test sleep issues resolved
+- Now performing deep audit of lib/ for remaining OTP issues before Phase 2
+- Will search for patterns listed in JULY_1_2025_PRE_PHASE_2_OTP_report.md
+
+### Audit Methodology
+- Searched for unsupervised processes (spawn, Task.async)
+- Searched for raw send/2 usage (found 17 files)
+- Searched for Process.monitor without demonitor
+- Analyzed file sizes to find god modules (>1000 lines)
+- Checked for ETS race conditions
+- Reviewed GenServer implementations for blocking operations
+
+### Critical Findings
+
+#### 1. Race Condition in Rate Limiter - CRITICAL
+- **File**: lib/foundation/services/rate_limiter.ex:533-541
+- **Issue**: Non-atomic check-and-update in check_and_increment_rate_limit
+- **Details**: After incrementing counter, checks limit, then decrements if exceeded
+- **Race**: Another process could increment between check and decrement
+- **Impact**: Could allow exceeding rate limits under high concurrency
+
+#### 2. Raw send/2 in Signal Router - CRITICAL  
+- **File**: lib/jido_foundation/signal_router.ex:326
+- **Issue**: Using raw send() for critical signal delivery
+- **Impact**: No delivery guarantees, signals could be lost
+
+### High Priority Findings
+
+#### 3. Missing Process.demonitor - HIGH
+- **File**: lib/jido_foundation/signal_router.ex
+- **Line 153**: Creates monitor with Process.monitor(handler_pid)
+- **Line 239**: DOWN handler cleans up subscriptions but never demonitors
+- **Impact**: Memory leak as monitor refs accumulate
+
+#### 4-6. God Modules - HIGH
+- **ml_foundation/distributed_optimization.ex**: 1,170 lines
+- **ml_foundation/team_orchestration.ex**: 1,153 lines  
+- **ml_foundation/agent_patterns.ex**: 1,074 lines
+- **Impact**: Hard to maintain, test, and reason about
+
+### Medium Priority Findings
+
+#### 7. Potential Blocking Operations
+- Several GenServers may have long-running operations in callbacks
+- Should move heavy work to Task.Supervisor.async_nolink
+
+#### 8. Missing Telemetry
+- Some critical paths lack telemetry events
+- Makes debugging and monitoring difficult
+
+#### 9. Unbounded State Growth
+- agent_registry.ex and coordination_manager.ex could accumulate state
+- Need periodic cleanup strategies
+
+### Summary
+- **Total Issues Found**: 11
+- **Critical**: 2 (must fix before Phase 2)
+- **High**: 4 (should fix soon)
+- **Medium**: 3 (can fix during Phase 2)
+- **Low**: 2 (nice to have)
+
+### Recommendations
+1. Fix critical issues immediately (2-3 hours)
+2. Add Process.demonitor to signal router
+3. Plan god module decomposition
+4. Then proceed to Phase 2 with remaining issues as parallel work
+
+### Report Created
+- Comprehensive findings documented in JULY_1_2025_PRE_PHASE_2_OTP_report.md
+- Includes code examples, impact analysis, and fix recommendations
+- Ready to proceed with fixing critical issues before Phase 2
+
+---
+
+## 2025-07-01 - Comprehensive OTP Refactor Plan Created
+
+### Documents Created
+
+Created 5-document comprehensive plan to transform codebase to proper OTP:
+
+1. **JULY_1_2025_PRE_PHASE_2_OTP_report_01.md** - Critical Fixes (2-3 days)
+   - Ban dangerous primitives
+   - Fix resource leaks  
+   - Fix race conditions
+   - Remove telemetry control flow
+   - Fix error handling
+   - Correct supervision strategies
+
+2. **JULY_1_2025_PRE_PHASE_2_OTP_report_02.md** - State & Architecture (1-2 weeks)
+   - Apply state persistence to all agents
+   - Decompose god agents
+   - Create migration path
+
+3. **JULY_1_2025_PRE_PHASE_2_OTP_report_03.md** - Testing & Communication (1 week)
+   - Build proper test helpers
+   - Add sync APIs
+   - Fix messaging patterns
+   - Migrate all tests
+
+4. **JULY_1_2025_PRE_PHASE_2_OTP_report_04.md** - Error Handling (5-7 days)
+   - Unify error systems
+   - Remove catch-all handling
+   - Add proper boundaries
+   - Implement recovery strategies
+
+5. **JULY_1_2025_PRE_PHASE_2_OTP_report_05.md** - Integration & Deployment (2 weeks)
+   - Feature flag system
+   - Gradual rollout plan
+   - Monitoring & rollback
+   - Production checklist
+
+### Context Document Created
+
+**JULY_1_2025_OTP_REFACTOR_CONTEXT.md** - Starting guide that:
+- Provides quick start for new context
+- Lists all required reading in order
+- Identifies key files to study
+- Includes audit commands
+- Defines success criteria
+- Total estimated time: 5-6 weeks
+
+### Key Insights from Analysis
+
+1. **The Illusion of OTP**: System uses OTP modules but fights against principles
+2. **State + Process**: These must be inseparable (entire point of GenServer)
+3. **Let It Crash**: Only catch expected errors, let bugs crash
+4. **Test Behavior**: Not implementation (no telemetry sync, no sleep)
+5. **Gradual Rollout**: Feature flags ensure safe deployment
+
+### Ready for Execution
+
+All documents are self-contained with:
+- Clear context and required reading
+- Specific file references with line numbers
+- Code examples of problems and solutions
+- Step-by-step implementation guides
+- Testing and verification steps
+- Rollback procedures
+
+The refactor can begin with Document 01, Stage 1.1 immediately.
