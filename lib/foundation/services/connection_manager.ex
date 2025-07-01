@@ -221,7 +221,12 @@ defmodule Foundation.Services.ConnectionManager do
         start_time = System.monotonic_time(:millisecond)
         updated_stats = Map.update!(state.stats, :active_requests, &(&1 + 1))
 
-        result = execute_http_request(state.finch_name, pool_config, request)
+        # Execute in a supervised task to avoid blocking, but wait for result
+        task_result =
+          Task.Supervisor.async_nolink(Foundation.TaskSupervisor, fn ->
+            execute_http_request(state.finch_name, pool_config, request)
+          end)
+          |> Task.await(pool_config.timeout)
 
         duration = System.monotonic_time(:millisecond) - start_time
 
@@ -231,9 +236,9 @@ defmodule Foundation.Services.ConnectionManager do
           |> Map.update!(:active_requests, &(&1 - 1))
           |> Map.update!(:total_requests, &(&1 + 1))
 
-        emit_request_telemetry(pool_id, request, result, duration)
+        emit_request_telemetry(pool_id, request, task_result, duration)
 
-        {:reply, result, %{state | stats: final_stats}}
+        {:reply, task_result, %{state | stats: final_stats}}
     end
   end
 

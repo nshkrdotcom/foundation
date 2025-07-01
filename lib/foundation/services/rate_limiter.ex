@@ -222,14 +222,11 @@ defmodule Foundation.Services.RateLimiter do
         limiter_key = {limiter_id, identifier}
         current_time = System.monotonic_time(:millisecond)
 
+        # Use atomic check and increment
         result =
-          case get_rate_limit_bucket(limiter_key, limiter_config, current_time) do
-            {:allow, _} ->
-              increment_rate_limit_bucket(limiter_key, limiter_config, current_time)
-              :allowed
-
-            {:deny, _} ->
-              :denied
+          case check_and_increment_rate_limit(limiter_key, limiter_config, current_time) do
+            {:allow, _} -> :allowed
+            {:deny, _} -> :denied
           end
 
         duration = System.monotonic_time(:millisecond) - start_time
@@ -346,6 +343,12 @@ defmodule Foundation.Services.RateLimiter do
   end
 
   @impl true
+  def handle_call({:get_limiter_config, limiter_id}, _from, state) do
+    config = Map.get(state.limiters, limiter_id, @default_config)
+    {:reply, config, state}
+  end
+
+  @impl true
   def handle_info({:cleanup, limiter_id}, state) do
     case Map.get(state.limiters, limiter_id) do
       nil ->
@@ -415,10 +418,63 @@ defmodule Foundation.Services.RateLimiter do
     end)
   end
 
-  defp perform_limiter_cleanup(_limiter_id) do
-    # Hammer handles its own cleanup automatically
-    # This is a placeholder for any additional cleanup logic
-    0
+  defp perform_limiter_cleanup(limiter_id) do
+    # Clean up expired rate limit windows
+    current_time = System.monotonic_time(:millisecond)
+
+    # Get all limiters to check window expiration
+    case :ets.info(:rate_limit_buckets) do
+      :undefined ->
+        0
+
+      _ ->
+        # Get the limiter config to know the window size
+        limiter_config =
+          try do
+            GenServer.call(__MODULE__, {:get_limiter_config, limiter_id}, 100)
+          catch
+            # Default 1 minute window
+            _, _ -> %{scale_ms: 60_000}
+          end
+
+        # Find and delete expired buckets
+        expired =
+          :ets.foldl(
+            fn
+              {{key, window_start}, _count}, acc when is_tuple(key) ->
+                # Check if this bucket belongs to our limiter
+                case key do
+                  {^limiter_id, _identifier} ->
+                    # Check if window is expired (older than 2 windows)
+                    expiry_time = window_start + limiter_config.scale_ms * 2
+
+                    if current_time > expiry_time do
+                      :ets.delete(:rate_limit_buckets, {key, window_start})
+                      acc + 1
+                    else
+                      acc
+                    end
+
+                  _ ->
+                    acc
+                end
+
+              _, acc ->
+                acc
+            end,
+            0,
+            :rate_limit_buckets
+          )
+
+        # Log if we cleaned up a lot of entries
+        if expired > 1000 do
+          Logger.warning(
+            "Rate limiter cleaned up #{expired} expired entries for limiter #{limiter_id}"
+          )
+        end
+
+        expired
+    end
   end
 
   defp get_limiter_stats(_limiter_id, limiter_config) do
@@ -458,12 +514,37 @@ defmodule Foundation.Services.RateLimiter do
   # Simple in-memory rate limiting implementation
   # TO DO: Replace with distributed solution for production use
 
+  # Atomic rate limiting using ETS update_counter
+  defp check_and_increment_rate_limit(limiter_key, limiter_config, current_time) do
+    # Calculate window start
+    window_start = current_time - rem(current_time, limiter_config.scale_ms)
+    bucket_key = {limiter_key, window_start}
+
+    # Ensure ETS table exists
+    ensure_rate_limit_table()
+
+    # Atomically increment and check in one operation
+    try do
+      new_count = :ets.update_counter(:rate_limit_buckets, bucket_key, {2, 1}, {bucket_key, 0})
+
+      if new_count > limiter_config.limit do
+        # Exceeded limit, decrement back
+        :ets.update_counter(:rate_limit_buckets, bucket_key, {2, -1})
+        {:deny, new_count - 1}
+      else
+        {:allow, new_count}
+      end
+    rescue
+      _ -> {:allow, 0}
+    end
+  end
+
   defp get_rate_limit_bucket(limiter_key, limiter_config, current_time) do
     # Calculate window start
     window_start = current_time - rem(current_time, limiter_config.scale_ms)
     bucket_key = {limiter_key, window_start}
 
-    # Get current count from ETS or process state
+    # Get current count from ETS
     count =
       case :ets.lookup(:rate_limit_buckets, bucket_key) do
         [{^bucket_key, count}] -> count
@@ -481,23 +562,25 @@ defmodule Foundation.Services.RateLimiter do
       {:allow, 0}
   end
 
-  defp increment_rate_limit_bucket(limiter_key, limiter_config, current_time) do
-    # Calculate window start
-    window_start = current_time - rem(current_time, limiter_config.scale_ms)
-    bucket_key = {limiter_key, window_start}
-
-    # Create ETS table if it doesn't exist
+  defp ensure_rate_limit_table() do
     case :ets.info(:rate_limit_buckets) do
       :undefined ->
-        :ets.new(:rate_limit_buckets, [:set, :public, :named_table])
+        try do
+          table = :ets.new(:rate_limit_buckets, [:set, :public, :named_table])
+
+          # Register with ResourceManager for monitoring
+          if Process.whereis(Foundation.ResourceManager) do
+            Foundation.ResourceManager.monitor_table(table)
+          end
+
+          table
+        rescue
+          # Table already exists (race condition)
+          ArgumentError -> :ok
+        end
 
       _ ->
         :ok
     end
-
-    # Increment counter
-    :ets.update_counter(:rate_limit_buckets, bucket_key, 1, {bucket_key, 0})
-  rescue
-    _ -> :ok
   end
 end

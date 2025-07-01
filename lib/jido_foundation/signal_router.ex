@@ -48,7 +48,17 @@ defmodule JidoFoundation.SignalRouter do
   use GenServer
   require Logger
 
-  defstruct [:subscriptions, :telemetry_attached, :telemetry_handler_id]
+  defstruct [:subscriptions, :telemetry_attached, :telemetry_handler_id, :backpressure_config]
+
+  # Default backpressure configuration
+  @default_backpressure %{
+    max_mailbox_size: 10_000,
+    # :drop_newest, :drop_oldest, :block
+    drop_strategy: :drop_newest,
+    warn_threshold: 5_000,
+    # Check every N messages
+    check_interval: 100
+  }
 
   ## Client API
 
@@ -109,10 +119,17 @@ defmodule JidoFoundation.SignalRouter do
     # Create unique handler ID for this router instance
     handler_id = "jido-signal-router-#{:erlang.unique_integer([:positive])}"
 
+    # Configure backpressure
+    backpressure_config =
+      opts
+      |> Keyword.get(:backpressure, %{})
+      |> Map.merge(@default_backpressure, fn _k, v1, _v2 -> v1 end)
+
     state = %__MODULE__{
       subscriptions: %{},
       telemetry_attached: false,
-      telemetry_handler_id: handler_id
+      telemetry_handler_id: handler_id,
+      backpressure_config: backpressure_config
     }
 
     state =
@@ -123,7 +140,10 @@ defmodule JidoFoundation.SignalRouter do
         state
       end
 
-    Logger.info("JidoFoundation.SignalRouter started")
+    Logger.info(
+      "JidoFoundation.SignalRouter started with backpressure: #{inspect(backpressure_config)}"
+    )
+
     {:ok, state}
   end
 
@@ -177,10 +197,16 @@ defmodule JidoFoundation.SignalRouter do
       total_subscription_patterns: map_size(state.subscriptions),
       total_handlers: state.subscriptions |> Map.values() |> List.flatten() |> length(),
       subscription_patterns: Map.keys(state.subscriptions),
-      telemetry_attached: state.telemetry_attached
+      telemetry_attached: state.telemetry_attached,
+      backpressure_config: state.backpressure_config
     }
 
     {:reply, stats, state}
+  end
+
+  @impl true
+  def handle_call(:get_backpressure_config, _from, state) do
+    {:reply, state.backpressure_config, state}
   end
 
   @impl true
@@ -281,13 +307,43 @@ defmodule JidoFoundation.SignalRouter do
       end)
       |> Enum.uniq()
 
-    # Route signal to all matching handlers with error protection
+    # Get backpressure config from GenServer state
+    backpressure_config =
+      try do
+        GenServer.call(self(), :get_backpressure_config, 100)
+      catch
+        _, _ -> @default_backpressure
+      end
+
+    # Route signal to all matching handlers with error protection and backpressure
     successful_deliveries =
       matching_handlers
       |> Enum.map(fn handler_pid ->
         try do
-          send(handler_pid, {:routed_signal, signal_type, measurements, metadata})
-          :ok
+          # Check mailbox size for backpressure
+          case check_backpressure(handler_pid, backpressure_config) do
+            :ok ->
+              send(handler_pid, {:routed_signal, signal_type, measurements, metadata})
+              :ok
+
+            {:drop, reason} ->
+              Logger.warning(
+                "Dropped signal to handler #{inspect(handler_pid)} due to backpressure: #{reason}"
+              )
+
+              # Emit telemetry for dropped signal
+              :telemetry.execute(
+                [:jido, :signal, :dropped],
+                %{count: 1},
+                %{
+                  handler_pid: handler_pid,
+                  signal_type: signal_type,
+                  reason: reason
+                }
+              )
+
+              :dropped
+          end
         catch
           kind, reason ->
             Logger.warning(
@@ -336,6 +392,34 @@ defmodule JidoFoundation.SignalRouter do
       # No match
       true ->
         false
+    end
+  end
+
+  defp check_backpressure(handler_pid, backpressure_config) do
+    # Get process info
+    case Process.info(handler_pid, [:message_queue_len, :status]) do
+      nil ->
+        # Process is dead
+        {:drop, :process_dead}
+
+      info ->
+        mailbox_size = Keyword.get(info, :message_queue_len, 0)
+        max_size = backpressure_config.max_mailbox_size
+
+        cond do
+          # Mailbox exceeded limit
+          mailbox_size >= max_size ->
+            {:drop, {:mailbox_full, mailbox_size}}
+
+          # Warn about high mailbox
+          mailbox_size >= backpressure_config.warn_threshold ->
+            Logger.warning("Handler #{inspect(handler_pid)} mailbox high: #{mailbox_size} messages")
+            :ok
+
+          # All good
+          true ->
+            :ok
+        end
     end
   end
 end

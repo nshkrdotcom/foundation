@@ -20,7 +20,8 @@ defmodule Foundation.Infrastructure.Cache do
   # 1 minute
   @cleanup_interval 60_000
   @default_ttl :infinity
-  @default_max_size :infinity
+  # Set reasonable default limit
+  @default_max_size 100_000
 
   # Client API
 
@@ -56,21 +57,35 @@ defmodule Foundation.Infrastructure.Cache do
     try do
       cache = Keyword.get(opts, :cache, __MODULE__)
       table = get_table_name(cache)
+      now = System.monotonic_time(:millisecond)
 
-      case :ets.lookup(table, key) do
-        [{^key, value, expiry}] ->
-          if expired?(expiry) do
-            :ets.delete(table, key)
-            emit_cache_event(:miss, key, start_time, %{reason: :expired})
-            default
-          else
-            emit_cache_event(:hit, key, start_time)
-            value
-          end
+      # Use atomic select to get non-expired values
+      match_spec = [
+        {
+          {key, :"$1", :"$2"},
+          [{:orelse, {:==, :"$2", :infinity}, {:>, :"$2", now}}],
+          [{{:"$1", :"$2"}}]
+        }
+      ]
+
+      case :ets.select(table, match_spec) do
+        [{value, _expiry}] ->
+          emit_cache_event(:hit, key, start_time)
+          value
 
         [] ->
-          emit_cache_event(:miss, key, start_time, %{reason: :not_found})
-          default
+          # Check if it was expired or not found
+          case :ets.lookup(table, key) do
+            [{^key, _value, expiry}] when expiry != :infinity and expiry <= now ->
+              # Atomically delete expired entry
+              :ets.select_delete(table, [{{key, :"$1", :"$2"}, [{:"=<", :"$2", now}], [true]}])
+              emit_cache_event(:miss, key, start_time, %{reason: :expired})
+              default
+
+            [] ->
+              emit_cache_event(:miss, key, start_time, %{reason: :not_found})
+              default
+          end
       end
     rescue
       ArgumentError ->
@@ -273,11 +288,7 @@ defmodule Foundation.Infrastructure.Cache do
 
   defp calculate_expiry(_), do: :infinity
 
-  defp expired?(:infinity), do: false
-
-  defp expired?(expiry) do
-    System.monotonic_time(:millisecond) > expiry
-  end
+  # Removed expired? functions as they're no longer used with atomic operations
 
   defp schedule_cleanup(interval) do
     Process.send_after(self(), :cleanup_expired, interval)
