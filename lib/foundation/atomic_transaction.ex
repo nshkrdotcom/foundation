@@ -13,9 +13,9 @@ defmodule Foundation.AtomicTransaction do
   - Manual rollback support via tracked rollback data
   - Transaction logging for audit trail
   - Operation batching
-  
+
   ## Limitations
-  
+
   - NO automatic rollback of ETS operations on failure
   - Partial failures leave ETS in inconsistent state until manual rollback
   - Not suitable for true ACID requirements

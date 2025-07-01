@@ -124,37 +124,41 @@ defmodule MABEAM.AgentRegistry.API do
 
   @doc """
   Executes a series of operations serially through the GenServer.
-  
+
   WARNING: Despite the old name, this does NOT provide atomic transaction guarantees!
   Operations are serialized but NOT rolled back on failure. ETS changes persist
   even if later operations fail. The caller must handle cleanup using the
   returned rollback data.
-  
+
   @deprecated Use execute_serial_operations/3 instead for clarity
   """
   @spec atomic_transaction(list(), any(), GenServer.server()) ::
           {:ok, list()} | {:error, term(), list()}
   def atomic_transaction(operations, tx_id, registry \\ AgentRegistry) do
-    IO.warn("atomic_transaction/3 is deprecated and misleading. Use execute_serial_operations/3 instead", [])
+    IO.warn(
+      "atomic_transaction/3 is deprecated and misleading. Use execute_serial_operations/3 instead",
+      []
+    )
+
     execute_serial_operations(operations, tx_id, registry)
   end
 
   @doc """
   Executes a series of operations serially through the GenServer.
-  
+
   Operations are guaranteed to run without interleaving with other GenServer calls,
   but there is NO automatic rollback on failure. If an operation fails, any ETS
   changes from previous operations in the batch will persist.
-  
+
   Returns {:ok, rollback_data} on success, where rollback_data can be used to
   manually undo the operations if needed.
-  
+
   Returns {:error, reason, partial_rollback_data} on failure, where 
   partial_rollback_data contains undo information for operations that succeeded
   before the failure.
-  
+
   ## Example
-  
+
       operations = [
         {:register, [agent_id, pid, metadata]},
         {:update_metadata, [agent_id2, new_metadata]}
