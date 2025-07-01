@@ -51,7 +51,7 @@ config :logger, :console,
 
 # Also configure Jido modules directly to reduce verbosity
 config :jido, log_level: :warning
-config :jido_action, log_level: :warning  
+# config :jido_action, log_level: :warning  
 config :jido_signal, log_level: :warning
 
 # Configure ExUnit for comprehensive testing
