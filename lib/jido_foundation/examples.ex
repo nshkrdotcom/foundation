@@ -207,6 +207,12 @@ defmodule JidoFoundation.Examples do
     Example of coordinating multiple Jido agents using Foundation's query capabilities.
     """
 
+    @type work_item :: term()
+    @type capability :: atom()
+    @type agent_pid :: pid()
+    @type work_chunk :: [work_item()]
+    
+    @spec distribute_work([work_item()], capability()) :: {:ok, [term()]} | {:error, atom()}
     def distribute_work(work_items, capability_required) do
       # Find all healthy agents with required capability
       case JidoFoundation.Bridge.find_agents([
@@ -227,11 +233,13 @@ defmodule JidoFoundation.Examples do
           case Process.whereis(Foundation.TaskSupervisor) do
             nil ->
               raise "Foundation.TaskSupervisor not running. Ensure Foundation.Application is started."
-            
+
             supervisor when is_pid(supervisor) ->
+              # Type annotation to help Dialyzer understand the structure
+              work_assignments = Enum.zip(work_chunks, agent_pids)
+              
               results =
-                work_chunks
-                |> Enum.zip(agent_pids)
+                work_assignments
                 |> Task.Supervisor.async_stream_nolink(
                   Foundation.TaskSupervisor,
                   fn {chunk, agent_pid} ->
@@ -249,6 +257,7 @@ defmodule JidoFoundation.Examples do
       end
     end
 
+    @spec chunk_work([work_item()], pos_integer()) :: [work_chunk()]
     defp chunk_work(items, num_chunks) do
       chunk_size = div(length(items), num_chunks) + 1
       Enum.chunk_every(items, chunk_size)

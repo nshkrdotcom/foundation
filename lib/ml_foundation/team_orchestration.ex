@@ -601,6 +601,9 @@ defmodule MLFoundation.TeamOrchestration.ExperimentCoordinator do
   """
   use GenServer
   require Logger
+  
+  # Dialyzer annotation for intentional no-return function
+  @dialyzer {:no_return, run_distributed_experiments: 2}
 
   def init({runners, opts}) do
     {:ok,

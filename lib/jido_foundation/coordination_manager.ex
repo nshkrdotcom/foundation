@@ -548,13 +548,7 @@ defmodule JidoFoundation.CoordinationManager do
     else
       # Add to buffer with sender info for proper delivery
       # Handle both map and tuple messages
-      sender = cond do
-        is_map(message) and Map.has_key?(message, :sender) -> Map.get(message, :sender)
-        is_tuple(message) and tuple_size(message) >= 2 and elem(message, 0) == :mabeam_coordination -> elem(message, 1)
-        is_tuple(message) and elem(message, 0) == :mabeam_task -> self()
-        is_map(message) -> Map.get(message, :sender, self())
-        true -> self()
-      end
+      sender = extract_message_sender(message)
 
       enriched_message = %{
         sender: sender,
@@ -644,4 +638,11 @@ defmodule JidoFoundation.CoordinationManager do
       %{state | pending_messages: new_pending}
     end
   end
+
+  # Helper function to extract sender from various message formats
+  defp extract_message_sender({:mabeam_coordination, sender, _}), do: sender
+  defp extract_message_sender({:mabeam_task, _, _}), do: self()
+  defp extract_message_sender(%{sender: sender}), do: sender
+  defp extract_message_sender(%{}), do: self()
+  defp extract_message_sender(_), do: self()
 end
