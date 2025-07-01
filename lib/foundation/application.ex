@@ -45,10 +45,11 @@ defmodule Foundation.Application do
       Foundation.ResourceManager,
 
       # Service layer supervisor for Foundation services
-      Foundation.Services.Supervisor,
-
-      # JidoSystem agent supervision infrastructure
-      JidoSystem.Application
+      Foundation.Services.Supervisor
+      
+      # NOTE: JidoSystem.Application removed to break circular dependency
+      # JidoSystem should be started as a separate application or
+      # included in the host application's supervision tree
     ]
 
     opts = [strategy: :one_for_one, name: Foundation.Supervisor]

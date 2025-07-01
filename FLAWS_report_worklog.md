@@ -263,3 +263,25 @@ Task.Supervisor handles:
 **Total Time:** ~2 hours
 **Critical Issues Fixed:** 8/8
 **Production Readiness:** Significantly improved - all critical OTP violations and race conditions resolved
+
+---
+
+### Fix #9: Break Circular Dependencies in Supervision
+
+Foundation.Application starts JidoSystem.Application which depends on Foundation services, creating a circular dependency.
+
+**Changes Made:**
+1. Removed JidoSystem.Application from Foundation.Application's supervision tree
+2. Created new FoundationJidoSupervisor module to manage proper startup order
+3. Updated JidoSystem.Application documentation with integration options
+4. Modified test_helper.exs to ensure both applications start in tests
+
+**Key Implementation:**
+- FoundationJidoSupervisor uses :rest_for_one strategy to ensure proper restart semantics
+- Foundation starts first, then JidoSystem starts with Foundation services available
+- If Foundation crashes, JidoSystem is restarted to maintain consistency
+- Test helper checks if services are already running before starting them
+
+**Test Results:** All 499 tests passing
+
+**Status:** ✅ COMPLETED - Circular dependency eliminated with proper supervision structure

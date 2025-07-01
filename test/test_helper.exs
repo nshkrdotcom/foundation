@@ -9,6 +9,18 @@ Application.put_env(:foundation, :infrastructure_impl, nil)
 {:ok, _cache_pid} =
   Foundation.Infrastructure.Cache.start_link(name: Foundation.Infrastructure.Cache)
 
+# Start Foundation and JidoSystem services for tests if not already running
+# This avoids the circular dependency while ensuring all services are available
+# Check if Foundation.Supervisor is already running
+unless Process.whereis(Foundation.Supervisor) do
+  {:ok, _foundation_pid} = Foundation.Application.start(:normal, [])
+end
+
+# Check if JidoSystem.Supervisor is already running
+unless Process.whereis(JidoSystem.Supervisor) do
+  {:ok, _jido_pid} = JidoSystem.Application.start(:normal, [])
+end
+
 # Filter out notice logs from Jido framework during tests
 Logger.add_backend(:console)
 Logger.configure_backend(:console, level: :info)

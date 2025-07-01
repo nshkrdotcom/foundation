@@ -14,15 +14,43 @@ defmodule JidoSystem.Application do
 
   ## Integration with Foundation
 
-  JidoSystem should be added to Foundation's supervision tree:
+  JidoSystem depends on Foundation services and must be started after Foundation.
+  
+  Use one of these approaches:
 
-      Foundation.Supervisor
-      ├── Foundation.Services.Supervisor
-      ├── MABEAM.Supervisor
-      └── JidoSystem.Supervisor  # This module
-          ├── JidoSystem.AgentSupervisor (DynamicSupervisor)
-          ├── JidoSystem.ErrorStore
-          └── JidoSystem.HealthMonitor
+  ### Option 1: Use FoundationJidoSupervisor (Recommended)
+  
+      # In your application.ex
+      def start(_type, _args) do
+        children = [
+          FoundationJidoSupervisor,
+          # ... your other children
+        ]
+        
+        Supervisor.start_link(children, strategy: :one_for_one)
+      end
+
+  ### Option 2: Manual supervision tree
+  
+      # Ensure Foundation starts first
+      children = [
+        Foundation.Application,
+        JidoSystem.Application,
+        # ... your other children
+      ]
+      
+      # Use :rest_for_one to ensure proper restart order
+      Supervisor.start_link(children, strategy: :rest_for_one)
+
+  ### Option 3: Separate OTP applications
+  
+  Configure in mix.exs to ensure Foundation starts before JidoSystem:
+  
+      def application do
+        [
+          extra_applications: [:foundation, :jido_system]
+        ]
+      end
   """
 
   use Application
