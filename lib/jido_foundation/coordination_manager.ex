@@ -362,6 +362,20 @@ defmodule JidoFoundation.CoordinationManager do
     end
   end
 
+  def handle_info({:check_circuit_reset, pid}, state) do
+    # Try to reset circuit to half-open and drain buffered messages
+    new_circuit_breakers =
+      Map.update(state.circuit_breakers, pid, %{failures: 0, status: :closed}, fn breaker ->
+        %{breaker | status: :half_open}
+      end)
+
+    # Attempt to drain buffered messages for this pid
+    {new_buffers, new_state} =
+      drain_message_buffer(pid, %{state | circuit_breakers: new_circuit_breakers})
+
+    {:noreply, %{new_state | message_buffers: new_buffers}}
+  end
+
   def handle_info(_msg, state) do
     {:noreply, state}
   end
@@ -399,23 +413,47 @@ defmodule JidoFoundation.CoordinationManager do
 
   defp attempt_message_delivery(sender_pid, receiver_pid, message, state) do
     if Process.alive?(receiver_pid) do
-      try do
-        send(receiver_pid, message)
+      # Try GenServer call first for guaranteed delivery
+      result =
+        try do
+          # Attempt supervised delivery with timeout
+          GenServer.call(receiver_pid, {:coordination_message, message}, 5000)
+          :ok
+        catch
+          :exit, {:timeout, _} ->
+            Logger.debug(
+              "GenServer call timed out, falling back to send for #{inspect(receiver_pid)}"
+            )
 
-        # Update circuit breaker on success
-        new_circuit_breakers =
-          update_circuit_breaker(receiver_pid, :success, state.circuit_breakers)
+            # Fall back to regular send for compatibility
+            send(receiver_pid, message)
+            :ok
 
-        # Update stats
-        new_stats = Map.update!(state.stats, :messages_sent, &(&1 + 1))
+          :exit, {:noproc, _} ->
+            {:error, :receiver_not_found}
 
-        {:ok, %{state | circuit_breakers: new_circuit_breakers, stats: new_stats}}
-      catch
-        kind, reason ->
-          Logger.warning(
-            "Failed to send message to #{inspect(receiver_pid)}: #{kind} #{inspect(reason)}"
-          )
+          :exit, {:normal, _} ->
+            {:error, :receiver_terminated}
 
+          :exit, reason ->
+            Logger.debug("GenServer call failed: #{inspect(reason)}, falling back to send")
+            # Fall back to regular send for agents that don't implement handle_call
+            send(receiver_pid, message)
+            :ok
+        end
+
+      case result do
+        :ok ->
+          # Update circuit breaker on success
+          new_circuit_breakers =
+            update_circuit_breaker(receiver_pid, :success, state.circuit_breakers)
+
+          # Update stats
+          new_stats = Map.update!(state.stats, :messages_sent, &(&1 + 1))
+
+          {:ok, %{state | circuit_breakers: new_circuit_breakers, stats: new_stats}}
+
+        {:error, reason} ->
           handle_delivery_failure(sender_pid, receiver_pid, message, reason, state)
       end
     else
@@ -477,6 +515,9 @@ defmodule JidoFoundation.CoordinationManager do
         new_failures = current.failures + 1
 
         if new_failures >= @circuit_breaker_threshold do
+          # Schedule circuit reset check
+          Process.send_after(self(), {:check_circuit_reset, pid}, 30_000)
+
           Map.put(circuit_breakers, pid, %{
             failures: new_failures,
             status: :open,
@@ -495,15 +536,60 @@ defmodule JidoFoundation.CoordinationManager do
     current_buffer = Map.get(state.message_buffers, receiver_pid, [])
 
     if length(current_buffer) >= @buffer_max_size do
-      # Buffer overflow
+      # Buffer overflow - drop oldest messages
+      Logger.warning("Message buffer full for #{inspect(receiver_pid)}, dropping oldest messages")
+
+      # Keep only the most recent messages
+      new_buffer = [message | Enum.take(current_buffer, @buffer_max_size - 1)]
+      new_buffers = Map.put(state.message_buffers, receiver_pid, new_buffer)
       new_stats = Map.update!(state.stats, :buffer_overflows, &(&1 + 1))
-      {:error, :buffer_overflow, %{state | stats: new_stats}}
+
+      {:ok, %{state | message_buffers: new_buffers, stats: new_stats}}
     else
-      # Add to buffer
-      new_buffer = [message | current_buffer]
+      # Add to buffer with sender info for proper delivery
+      # Handle both map and tuple messages
+      sender = cond do
+        is_map(message) and Map.has_key?(message, :sender) -> Map.get(message, :sender)
+        is_tuple(message) and tuple_size(message) >= 2 and elem(message, 0) == :mabeam_coordination -> elem(message, 1)
+        is_tuple(message) and elem(message, 0) == :mabeam_task -> self()
+        is_map(message) -> Map.get(message, :sender, self())
+        true -> self()
+      end
+
+      enriched_message = %{
+        sender: sender,
+        message: message,
+        buffered_at: System.monotonic_time(:millisecond)
+      }
+
+      new_buffer = [enriched_message | current_buffer]
       new_buffers = Map.put(state.message_buffers, receiver_pid, new_buffer)
 
       {:ok, %{state | message_buffers: new_buffers}}
+    end
+  end
+
+  defp drain_message_buffer(pid, state) do
+    case Map.get(state.message_buffers, pid, []) do
+      [] ->
+        {state.message_buffers, state}
+
+      buffered_messages ->
+        Logger.info("Draining #{length(buffered_messages)} buffered messages for #{inspect(pid)}")
+
+        # Send messages in original order (reverse since we prepend)
+        new_state =
+          Enum.reverse(buffered_messages)
+          |> Enum.reduce(state, fn %{sender: sender, message: message}, acc_state ->
+            case attempt_message_delivery(sender, pid, message, acc_state) do
+              {:ok, updated_state} -> updated_state
+              {_, _, updated_state} -> updated_state
+            end
+          end)
+
+        # Clear the buffer for this pid
+        new_buffers = Map.delete(new_state.message_buffers, pid)
+        {new_buffers, new_state}
     end
   end
 

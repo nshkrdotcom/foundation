@@ -61,32 +61,21 @@ defmodule Foundation.Infrastructure.Cache do
       table = get_table_name(cache)
       now = System.monotonic_time(:millisecond)
 
-      # Use atomic select to get non-expired values
-      match_spec = [
-        {
-          {key, :"$1", :"$2"},
-          [{:orelse, {:==, :"$2", :infinity}, {:>, :"$2", now}}],
-          [{{:"$1", :"$2"}}]
-        }
-      ]
-
-      case :ets.select(table, match_spec) do
-        [{value, _expiry}] ->
-          emit_cache_event(:hit, key, start_time)
-          value
-
+      # Single atomic operation to avoid race condition
+      case :ets.lookup(table, key) do
         [] ->
-          # Check if it was expired or not found
-          case :ets.lookup(table, key) do
-            [{^key, _value, expiry}] when expiry != :infinity and expiry <= now ->
-              # Atomically delete expired entry
-              :ets.select_delete(table, [{{key, :"$1", :"$2"}, [{:"=<", :"$2", now}], [true]}])
-              emit_cache_event(:miss, key, start_time, %{reason: :expired})
-              default
+          emit_cache_event(:miss, key, start_time, %{reason: :not_found})
+          default
 
-            [] ->
-              emit_cache_event(:miss, key, start_time, %{reason: :not_found})
-              default
+        [{^key, value, expiry}] ->
+          if expiry == :infinity or expiry > now do
+            emit_cache_event(:hit, key, start_time)
+            value
+          else
+            # Entry is expired - delete it atomically
+            :ets.delete(table, key)
+            emit_cache_event(:miss, key, start_time, %{reason: :expired})
+            default
           end
       end
     rescue

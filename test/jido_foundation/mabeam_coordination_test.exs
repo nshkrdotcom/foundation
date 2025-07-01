@@ -42,7 +42,35 @@ defmodule JidoFoundation.MABEAMCoordinationTest do
     end
 
     def handle_call({:coordination_message, message}, _from, state) do
-      new_messages = [message | state.received_messages]
+      # Handle both direct messages and wrapped MABEAM coordination tuples
+      processed_message =
+        case message do
+          {:mabeam_coordination, from_agent, actual_message} ->
+            %{
+              type: :mabeam_coordination,
+              from: from_agent,
+              message: actual_message,
+              received_at: System.system_time(:microsecond)
+            }
+
+          {:mabeam_task, task_id, task_data} ->
+            task_message = %{
+              type: :mabeam_task,
+              task_id: task_id,
+              task_data: task_data,
+              status: :received,
+              received_at: System.system_time(:microsecond)
+            }
+
+            # Process task asynchronously
+            send(self(), {:process_task, task_id})
+            task_message
+
+          _ ->
+            message
+        end
+
+      new_messages = [processed_message | state.received_messages]
       new_state = %{state | received_messages: new_messages}
       {:reply, :ok, new_state}
     end

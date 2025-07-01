@@ -419,9 +419,12 @@ defmodule MABEAM.AgentRegistry do
   # --- handle_info for process monitoring ---
 
   def handle_info({:DOWN, monitor_ref, :process, _pid, reason}, state) do
+    # ALWAYS demonitor to prevent leak
+    Process.demonitor(monitor_ref, [:flush])
+
     case Map.get(state.monitors, monitor_ref) do
       nil ->
-        # Unknown monitor, ignore
+        Logger.debug("Received :DOWN for unknown monitor ref: #{inspect(monitor_ref)}")
         {:noreply, state}
 
       agent_id ->

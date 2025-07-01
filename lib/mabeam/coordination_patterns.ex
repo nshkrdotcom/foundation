@@ -137,21 +137,29 @@ defmodule MABEAM.CoordinationPatterns do
     timeout = Keyword.get(opts, :timeout, 30_000)
     max_concurrency = Keyword.get(opts, :max_concurrency, length(assignments))
 
-    results =
-      assignments
-      |> Task.async_stream(
-        fn {agent_pid, work_items} ->
-          execute_agent_work(agent_pid, work_items, operation_fn, timeout)
-        end,
-        max_concurrency: max_concurrency,
-        timeout: timeout + 1000
-      )
-      |> Enum.map(fn
-        {:ok, result} -> result
-        {:exit, reason} -> {:error, {:agent_timeout, reason}}
-      end)
+    # ALWAYS require supervisor - fail fast if not available
+    case Process.whereis(Foundation.TaskSupervisor) do
+      nil ->
+        raise "Foundation.TaskSupervisor not running. Ensure Foundation.Application is started."
+      
+      supervisor when is_pid(supervisor) ->
+        results =
+          assignments
+          |> Task.Supervisor.async_stream_nolink(
+            Foundation.TaskSupervisor,
+            fn {agent_pid, work_items} ->
+              execute_agent_work(agent_pid, work_items, operation_fn, timeout)
+            end,
+            max_concurrency: max_concurrency,
+            timeout: timeout + 1000
+          )
+          |> Enum.map(fn
+            {:ok, result} -> result
+            {:exit, reason} -> {:error, {:agent_timeout, reason}}
+          end)
 
-    {:ok, results}
+        {:ok, results}
+    end
   end
 
   # Consensus Building Pattern

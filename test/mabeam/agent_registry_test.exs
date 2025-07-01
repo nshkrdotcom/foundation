@@ -458,4 +458,30 @@ defmodule MABEAM.AgentRegistryTest do
       assert {_, ^agent2, _} = hd(filtered_agents)
     end
   end
+
+  describe "monitor leak fix" do
+    test "cleans up unknown monitor refs without leaking", %{agent1: agent1} do
+      # Start a separate registry for this test
+      {:ok, registry} = AgentRegistry.start_link(name: :test_registry_leak)
+
+      # Register and unregister an agent to create a monitor
+      :ok = Foundation.register("leak_test", agent1, valid_metadata(), registry)
+      :ok = Foundation.unregister("leak_test", registry)
+
+      # Simulate a DOWN message for unknown monitor
+      fake_ref = make_ref()
+      send(registry, {:DOWN, fake_ref, :process, self(), :normal})
+
+      # Give it time to process
+      Process.sleep(10)
+
+      # Verify process doesn't accumulate monitors
+      {:dictionary, dict} = Process.info(registry, :dictionary)
+      monitors = Keyword.get(dict, :"$monitors", [])
+      assert length(monitors) == 0
+
+      # Clean up
+      GenServer.stop(registry)
+    end
+  end
 end

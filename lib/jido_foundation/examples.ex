@@ -223,21 +223,29 @@ defmodule JidoFoundation.Examples do
           work_chunks = chunk_work(work_items, length(agent_pids))
 
           # Assign work to each agent in parallel
-          results =
-            work_chunks
-            |> Enum.zip(agent_pids)
-            |> Task.async_stream(
-              fn {chunk, agent_pid} ->
-                GenServer.call(agent_pid, {:process_batch, chunk}, 10_000)
-              end,
-              max_concurrency: length(agent_pids)
-            )
-            |> Enum.map(fn
-              {:ok, result} -> result
-              {:exit, reason} -> {:error, reason}
-            end)
+          # ALWAYS require supervisor - fail fast if not available
+          case Process.whereis(Foundation.TaskSupervisor) do
+            nil ->
+              raise "Foundation.TaskSupervisor not running. Ensure Foundation.Application is started."
+            
+            supervisor when is_pid(supervisor) ->
+              results =
+                work_chunks
+                |> Enum.zip(agent_pids)
+                |> Task.Supervisor.async_stream_nolink(
+                  Foundation.TaskSupervisor,
+                  fn {chunk, agent_pid} ->
+                    GenServer.call(agent_pid, {:process_batch, chunk}, 10_000)
+                  end,
+                  max_concurrency: length(agent_pids)
+                )
+                |> Enum.map(fn
+                  {:ok, result} -> result
+                  {:exit, reason} -> {:error, reason}
+                end)
 
-          {:ok, results}
+              {:ok, results}
+          end
       end
     end
 

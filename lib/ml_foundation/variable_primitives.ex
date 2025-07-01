@@ -23,7 +23,7 @@ defmodule MLFoundation.VariablePrimitives do
   """
 
   require Logger
-  alias Foundation.AtomicTransaction
+  alias Foundation.SerialOperations
 
   # Variable Definition
 
@@ -182,7 +182,7 @@ defmodule MLFoundation.VariablePrimitives do
     space_id = Keyword.get(opts, :space)
 
     # Use Foundation's atomic transaction
-    AtomicTransaction.transact(fn tx ->
+    SerialOperations.transact(fn tx ->
       perform_atomic_updates(updates, space_id, tx)
     end)
   end
@@ -486,7 +486,7 @@ defmodule MLFoundation.VariablePrimitives do
 
     # For now, just use direct update since we don't have proper transaction support
     # Issue: Implement proper atomic transaction support for variable updates
-    # This will require integration with Foundation.AtomicTransaction
+    # This will require integration with Foundation.SerialOperations
     update_directly(variable_name, new_value, opts)
   end
 

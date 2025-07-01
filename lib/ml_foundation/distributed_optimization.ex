@@ -24,7 +24,7 @@ defmodule MLFoundation.DistributedOptimization do
   """
 
   require Logger
-  alias Foundation.{AtomicTransaction, Registry}
+  alias Foundation.{SerialOperations, Registry}
 
   # Federated Optimization Pattern
 
@@ -665,7 +665,7 @@ defmodule MLFoundation.DistributedOptimization.ParameterServer do
   Manages global parameters and applies updates from workers.
   """
   use GenServer
-  alias Foundation.AtomicTransaction
+  alias Foundation.SerialOperations
 
   def init(opts) do
     {:ok,
@@ -695,7 +695,7 @@ defmodule MLFoundation.DistributedOptimization.ParameterServer do
 
       # Update parameters atomically
       new_params =
-        AtomicTransaction.transact(fn _tx ->
+        SerialOperations.transact(fn _tx ->
           apply_gradients(state.parameters, gradients, learning_rate)
         end)
 

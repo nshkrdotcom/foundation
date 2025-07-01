@@ -100,32 +100,50 @@ defmodule Foundation.Services.SignalBus do
 
     Logger.info("Starting Foundation Signal Bus service: #{inspect(bus_name)}")
 
-    case Jido.Signal.Bus.start_link(bus_opts) do
-      {:ok, bus_pid} ->
-        Logger.info("Foundation Signal Bus started successfully: #{inspect(bus_name)}")
+    # Check if Jido.Signal.Registry is available
+    case Process.whereis(Jido.Signal.Registry) do
+      nil ->
+        Logger.warning("Jido.Signal.Registry not available - SignalBus will run in degraded mode")
 
         state = %{
           bus_name: bus_name,
-          bus_pid: bus_pid,
-          started_at: System.monotonic_time(:millisecond)
+          bus_pid: nil,
+          started_at: System.monotonic_time(:millisecond),
+          degraded_mode: true
         }
 
         Telemetry.service_started(__MODULE__, %{
           bus_name: bus_name,
-          middleware_count: length(middleware)
+          middleware_count: 0,
+          degraded_mode: true
         })
 
         {:ok, state}
 
-      {:error, reason} ->
-        Logger.error("Failed to start Foundation Signal Bus: #{inspect(reason)}")
+      _pid ->
+        case Jido.Signal.Bus.start_link(bus_opts) do
+          {:ok, bus_pid} ->
+            Logger.info("Foundation Signal Bus started successfully: #{inspect(bus_name)}")
 
-        Telemetry.service_error(__MODULE__, reason, %{
-          bus_name: bus_name,
-          operation: :start
-        })
+            state = %{
+              bus_name: bus_name,
+              bus_pid: bus_pid,
+              started_at: System.monotonic_time(:millisecond),
+              degraded_mode: false
+            }
 
-        {:stop, reason}
+            Telemetry.service_started(__MODULE__, %{
+              bus_name: bus_name,
+              middleware_count: length(middleware),
+              degraded_mode: false
+            })
+
+            {:ok, state}
+
+          {:error, reason} ->
+            Logger.error("Failed to start Foundation Signal Bus: #{inspect(reason)}")
+            {:stop, reason}
+        end
     end
   end
 
@@ -134,14 +152,19 @@ defmodule Foundation.Services.SignalBus do
     start_time = System.monotonic_time()
 
     health_status =
-      if Process.alive?(state.bus_pid) do
-        # Try a simple operation to verify the bus is responsive
-        case Jido.Signal.Bus.whereis(state.bus_name) do
-          {:ok, _pid} -> :healthy
-          {:error, _} -> :degraded
-        end
-      else
-        :unhealthy
+      cond do
+        Map.get(state, :degraded_mode, false) ->
+          :degraded
+
+        state.bus_pid && Process.alive?(state.bus_pid) ->
+          # Try a simple operation to verify the bus is responsive
+          case Jido.Signal.Bus.whereis(state.bus_name) do
+            {:ok, _pid} -> :healthy
+            {:error, _} -> :degraded
+          end
+
+        true ->
+          :unhealthy
       end
 
     Telemetry.emit(
