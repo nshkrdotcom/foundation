@@ -309,8 +309,21 @@ defmodule MABEAM.AgentRegistryTest do
 
   describe "process monitoring and automatic cleanup" do
     test "automatically removes agent when process dies", %{registry: registry} do
-      # Create a process that will die
-      short_lived = spawn(fn -> :timer.sleep(10) end)
+      import Foundation.AsyncTestHelpers
+      
+      # Create a process that we control
+      test_pid = self()
+      short_lived = spawn(fn -> 
+        # Signal that process is ready
+        send(test_pid, :process_started)
+        # Stay alive until told to exit
+        receive do
+          :exit -> :ok
+        end
+      end)
+
+      # Wait for process to be ready
+      assert_receive :process_started, 1000
 
       metadata = valid_metadata(capability: :inference)
       :ok = Foundation.register("short_lived", short_lived, metadata, registry)
@@ -318,13 +331,32 @@ defmodule MABEAM.AgentRegistryTest do
       # Verify registration
       assert {:ok, {^short_lived, _}} = Foundation.lookup("short_lived", registry)
 
-      # Wait for process to die and cleanup to occur
-      :timer.sleep(50)
+      # Set up telemetry handler to catch the agent_down event
+      ref = make_ref()
+      :telemetry.attach(
+        "test-agent-down-#{inspect(ref)}",
+        [:foundation, :mabeam, :registry, :agent_down],
+        fn _event, _measurements, metadata, config ->
+          if metadata.agent_id == "short_lived" do
+            send(config.test_pid, {:agent_down_event, metadata})
+          end
+        end,
+        %{test_pid: test_pid}
+      )
 
-      # Should be automatically removed
+      # Kill the process
+      Process.exit(short_lived, :kill)
+      
+      # Wait for the agent_down telemetry event
+      assert_receive {:agent_down_event, %{agent_id: "short_lived"}}, 5000
+
+      # Verify agent has been removed
       assert :error = Foundation.lookup("short_lived", registry)
       {:ok, inference_agents} = Foundation.find_by_attribute(:capability, :inference, registry)
       assert Enum.empty?(inference_agents)
+
+      # Clean up telemetry handler
+      :telemetry.detach("test-agent-down-#{inspect(ref)}")
     end
   end
 

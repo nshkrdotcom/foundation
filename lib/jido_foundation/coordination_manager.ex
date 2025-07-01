@@ -532,11 +532,11 @@ defmodule JidoFoundation.CoordinationManager do
     end
   end
 
-  @type coordination_message :: 
-    {:mabeam_coordination, pid(), term()} |
-    {:mabeam_coordination_context, integer(), map()} |
-    {:mabeam_task, term(), term()}
-  
+  @type coordination_message ::
+          {:mabeam_coordination, pid(), term()}
+          | {:mabeam_coordination_context, integer(), map()}
+          | {:mabeam_task, term(), term()}
+
   @spec buffer_message(pid(), coordination_message(), map()) :: {:ok, map()}
   defp buffer_message(receiver_pid, message, state) do
     current_buffer = Map.get(state.message_buffers, receiver_pid, [])
@@ -648,10 +648,10 @@ defmodule JidoFoundation.CoordinationManager do
   # Helper function to extract sender from various message formats
   # Only tuple messages are passed to this function based on actual usage
   @spec extract_message_sender(
-    {:mabeam_coordination, pid(), term()} |
-    {:mabeam_coordination_context, integer(), map()} |
-    {:mabeam_task, term(), term()}
-  ) :: pid()
+          {:mabeam_coordination, pid(), term()}
+          | {:mabeam_coordination_context, integer(), map()}
+          | {:mabeam_task, term(), term()}
+        ) :: pid()
   defp extract_message_sender(message) do
     case message do
       {:mabeam_coordination, sender, _} -> sender

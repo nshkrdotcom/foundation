@@ -211,12 +211,12 @@ defmodule JidoFoundation.Examples do
     @type capability :: atom()
     @type agent_pid :: pid()
     @type work_chunk :: [work_item()]
-    
+
     # Dialyzer has trouble seeing the success path due to nested case expressions
     # The function does return {:ok, [term()]} when agents are found and supervisor is available
-    @spec distribute_work([work_item()], capability()) :: 
-      {:ok, [term()]} | 
-      {:error, :no_agents_available | :task_supervisor_not_available}
+    @spec distribute_work([work_item()], capability()) ::
+            {:ok, [term()]}
+            | {:error, :no_agents_available | :task_supervisor_not_available}
     def distribute_work(work_items, capability_required) do
       with {:ok, agents} when agents != [] <- find_healthy_agents(capability_required),
            {:ok, supervisor} <- ensure_task_supervisor() do
@@ -227,32 +227,36 @@ defmodule JidoFoundation.Examples do
         error -> error
       end
     end
-    
+
     defp find_healthy_agents(capability_required) do
       JidoFoundation.Bridge.find_agents([
         {[:capability], capability_required, :eq},
         {[:health_status], :healthy, :eq}
       ])
     end
-    
+
     defp ensure_task_supervisor do
       case Process.whereis(Foundation.TaskSupervisor) do
         nil ->
-          Logger.error("Foundation.TaskSupervisor not running. Ensure Foundation.Application is started.")
+          Logger.error(
+            "Foundation.TaskSupervisor not running. Ensure Foundation.Application is started."
+          )
+
           {:error, :no_supervisor}
+
         supervisor when is_pid(supervisor) ->
           {:ok, supervisor}
       end
     end
-    
+
     defp distribute_to_agents(work_items, agents, _supervisor) do
       agent_pids = Enum.map(agents, fn {_key, pid, _metadata} -> pid end)
       work_chunks = chunk_work(work_items, length(agent_pids))
-      
+
       # Create index-based processing to avoid tuple inference issues
       indexed_chunks = Enum.with_index(work_chunks)
       agent_array = List.to_tuple(agent_pids)
-      
+
       results =
         indexed_chunks
         |> Task.Supervisor.async_stream_nolink(

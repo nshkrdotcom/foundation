@@ -24,7 +24,7 @@ defmodule MABEAM.CoordinationPatterns do
 
   require Logger
   alias Foundation.{Coordination, Registry}
-  
+
   # Dialyzer annotations for intentional no-return functions
   @dialyzer {:no_return, execute_distributed: 2}
   @dialyzer {:no_return, execute_distributed: 3}
