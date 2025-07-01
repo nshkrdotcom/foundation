@@ -1,372 +1,601 @@
-# Foundation
+# Foundation/Jido System
 
-**A comprehensive Elixir infrastructure and observability library providing essential services for building robust, scalable applications.**
+A production-grade multi-agent platform for Elixir/BEAM that combines protocol-based infrastructure with autonomous agent orchestration capabilities.
 
-[![CI](https://github.com/nshkrdotcom/foundation/actions/workflows/elixir.yml/badge.svg)](https://github.com/nshkrdotcom/foundation/actions/workflows/elixir.yml)
-[![Elixir](https://img.shields.io/badge/elixir-1.18.3-purple.svg)](https://elixir-lang.org)
-[![OTP](https://img.shields.io/badge/otp-27.3.3-blue.svg)](https://www.erlang.org)
-[![Hex version badge](https://img.shields.io/hexpm/v/foundation.svg)](https://hex.pm/packages/foundation)
-[![Hexdocs badge](https://img.shields.io/badge/docs-hexdocs-purple)](https://hexdocs.pm/foundation)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+## Table of Contents
 
-## 🚀 Overview
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [Key Features](#key-features)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Core Components](#core-components)
+- [Usage Examples](#usage-examples)
+- [Testing](#testing)
+- [Development](#development)
+- [Contributing](#contributing)
+- [License](#license)
 
-Foundation is a standalone library extracted from the ElixirScope project, designed to provide core infrastructure services including configuration management, event storage, telemetry, process management, and fault tolerance patterns.
+## Overview
 
-### ✨ Key Features
+The Foundation/Jido System is a comprehensive platform for building distributed, autonomous agent systems on the BEAM. It provides:
 
-### 🔧 **Configuration Management**
-- Dynamic configuration updates with subscriber notifications
-- Nested configuration structures with validation
-- Environment-specific configurations
-- Runtime configuration changes with rollback support
-- Path-based configuration access and updates
+- **Protocol-based infrastructure** with swappable implementations
+- **Multi-agent orchestration** with built-in coordination primitives
+- **Production-grade services** including circuit breakers, rate limiting, and monitoring
+- **Unified telemetry** and observability across all components
+- **Fault-tolerant supervision** following OTP principles
 
-### 📊 **Event System**
-- Structured event creation and storage
-- Event querying and correlation tracking
-- Batch operations for high-throughput scenarios
-- Event relationships and workflow tracking
-- In-memory event store with pruning capabilities
+## Architecture
 
-### 📈 **Telemetry & Monitoring**
-- Metrics collection (counters, gauges, histograms)
-- Event measurement and timing
-- Integration with `:telemetry` ecosystem
-- Custom metric handlers and aggregation
-- Performance monitoring and VM metrics
+The system is organized into five main layers:
 
-### 🛡️ **Infrastructure Protection**
-- Circuit breaker patterns (via `:fuse`)
-- Rate limiting (via `:hammer`)
-- Connection pool management (via `:poolboy`)
-- Fault tolerance and resilience patterns
-- Unified protection facade for coordinated safeguards
+### 1. Foundation Protocol Layer
+Protocol-based abstractions for core infrastructure:
+- `Foundation.Registry` - Service registration and discovery
+- `Foundation.Coordination` - Distributed consensus and synchronization
+- `Foundation.Infrastructure` - Circuit breakers, rate limiting, protected execution
 
-### 🔍 **Service Discovery**
-- Service registration and lookup
-- Health checking for registered services
-- Process registry with supervision
-- Namespace-based service organization
-- Registry performance monitoring
+### 2. MABEAM Implementation Layer
+Multi-agent BEAM implementations of Foundation protocols:
+- `MABEAM.AgentRegistry` - Agent-specific registration with capabilities
+- `MABEAM.AgentCoordination` - Multi-agent consensus and barriers
+- `MABEAM.AgentInfrastructure` - Agent-aware circuit breakers and rate limiting
 
-### 🚨 **Error Handling**
-- Structured error types with context
-- Error context tracking (user, request, operation)
-- Error aggregation and reporting
-- Comprehensive error logging
-- Retry strategies and error recovery
+### 3. Foundation Services Layer
+Core infrastructure services:
+- **RetryService** - Resilient retries with exponential backoff
+- **ConnectionManager** - HTTP connection pooling
+- **RateLimiter** - Token bucket rate limiting
+- **SignalBus** - Event routing system
+- **DependencyManager** - Service dependency tracking
+- **HealthChecker** - Unified health monitoring
 
-### 🛠️ **Utilities**
-- ID generation and correlation tracking
-- Time measurement and formatting
-- Memory usage tracking
-- System statistics collection
+### 4. JidoSystem Agent Framework
+Agent programming model and runtime:
+- **Agents** - FoundationAgent, TaskAgent, MonitorAgent, CoordinatorAgent
+- **Actions** - Reusable agent behaviors
+- **Sensors** - Performance and system monitoring
+- **Workflows** - Multi-agent task orchestration
 
-## 📦 Installation
+### 5. JidoFoundation Bridge Layer
+Integration between Jido agents and Foundation infrastructure:
+- Automatic agent registration
+- Telemetry forwarding
+- Signal routing
+- Protected execution
 
-Add Foundation to your `mix.exs`:
+## Key Features
+
+### Production-Ready Infrastructure
+- **Supervision trees** - Every process properly supervised
+- **Circuit breakers** - Protect against cascading failures
+- **Rate limiting** - Prevent resource exhaustion
+- **Connection pooling** - Efficient resource usage
+- **Retry mechanisms** - Handle transient failures gracefully
+
+### Multi-Agent Capabilities
+- **Agent lifecycle management** - Create, monitor, and terminate agents
+- **Coordination primitives** - Barriers, consensus, leader election
+- **Message passing** - Type-safe inter-agent communication
+- **Workflow orchestration** - Complex multi-agent task flows
+- **Capability-based discovery** - Find agents by their abilities
+
+### Observability & Monitoring
+- **Structured telemetry** - Consistent event naming and metadata
+- **Performance monitoring** - Track agent and system performance
+- **Health checks** - Unified health status across all components
+- **Error tracking** - Centralized error collection and analysis
+- **Load testing** - Built-in performance testing framework
+
+### Developer Experience
+- **Protocol-based design** - Clean abstractions and interfaces
+- **Comprehensive testing** - Unit, integration, and property-based tests
+- **Mox-based mocking** - Test in isolation with mock implementations
+- **Clear error messages** - Helpful debugging information
+- **Extensive documentation** - Inline docs and examples
+
+## Installation
+
+Add `foundation` to your list of dependencies in `mix.exs`:
 
 ```elixir
 def deps do
   [
-    {:foundation, "~> 0.1.0"}
+    {:foundation, "~> 0.2.0"}
   ]
 end
 ```
 
-Ensure Foundation starts before your application:
+## Quick Start
+
+### Basic Agent Example
 
 ```elixir
-def application do
-  [
-    mod: {MyApp.Application, []},
-    extra_applications: [:foundation]
+# Define an agent
+defmodule MyAgent do
+  use JidoSystem.Agents.FoundationAgent
+  
+  def handle_action(:greet, %{name: name}, state) do
+    {:ok, "Hello, #{name}!", state}
+  end
+end
+
+# Start the agent
+{:ok, agent} = JidoSystem.start_agent(MyAgent, %{})
+
+# Execute an action
+{:ok, greeting} = JidoSystem.execute_action(agent, :greet, %{name: "Alice"})
+# => "Hello, Alice!"
+```
+
+### Multi-Agent Workflow
+
+```elixir
+# Define a workflow
+workflow = %JidoSystem.Workflows.Workflow{
+  id: "data-processing",
+  name: "Data Processing Pipeline",
+  agents: [
+    %{id: "fetcher", module: DataFetcher, config: %{}},
+    %{id: "processor", module: DataProcessor, config: %{}},
+    %{id: "validator", module: DataValidator, config: %{}}
+  ],
+  tasks: [
+    %{id: "fetch", agent: "fetcher", action: :fetch_data},
+    %{id: "process", agent: "processor", action: :process, depends_on: ["fetch"]},
+    %{id: "validate", agent: "validator", action: :validate, depends_on: ["process"]}
   ]
+}
+
+# Execute the workflow
+{:ok, results} = JidoSystem.Workflows.Engine.execute(workflow, %{source: "api"})
+```
+
+### Protected External Calls
+
+```elixir
+# Use circuit breakers for external calls
+{:ok, result} = Foundation.Infrastructure.protected_call(
+  :my_service,
+  fn -> HTTPClient.get("https://api.example.com/data") end,
+  circuit_breaker: true,
+  retry: [max_attempts: 3, backoff: :exponential]
+)
+```
+
+## Core Components
+
+### Foundation Protocols
+
+#### Registry Protocol
+```elixir
+# Register a service
+Foundation.Registry.register(:my_service, self(), %{capabilities: [:compute, :store]})
+
+# Discover services
+{:ok, services} = Foundation.Registry.lookup_by_capability(:compute)
+```
+
+#### Coordination Protocol
+```elixir
+# Distributed consensus
+{:ok, leader} = Foundation.Coordination.elect_leader(:my_cluster)
+
+# Synchronization barrier
+{:ok, _} = Foundation.Coordination.barrier(:checkpoint, 3)
+```
+
+#### Infrastructure Protocol
+```elixir
+# Rate limiting
+{:ok, result} = Foundation.Infrastructure.rate_limited_call(
+  :api_calls,
+  fn -> perform_api_call() end,
+  rate: 10,
+  period: :second
+)
+```
+
+### JidoSystem Agents
+
+#### FoundationAgent
+Base agent with automatic Foundation integration:
+```elixir
+defmodule MyWorker do
+  use JidoSystem.Agents.FoundationAgent
+  
+  @impl true
+  def init(config) do
+    {:ok, %{tasks_processed: 0}}
+  end
+  
+  @impl true
+  def handle_action(:process_task, task, state) do
+    # Process the task
+    result = process(task)
+    new_state = %{state | tasks_processed: state.tasks_processed + 1}
+    {:ok, result, new_state}
+  end
 end
 ```
 
-## 🏁 Quick Start
-
-### Basic Usage
-
+#### TaskAgent
+High-performance task processing:
 ```elixir
-# Initialize Foundation (typically done by your application supervisor)
-:ok = Foundation.initialize()
-
-# Configure your application
-:ok = Foundation.Config.update([:app, :feature_flags, :new_ui], true)
-
-# Create and store events
-correlation_id = Foundation.Utils.generate_correlation_id()
-{:ok, event} = Foundation.Events.new_event(
-  :user_action, 
-  %{action: "login", user_id: 123},
-  correlation_id: correlation_id
-)
-{:ok, event_id} = Foundation.Events.store(event)
-
-# Emit telemetry metrics
-:ok = Foundation.Telemetry.emit_counter(
-  [:myapp, :user, :login_attempts], 
-  %{user_id: 123}
+{:ok, agent} = JidoSystem.start_agent(
+  JidoSystem.Agents.TaskAgent,
+  %{max_concurrent: 10, timeout: 5000}
 )
 
-# Use infrastructure protection
-result = Foundation.Infrastructure.execute_protected(
-  :external_api_call,
-  [circuit_breaker: :api_fuse, rate_limiter: {:api_user_rate, "user_123"}],
-  fn -> ExternalAPI.call() end
-)
-```
-
-### Configuration Management
-
-```elixir
-# Get configuration
-{:ok, config} = Foundation.Config.get()
-{:ok, value} = Foundation.Config.get([:ai, :provider])
-
-# Update configuration
-:ok = Foundation.Config.update([:dev, :debug_mode], true)
-
-# Subscribe to configuration changes
-:ok = Foundation.Config.subscribe()
-# Receive: {:config_notification, {:config_updated, path, new_value}}
-
-# Check updatable paths
-{:ok, paths} = Foundation.Config.updatable_paths()
-```
-
-### Event Management
-
-```elixir
-# Create different types of events
-{:ok, user_event} = Foundation.Events.new_user_event(123, :profile_updated, %{field: "email"})
-{:ok, system_event} = Foundation.Events.new_system_event(:maintenance_started, %{duration: "2h"})
-{:ok, error_event} = Foundation.Events.new_error_event(:api_timeout, %{service: "users"})
-
-# Store events
-{:ok, event_id} = Foundation.Events.store(user_event)
-
-# Query events
-{:ok, events} = Foundation.Events.query(%{event_type: :user_action})
-{:ok, correlated} = Foundation.Events.get_by_correlation(correlation_id)
-```
-
-### Telemetry & Monitoring
-
-```elixir
-# Measure function execution
-result = Foundation.Telemetry.measure(
-  [:myapp, :database, :query],
-  %{table: "users"},
-  fn -> Database.fetch_users() end
-)
-
-# Emit different metric types
-:ok = Foundation.Telemetry.emit_counter([:api, :requests], %{endpoint: "/users"})
-:ok = Foundation.Telemetry.emit_gauge([:system, :memory], 1024, %{unit: :mb})
-
-# Get collected metrics
-{:ok, metrics} = Foundation.Telemetry.get_metrics()
-```
-
-### Infrastructure Protection
-
-```elixir
-# Configure protection for a service
-Foundation.Infrastructure.configure_protection(:payment_service, %{
-  circuit_breaker: %{
-    failure_threshold: 5,
-    recovery_time: 30_000
-  },
-  rate_limiter: %{
-    scale: 60_000,  # 1 minute
-    limit: 100      # 100 requests per minute
-  }
+# Queue tasks
+JidoSystem.execute_action(agent, :queue_task, %{
+  id: "task-1",
+  payload: %{type: :compute, data: [1, 2, 3]}
 })
+```
 
-# Execute protected operations
-result = Foundation.Infrastructure.execute_protected(
-  :payment_service,
-  [circuit_breaker: :payment_breaker, rate_limiter: {:payment_api, user_id}],
-  fn -> PaymentAPI.charge(amount) end
+#### MonitorAgent
+System health monitoring:
+```elixir
+{:ok, monitor} = JidoSystem.start_agent(
+  JidoSystem.Agents.MonitorAgent,
+  %{check_interval: 5000}
+)
+
+# Get system health
+{:ok, health} = JidoSystem.execute_action(monitor, :check_health, %{})
+```
+
+#### CoordinatorAgent
+Multi-agent workflow orchestration:
+```elixir
+{:ok, coordinator} = JidoSystem.start_agent(
+  JidoSystem.Agents.CoordinatorAgent,
+  %{max_agents: 100}
+)
+
+# Coordinate a task across multiple agents
+JidoSystem.execute_action(coordinator, :coordinate_task, %{
+  task: %{type: :distributed_compute},
+  agents: [agent1, agent2, agent3]
+})
+```
+
+### Foundation Services
+
+#### RetryService
+```elixir
+Foundation.Services.Retry.with_retry(
+  fn -> unstable_operation() end,
+  max_attempts: 5,
+  backoff: {:exponential, 100}
 )
 ```
 
-## 🏗️ Architecture
+#### RateLimiter
+```elixir
+# Configure rate limits
+Foundation.Services.RateLimiter.configure(:api, rate: 100, period: :minute)
 
-Foundation follows a layered architecture with clear separation of concerns:
-
-```
-┌─────────────────────────────────────────┐
-│             Public API Layer            │
-│   Foundation.{Config,Events,Telemetry}  │
-├─────────────────────────────────────────┤
-│           Business Logic Layer          │
-│    Foundation.Logic.{Config,Event}      │
-├─────────────────────────────────────────┤
-│            Service Layer                │
-│ Foundation.Services.{ConfigServer,      │
-│   EventStore,TelemetryService}          │
-├─────────────────────────────────────────┤
-│         Infrastructure Layer            │
-│ Foundation.{ProcessRegistry,            │
-│   ServiceRegistry,Infrastructure}       │
-└─────────────────────────────────────────┘
+# Check and consume tokens
+case Foundation.Services.RateLimiter.check_rate(:api) do
+  :ok -> perform_operation()
+  {:error, :rate_limited} -> {:error, "Too many requests"}
+end
 ```
 
-### Key Design Principles
+#### HealthChecker
+```elixir
+# Register health checks
+Foundation.Services.HealthChecker.register_check(:database, fn ->
+  case Database.ping() do
+    :ok -> {:ok, %{status: :healthy}}
+    _ -> {:error, %{status: :unhealthy}}
+  end
+end)
 
-- **Separation of Concerns**: Each layer has a specific responsibility
-- **Contract-Based**: All services implement well-defined behaviors
-- **Fault Tolerance**: Built-in error handling and recovery mechanisms
-- **Observability**: Comprehensive telemetry and monitoring
-- **Testability**: Extensive test coverage with different test types
+# Get overall health
+{:ok, health} = Foundation.Services.HealthChecker.check_health()
+```
 
-## 📚 Documentation
+## Usage Examples
 
-- [Complete API Documentation](docs/API_FULL.md) - Comprehensive API reference
-- [Architecture](docs/ARCHITECTURE.md) - Foundation Architecture 
+### Building a Data Processing Pipeline
 
-## 🧪 Testing
+```elixir
+defmodule DataPipeline do
+  def process_data(source) do
+    # Create specialized agents
+    {:ok, fetcher} = JidoSystem.start_agent(DataFetchAgent, %{source: source})
+    {:ok, transformer} = JidoSystem.start_agent(DataTransformAgent, %{})
+    {:ok, validator} = JidoSystem.start_agent(DataValidateAgent, %{})
+    
+    # Create a coordinator
+    {:ok, coordinator} = JidoSystem.start_agent(
+      JidoSystem.Agents.CoordinatorAgent,
+      %{}
+    )
+    
+    # Define the workflow
+    workflow = %{
+      steps: [
+        %{agent: fetcher, action: :fetch, id: "fetch"},
+        %{agent: transformer, action: :transform, id: "transform", depends_on: ["fetch"]},
+        %{agent: validator, action: :validate, id: "validate", depends_on: ["transform"]}
+      ]
+    }
+    
+    # Execute the pipeline
+    JidoSystem.execute_action(coordinator, :execute_workflow, workflow)
+  end
+end
+```
 
-Foundation includes comprehensive test coverage:
+### Implementing a Distributed Task Queue
+
+```elixir
+defmodule DistributedQueue do
+  def start_workers(count) do
+    # Start multiple task agents
+    workers = for i <- 1..count do
+      {:ok, agent} = JidoSystem.start_agent(
+        JidoSystem.Agents.TaskAgent,
+        %{
+          name: "worker-#{i}",
+          max_concurrent: 5,
+          timeout: 30_000
+        }
+      )
+      agent
+    end
+    
+    # Start a coordinator to distribute work
+    {:ok, coordinator} = JidoSystem.start_agent(
+      JidoSystem.Agents.CoordinatorAgent,
+      %{
+        workers: workers,
+        strategy: :round_robin
+      }
+    )
+    
+    {:ok, coordinator}
+  end
+  
+  def enqueue_task(coordinator, task) do
+    JidoSystem.execute_action(coordinator, :distribute_task, task)
+  end
+end
+```
+
+### Monitoring System Health
+
+```elixir
+defmodule SystemMonitor do
+  def start_monitoring do
+    # Start the monitor agent
+    {:ok, monitor} = JidoSystem.start_agent(
+      JidoSystem.Agents.MonitorAgent,
+      %{
+        check_interval: 5_000,
+        alerts_enabled: true
+      }
+    )
+    
+    # Register custom health checks
+    Foundation.Services.HealthChecker.register_check(:api, &check_api_health/0)
+    Foundation.Services.HealthChecker.register_check(:database, &check_db_health/0)
+    Foundation.Services.HealthChecker.register_check(:cache, &check_cache_health/0)
+    
+    # Set up telemetry handlers
+    :telemetry.attach(
+      "system-monitor",
+      [:foundation, :health, :check, :complete],
+      &handle_health_event/4,
+      nil
+    )
+    
+    {:ok, monitor}
+  end
+  
+  defp handle_health_event(_event_name, measurements, metadata, _config) do
+    if metadata.status == :unhealthy do
+      # Send alert
+      Logger.error("Health check failed: #{inspect(metadata)}")
+    end
+  end
+end
+```
+
+## Testing
+
+The system includes comprehensive testing utilities:
+
+### Unit Testing with Mox
+
+```elixir
+defmodule MyAgentTest do
+  use ExUnit.Case
+  import Mox
+  
+  setup :verify_on_exit!
+  
+  test "agent processes task successfully" do
+    # Mock the infrastructure
+    expect(Foundation.Infrastructure.Mock, :protected_call, fn _, fun, _ ->
+      fun.()
+    end)
+    
+    {:ok, agent} = JidoSystem.start_agent(MyAgent, %{})
+    {:ok, result} = JidoSystem.execute_action(agent, :process, %{data: [1, 2, 3]})
+    
+    assert result == [2, 4, 6]
+  end
+end
+```
+
+### Integration Testing
+
+```elixir
+defmodule WorkflowIntegrationTest do
+  use Foundation.IntegrationCase
+  
+  @tag :integration
+  test "complete workflow executes successfully" do
+    # Start all required services
+    start_supervised!(Foundation.Services.Supervisor)
+    start_supervised!(JidoSystem.Supervisor)
+    
+    # Run the workflow
+    {:ok, results} = DataPipeline.process_data("test-source")
+    
+    assert results.fetch.status == :success
+    assert results.transform.status == :success
+    assert results.validate.status == :success
+  end
+end
+```
+
+### Property-Based Testing
+
+```elixir
+defmodule RateLimiterPropertyTest do
+  use ExUnit.Case
+  use ExUnitProperties
+  
+  property "rate limiter never exceeds configured rate" do
+    check all rate <- integer(1..100),
+              period <- member_of([:second, :minute]),
+              requests <- integer(1..200) do
+      
+      Foundation.Services.RateLimiter.configure(:test, rate: rate, period: period)
+      
+      allowed = Enum.reduce(1..requests, 0, fn _, acc ->
+        case Foundation.Services.RateLimiter.check_rate(:test) do
+          :ok -> acc + 1
+          {:error, :rate_limited} -> acc
+        end
+      end)
+      
+      assert allowed <= rate
+    end
+  end
+end
+```
+
+### Load Testing
+
+```elixir
+# Run load tests
+mix foundation.load_test --workers 100 --duration 60 --rate 1000
+```
+
+## Development
+
+### Project Structure
+
+```
+foundation/
+├── lib/
+│   ├── foundation/          # Core Foundation protocols and services
+│   ├── foundation_web/      # Web interface (if applicable)
+│   ├── jido_system/         # Jido agent framework
+│   ├── jido_foundation/     # Bridge layer
+│   └── mabeam/              # Multi-agent BEAM implementations
+├── test/
+│   ├── foundation/          # Foundation tests
+│   ├── jido_system/         # Jido tests
+│   └── integration/         # Integration tests
+├── config/                  # Configuration files
+├── priv/                    # Private resources
+└── mix.exs                  # Project configuration
+```
+
+### Running Tests
 
 ```bash
 # Run all tests
 mix test
 
-# Run specific test suites
-mix test.unit          # Unit tests
-mix test.integration   # Integration tests
-mix test.contract      # Contract tests
-mix test.smoke         # Smoke tests
+# Run only unit tests
+mix test --exclude integration
 
 # Run with coverage
-mix coveralls
-mix coveralls.html     # Generate HTML coverage report
+mix test --cover
+
+# Run property-based tests
+mix test --only property
+
+# Run load tests
+mix foundation.load_test
 ```
 
-### Test Categories
-
-- **Unit Tests**: Test individual modules in isolation
-- **Integration Tests**: Test service interactions
-- **Contract Tests**: Verify API contracts and behaviors
-- **Smoke Tests**: Basic functionality verification
-- **Property Tests**: Property-based testing with StreamData
-
-## 🔧 Development
-
-### Setup
+### Code Quality
 
 ```bash
-# Get dependencies
-mix deps.get
+# Run static analysis
+mix credo
 
-# Compile project
-mix compile
+# Run type checking
+mix dialyzer
 
-# Setup development environment
-mix setup
-
-# Run development checks
-mix dev.check
-```
-
-### Quality Assurance
-
-```bash
 # Format code
 mix format
 
-# Run static analysis
-mix credo --strict
-mix dialyzer
-
-# Run full QA pipeline
-mix qa.all
+# Run all checks
+mix check
 ```
 
-### Development Workflow
+### Development Setup
 
-```bash
-# Watch tests during development
-mix test.watch
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/your-org/foundation.git
+   cd foundation
+   ```
 
-# Run development workflow
-mix dev.workflow
+2. Install dependencies:
+   ```bash
+   mix deps.get
+   ```
 
-# Validate architecture
-mix validate_architecture
-```
+3. Set up the database (if applicable):
+   ```bash
+   mix ecto.setup
+   ```
 
-## 📊 Performance
+4. Run tests to verify setup:
+   ```bash
+   mix test
+   ```
 
-Foundation is designed for high performance:
+## Contributing
 
-- **Event Storage**: In-memory store with configurable retention
-- **Configuration**: Cached configuration with efficient updates
-- **Telemetry**: Low-overhead metric collection
-- **Circuit Breakers**: Fast failure detection
-- **Rate Limiting**: Efficient token bucket implementation
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details on:
 
-### Benchmarks
+- Code of Conduct
+- Development process
+- Submitting pull requests
+- Reporting issues
 
-```bash
-# Run performance benchmarks
-mix dev.benchmark
-```
+### Contribution Guidelines
 
-## 🔒 Security
+1. **Fork the repository** and create your branch from `main`
+2. **Write tests** for any new functionality
+3. **Ensure all tests pass** and code is formatted
+4. **Update documentation** as needed
+5. **Submit a pull request** with a clear description
 
-- Input validation at all boundaries
-- Secure configuration defaults
-- Access control for sensitive operations
-- Audit logging for security events
-- Protection against common vulnerabilities
+## License
 
-## 🤝 Contributing
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Run the full test suite
-6. Submit a pull request
+## Acknowledgments
 
-### Code Style
-
-- Follow Elixir community conventions
-- Use `mix format` for consistent formatting
-- Add comprehensive documentation
-- Include typespecs for all public functions
-
-## 📋 Requirements
-
-- **Elixir**: ~> 1.15
-- **Erlang**: Compatible with Elixir requirements
-- **Dependencies**: See `mix.exs` for complete list
-
-### Core Dependencies
-
-- `telemetry` - Telemetry events and metrics
-- `jason` - JSON encoding/decoding
-- `poolboy` - Connection pooling
-- `hammer` - Rate limiting
-- `fuse` - Circuit breakers
-
-## 📄 License
-
-See [LICENSE](LICENSE) file for details.
-
-## 🆘 Support
-
-- **Issues**: Report bugs and request features on GitHub
-- **Documentation**: Comprehensive API documentation available
-- **Community**: Join the Elixir community discussions
+- Built on the solid foundation of Elixir/OTP
+- Inspired by actor model and multi-agent systems research
+- Thanks to all contributors and the Elixir community
 
 ---
 
-**Foundation** - Building reliable Elixir applications from the ground up. 🏗️
+For more information, detailed API documentation, and advanced usage examples, please visit our [documentation site](https://foundation-docs.example.com).
