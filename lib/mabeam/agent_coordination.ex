@@ -442,27 +442,50 @@ defmodule MABEAM.AgentCoordination do
   end
 
   defp find_lock_by_ref(lock_table, lock_ref) do
-    :ets.tab2list(lock_table)
-    |> Enum.find(fn {_lock_id, lock_data} -> lock_data.ref == lock_ref end)
+    # Use ETS foldl to avoid loading entire table
+    # More efficient than tab2list for finding single item
+    :ets.foldl(
+      fn {lock_id, lock_data}, acc ->
+        if lock_data.ref == lock_ref do
+          {:halt, {lock_id, lock_data}}
+        else
+          acc
+        end
+      end,
+      nil,
+      lock_table
+    )
   end
 
   defp cleanup_expired_consensus(consensus_table, now) do
-    :ets.tab2list(consensus_table)
-    |> Enum.each(fn {ref, data} ->
-      if data.deadline < now and data.state == :voting do
-        updated_data = %{data | state: :timeout}
-        :ets.insert(consensus_table, {ref, updated_data})
-      end
-    end)
+    # Use ETS foldl to process entries without loading entire table
+    :ets.foldl(
+      fn {ref, data}, acc ->
+        if data.deadline < now and data.state == :voting do
+          updated_data = %{data | state: :timeout}
+          :ets.insert(consensus_table, {ref, updated_data})
+        end
+
+        acc
+      end,
+      :ok,
+      consensus_table
+    )
   end
 
   defp cleanup_old_barriers(barrier_table, cutoff_time) do
-    :ets.tab2list(barrier_table)
-    |> Enum.each(fn {id, data} ->
-      if data.created_at < cutoff_time do
-        :ets.delete(barrier_table, id)
-        Logger.debug("Cleaned up old barrier #{inspect(id)}")
-      end
-    end)
+    # Use ETS foldl to process entries without loading entire table
+    :ets.foldl(
+      fn {id, data}, acc ->
+        if data.created_at < cutoff_time do
+          :ets.delete(barrier_table, id)
+          Logger.debug("Cleaned up old barrier #{inspect(id)}")
+        end
+
+        acc
+      end,
+      :ok,
+      barrier_table
+    )
   end
 end

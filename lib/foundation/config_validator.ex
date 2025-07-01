@@ -4,6 +4,15 @@ defmodule Foundation.ConfigValidator do
 
   Validates that required implementations are properly configured and
   meet protocol requirements before application startup.
+
+  ## Configuration
+
+  You can enable strict mode to halt startup on configuration errors:
+
+      config :foundation, :strict_config_validation, true
+
+  When strict mode is enabled, the application will refuse to start
+  if any configuration errors are detected.
   """
 
   require Logger

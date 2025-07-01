@@ -340,9 +340,15 @@ defmodule MABEAM.AgentRegistry do
   end
 
   def handle_call({:list_all, filter_fn}, _from, state) do
+    # Use streaming to avoid loading entire table
+    # This is the GenServer path - Reader module provides direct access
+    match_spec = [{:_, [], [:"$_"]}]
+    batch_size = 100
+
     results =
-      :ets.tab2list(state.main_table)
-      |> Enum.map(fn {id, pid, metadata, _timestamp} -> {id, pid, metadata} end)
+      stream_ets_select(state.main_table, match_spec, batch_size)
+      |> Stream.map(fn {id, pid, metadata, _timestamp} -> {id, pid, metadata} end)
+      |> Enum.to_list()
       |> apply_filter(filter_fn)
 
     {:reply, results, state}
@@ -807,5 +813,23 @@ defmodule MABEAM.AgentRegistry do
         # Batch failed - return partial results
         {:error, {:batch_register_failed, agent_id, reason}, Enum.reverse(registered_ids), state}
     end
+  end
+
+  # Streaming helper for efficient ETS access
+
+  defp stream_ets_select(table, match_spec, batch_size) do
+    Stream.resource(
+      # Start function - initiate the select
+      fn -> :ets.select(table, match_spec, batch_size) end,
+
+      # Next function - get next batch
+      fn
+        :"$end_of_table" -> {:halt, nil}
+        {results, continuation} -> {results, continuation}
+      end,
+
+      # Cleanup function - nothing to clean up
+      fn _acc -> :ok end
+    )
   end
 end

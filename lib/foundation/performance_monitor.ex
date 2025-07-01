@@ -29,7 +29,9 @@ defmodule Foundation.PerformanceMonitor do
 
   defstruct operations: %{},
             start_time: nil,
-            last_cleanup: nil
+            last_cleanup: nil,
+            cached_summary: nil,
+            cache_timestamp: nil
 
   # --- API ---
 
@@ -161,13 +163,17 @@ defmodule Foundation.PerformanceMonitor do
     # Run benchmark operations
     start_time = System.monotonic_time(:microsecond)
 
+    # Pre-calculate node name to avoid repeated calls
+    node_name = node()
+
     for i <- 1..operation_count do
-      key = "bench_agent_#{i}"
+      # Use atom instead of string interpolation in hot path
+      key = {:bench_agent, i}
 
       metadata = %{
         capability: :benchmark,
         health_status: :healthy,
-        node: node(),
+        node: node_name,
         resources: %{memory_usage: 0.1, cpu_usage: 0.1}
       }
 
@@ -225,8 +231,22 @@ defmodule Foundation.PerformanceMonitor do
 
   @impl true
   def handle_call(:get_metrics, _from, state) do
-    metrics = build_metrics_summary(state)
-    {:reply, metrics, state}
+    # Use cached summary if available and fresh (within 1 second)
+    current_time = System.monotonic_time(:millisecond)
+
+    {metrics, new_state} =
+      if state.cached_summary && state.cache_timestamp &&
+           current_time - state.cache_timestamp < 1000 do
+        # Return cached metrics
+        {state.cached_summary, state}
+      else
+        # Build new metrics and cache them
+        metrics = build_metrics_summary(state)
+        updated_state = %{state | cached_summary: metrics, cache_timestamp: current_time}
+        {metrics, updated_state}
+      end
+
+    {:reply, metrics, new_state}
   end
 
   @impl true
@@ -246,7 +266,8 @@ defmodule Foundation.PerformanceMonitor do
     updated_operations =
       update_operation_stats(state.operations, operation_name, duration_us, result)
 
-    new_state = %{state | operations: updated_operations}
+    # Invalidate cache when new operations are recorded
+    new_state = %{state | operations: updated_operations, cached_summary: nil, cache_timestamp: nil}
     {:noreply, new_state}
   end
 
@@ -307,8 +328,12 @@ defmodule Foundation.PerformanceMonitor do
     }
 
     # Keep only last 100 operations
-    [operation | recent_ops]
-    |> Enum.take(100)
+    # Avoid creating unnecessary intermediate lists
+    if length(recent_ops) >= 100 do
+      [operation | Enum.take(recent_ops, 99)]
+    else
+      [operation | recent_ops]
+    end
   end
 
   defp build_metrics_summary(state) do
@@ -319,24 +344,39 @@ defmodule Foundation.PerformanceMonitor do
       state.operations
       |> Enum.reduce(0, fn {_op, stats}, acc -> acc + stats.count end)
 
+    # Pre-calculate to avoid repeated computation
     operations_summary =
-      state.operations
-      |> Enum.map(fn {op_name, stats} ->
-        avg_duration = if stats.count > 0, do: stats.total_duration_us / stats.count, else: 0
-        success_rate = if stats.count > 0, do: stats.success_count / stats.count * 100, else: 0
+      Map.new(state.operations, fn {op_name, stats} ->
+        # Only compute if we have data
+        summary =
+          if stats.count > 0 do
+            # Use integer division where possible to avoid float operations
+            avg_duration_us = div(stats.total_duration_us, stats.count)
+            success_rate_percent = div(stats.success_count * 100, stats.count)
 
-        {op_name,
-         %{
-           count: stats.count,
-           success_count: stats.success_count,
-           error_count: stats.error_count,
-           avg_duration_us: Float.round(avg_duration, 2),
-           min_duration_us: stats.min_duration_us,
-           max_duration_us: stats.max_duration_us,
-           success_rate_percent: Float.round(success_rate, 2)
-         }}
+            %{
+              count: stats.count,
+              success_count: stats.success_count,
+              error_count: stats.error_count,
+              avg_duration_us: avg_duration_us,
+              min_duration_us: stats.min_duration_us,
+              max_duration_us: stats.max_duration_us,
+              success_rate_percent: success_rate_percent
+            }
+          else
+            %{
+              count: 0,
+              success_count: 0,
+              error_count: 0,
+              avg_duration_us: 0,
+              min_duration_us: 0,
+              max_duration_us: 0,
+              success_rate_percent: 0
+            }
+          end
+
+        {op_name, summary}
       end)
-      |> Enum.into(%{})
 
     %{
       total_operations: total_operations,

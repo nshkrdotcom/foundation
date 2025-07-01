@@ -33,6 +33,37 @@ defmodule Foundation.Application do
   def start(_type, _args) do
     Logger.info("Starting Foundation Protocol Platform v2.1")
 
+    # Validate configuration BEFORE starting any processes
+    # This ensures we catch configuration issues early
+    case Foundation.ConfigValidator.validate() do
+      :ok ->
+        Logger.info("Foundation configuration validation passed")
+        start_supervised_children()
+
+      {:error, errors} ->
+        Logger.error("Foundation configuration validation failed:")
+
+        Enum.each(errors, fn error ->
+          Logger.error("  - #{error}")
+        end)
+
+        # Check if strict validation is enabled
+        if Application.get_env(:foundation, :strict_config_validation, false) do
+          Logger.error("Strict configuration validation enabled - halting startup")
+          {:error, {:invalid_configuration, errors}}
+        else
+          # Still start the application but log warnings
+          # This maintains backward compatibility
+          Logger.warning(
+            "Starting Foundation with configuration errors - some features may not work"
+          )
+
+          start_supervised_children()
+        end
+    end
+  end
+
+  defp start_supervised_children do
     # Foundation supervision tree with service layer architecture
     children = [
       # Task supervisor for Foundation async operations
@@ -58,7 +89,6 @@ defmodule Foundation.Application do
       {:ok, pid} ->
         Logger.info("Foundation Protocol Platform started successfully")
         log_configuration()
-        Foundation.ConfigValidator.validate_and_log()
         {:ok, pid}
 
       {:error, reason} ->

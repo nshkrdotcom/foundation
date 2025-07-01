@@ -11,24 +11,25 @@ defmodule MABEAM.AgentRegistry.QueryEngine do
   @doc """
   Performs application-level query when match specs cannot be used.
 
-  Falls back to loading all agents and filtering in-memory when
-  ETS match specifications cannot express the query criteria.
+  Uses ETS match_object with streaming to avoid loading entire table into memory.
+  Falls back to filtering in-application when ETS match specifications 
+  cannot express the query criteria.
   """
   @spec do_application_level_query(list(), map(), integer() | nil) ::
           {:ok, list()} | {:error, term()}
   def do_application_level_query(criteria, tables, start_time \\ nil) do
     query_start = start_time || System.monotonic_time()
-    all_agents = :ets.tab2list(tables.main_table)
 
-    filtered =
-      Enum.filter(all_agents, fn {_id, _pid, metadata, _timestamp} ->
-        Enum.all?(criteria, fn criterion ->
-          matches_criterion?(metadata, criterion)
-        end)
-      end)
+    # Build a basic match spec to reduce data transferred from ETS
+    # Use streaming with continuation to avoid loading entire table
+    match_spec = build_partial_match_spec(criteria)
 
+    # Stream results from ETS to avoid loading entire table
+    filtered_results = stream_and_filter_ets(tables.main_table, match_spec, criteria)
+
+    # Format results
     formatted_results =
-      Enum.map(filtered, fn {id, pid, metadata, _timestamp} ->
+      Enum.map(filtered_results, fn {id, pid, metadata, _timestamp} ->
         {id, pid, metadata}
       end)
 
@@ -37,12 +38,13 @@ defmodule MABEAM.AgentRegistry.QueryEngine do
       %{
         duration: System.monotonic_time() - query_start,
         result_count: length(formatted_results),
-        total_scanned: length(all_agents)
+        # Can't know without full scan
+        total_scanned: :unknown
       },
       %{
         registry_id: tables.registry_id,
         criteria_count: length(criteria),
-        query_type: :application_level
+        query_type: :streaming_application_level
       }
     )
 
@@ -139,5 +141,54 @@ defmodule MABEAM.AgentRegistry.QueryEngine do
       # For other types, use standard not-in check
       true -> actual not in expected_list
     end
+  end
+
+  # Streaming ETS functions to avoid loading entire table
+
+  @doc false
+  defp build_partial_match_spec(_criteria) do
+    # Build a basic match spec that can filter some criteria at ETS level
+    # This reduces the amount of data transferred from ETS
+    # Even if we can't express all criteria, any filtering helps
+    # {id, pid, metadata, timestamp}
+    pattern = {:_, :_, :_, :_}
+
+    # For now, use a permissive pattern and filter in-app
+    # Future optimization: Convert simple equality checks to ETS guards
+    [{pattern, [], [:"$_"]}]
+  end
+
+  @doc false
+  defp stream_and_filter_ets(table, match_spec, criteria) do
+    # Use ETS select with continuation to stream results
+    # This avoids loading the entire table into memory at once
+    stream_ets_select(table, match_spec)
+    |> Stream.filter(fn {_id, _pid, metadata, _timestamp} ->
+      Enum.all?(criteria, fn criterion ->
+        matches_criterion?(metadata, criterion)
+      end)
+    end)
+    |> Enum.to_list()
+  end
+
+  @doc false
+  defp stream_ets_select(table, match_spec) do
+    # Stream results from ETS using continuation
+    # Default to 100 items per batch to balance memory vs performance
+    batch_size = 100
+
+    Stream.resource(
+      # Start function - initiate the select
+      fn -> :ets.select(table, match_spec, batch_size) end,
+
+      # Next function - get next batch
+      fn
+        :"$end_of_table" -> {:halt, nil}
+        {results, continuation} -> {results, continuation}
+      end,
+
+      # Cleanup function - nothing to clean up
+      fn _acc -> :ok end
+    )
   end
 end

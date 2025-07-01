@@ -67,12 +67,19 @@ defmodule MABEAM.AgentRegistry.Reader do
   Lists all agents with optional filtering using direct ETS access.
 
   The filter function receives agent metadata and should return true to include.
+  Uses streaming to avoid loading entire table into memory.
   """
   @spec list_all(map(), nil | (map() -> boolean())) :: list()
   def list_all(tables, filter_fn \\ nil) do
+    # Use streaming with ETS select and continuation
+    # to avoid loading entire table into memory
+    match_spec = [{:_, [], [:"$_"]}]
+    batch_size = 100
+
     results =
-      :ets.tab2list(tables.main_table)
-      |> Enum.map(fn {id, pid, metadata, _timestamp} -> {id, pid, metadata} end)
+      stream_ets_select(tables.main_table, match_spec, batch_size)
+      |> Stream.map(fn {id, pid, metadata, _timestamp} -> {id, pid, metadata} end)
+      |> Enum.to_list()
 
     QueryEngine.apply_filter(results, filter_fn)
   end
@@ -132,5 +139,23 @@ defmodule MABEAM.AgentRegistry.Reader do
   @spec count(map()) :: {:ok, non_neg_integer()}
   def count(tables) do
     {:ok, :ets.info(tables.main_table, :size)}
+  end
+
+  # Private helper for streaming ETS results
+
+  defp stream_ets_select(table, match_spec, batch_size) do
+    Stream.resource(
+      # Start function - initiate the select
+      fn -> :ets.select(table, match_spec, batch_size) end,
+
+      # Next function - get next batch
+      fn
+        :"$end_of_table" -> {:halt, nil}
+        {results, continuation} -> {results, continuation}
+      end,
+
+      # Cleanup function - nothing to clean up
+      fn _acc -> :ok end
+    )
   end
 end

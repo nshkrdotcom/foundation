@@ -553,20 +553,25 @@ defmodule MABEAM.AgentInfrastructure do
     # 1 hour
     cutoff = now - 3_600_000
 
-    :ets.tab2list(rate_limiter_table)
-    |> Enum.each(fn {limiter_id, limiter_data} ->
-      # Remove old buckets
-      active_buckets =
-        limiter_data.buckets
-        |> Enum.filter(fn {_identifier, bucket} ->
-          last_activity = Map.get(bucket, :last_refill, Map.get(bucket, :window_start, 0))
-          last_activity > cutoff
-        end)
-        |> Enum.into(%{})
+    # Use ETS foldl to process entries without loading entire table
+    :ets.foldl(
+      fn {limiter_id, limiter_data}, acc ->
+        # Remove old buckets
+        active_buckets =
+          limiter_data.buckets
+          |> Enum.filter(fn {_identifier, bucket} ->
+            last_activity = Map.get(bucket, :last_refill, Map.get(bucket, :window_start, 0))
+            last_activity > cutoff
+          end)
+          |> Enum.into(%{})
 
-      updated_data = %{limiter_data | buckets: active_buckets}
-      :ets.insert(rate_limiter_table, {limiter_id, updated_data})
-    end)
+        updated_data = %{limiter_data | buckets: active_buckets}
+        :ets.insert(rate_limiter_table, {limiter_id, updated_data})
+        acc
+      end,
+      :ok,
+      rate_limiter_table
+    )
   end
 
   # --- Private Resource Monitoring Helpers ---

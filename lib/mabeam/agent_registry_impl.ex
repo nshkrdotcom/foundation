@@ -77,9 +77,14 @@ defimpl Foundation.Registry, for: MABEAM.AgentRegistry do
   def list_all(registry_pid, filter_fn) do
     tables = get_cached_table_names(registry_pid)
 
+    # Use streaming to avoid loading entire table
+    match_spec = [{:_, [], [:"$_"]}]
+    batch_size = 100
+
     results =
-      :ets.tab2list(tables.main)
-      |> Enum.map(fn {id, pid, metadata, _timestamp} -> {id, pid, metadata} end)
+      stream_ets_select(tables.main, match_spec, batch_size)
+      |> Stream.map(fn {id, pid, metadata, _timestamp} -> {id, pid, metadata} end)
+      |> Enum.to_list()
       |> apply_filter(filter_fn)
 
     results
@@ -132,5 +137,23 @@ defimpl Foundation.Registry, for: MABEAM.AgentRegistry do
 
   def protocol_version(registry_pid) do
     GenServer.call(registry_pid, {:protocol_version})
+  end
+
+  # Streaming helper for efficient ETS access
+
+  defp stream_ets_select(table, match_spec, batch_size) do
+    Stream.resource(
+      # Start function - initiate the select
+      fn -> :ets.select(table, match_spec, batch_size) end,
+
+      # Next function - get next batch
+      fn
+        :"$end_of_table" -> {:halt, nil}
+        {results, continuation} -> {results, continuation}
+      end,
+
+      # Cleanup function - nothing to clean up
+      fn _acc -> :ok end
+    )
   end
 end

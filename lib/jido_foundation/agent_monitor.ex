@@ -165,14 +165,19 @@ defmodule JidoFoundation.AgentMonitor do
     interval = Keyword.get(opts, :interval, @default_interval)
     registry = Keyword.get(opts, :registry)
 
-    # Verify agent is alive before starting monitoring
+    # Set up process monitoring FIRST to avoid race condition
+    # This ensures we'll get a DOWN message even if the process dies
+    # before we finish initialization
+    monitor_ref = Process.monitor(agent_pid)
+
+    # Now check if agent is still alive
+    # If it died between monitor setup and this check, we'll get a DOWN message
     unless Process.alive?(agent_pid) do
+      # Demonitor to avoid getting DOWN message in terminate
+      Process.demonitor(monitor_ref, [:flush])
       Logger.warning("Agent #{inspect(agent_pid)} is not alive, stopping monitor")
       {:stop, :agent_not_alive}
     else
-      # Set up process monitoring
-      monitor_ref = Process.monitor(agent_pid)
-
       state = %__MODULE__{
         agent_pid: agent_pid,
         health_check: health_check,
