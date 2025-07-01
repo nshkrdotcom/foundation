@@ -46,7 +46,7 @@ defmodule Foundation.Application do
 
       # Service layer supervisor for Foundation services
       Foundation.Services.Supervisor
-      
+
       # NOTE: JidoSystem.Application removed to break circular dependency
       # JidoSystem should be started as a separate application or
       # included in the host application's supervision tree

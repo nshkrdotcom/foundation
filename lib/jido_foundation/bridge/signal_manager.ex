@@ -1,14 +1,14 @@
 defmodule JidoFoundation.Bridge.SignalManager do
   @moduledoc """
   Manages signal routing, subscriptions, and emission for Jido agents within Foundation.
-  
+
   This module handles all signal-related operations that were previously in the Bridge module,
   providing a focused interface for signal management using Jido.Signal.Bus.
   """
-  
+
   require Logger
   alias Jido.Signal.Bus
-  
+
   @doc """
   Starts the Jido signal bus for Foundation agents.
 
@@ -182,7 +182,7 @@ defmodule JidoFoundation.Bridge.SignalManager do
             # This allows tests to work without a full signal bus
             telemetry_signal_id = original_signal_id || signal.id
             emit_telemetry(agent, signal, telemetry_signal_id)
-            
+
             # Return a simulated success response for compatibility
             {:ok, [%{signal: signal, timestamp: System.system_time(:microsecond)}]}
 

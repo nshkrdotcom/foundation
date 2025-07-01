@@ -15,11 +15,11 @@ defmodule JidoSystem.Application do
   ## Integration with Foundation
 
   JidoSystem depends on Foundation services and must be started after Foundation.
-  
+
   Use one of these approaches:
 
   ### Option 1: Use FoundationJidoSupervisor (Recommended)
-  
+
       # In your application.ex
       def start(_type, _args) do
         children = [
@@ -31,7 +31,7 @@ defmodule JidoSystem.Application do
       end
 
   ### Option 2: Manual supervision tree
-  
+
       # Ensure Foundation starts first
       children = [
         Foundation.Application,
@@ -43,9 +43,9 @@ defmodule JidoSystem.Application do
       Supervisor.start_link(children, strategy: :rest_for_one)
 
   ### Option 3: Separate OTP applications
-  
+
   Configure in mix.exs to ensure Foundation starts before JidoSystem:
-  
+
       def application do
         [
           extra_applications: [:foundation, :jido_system]

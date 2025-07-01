@@ -1,13 +1,13 @@
 defmodule JidoFoundation.Bridge.CoordinationManager do
   @moduledoc """
   Manages MABEAM coordination for Jido agents within Foundation.
-  
+
   This module provides coordination primitives for multi-agent communication,
   task distribution, and collaborative workflows.
   """
-  
+
   require Logger
-  
+
   @doc """
   Coordinates communication between two Jido agents.
 

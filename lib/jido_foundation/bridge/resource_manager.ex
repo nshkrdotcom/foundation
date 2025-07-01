@@ -1,11 +1,11 @@
 defmodule JidoFoundation.Bridge.ResourceManager do
   @moduledoc """
   Manages resource acquisition and release for Jido agents within Foundation.
-  
+
   This module provides a simple interface to Foundation's ResourceManager
   for Jido agents to safely acquire and release resources.
   """
-  
+
   @doc """
   Acquires a resource token before executing a Jido action.
 

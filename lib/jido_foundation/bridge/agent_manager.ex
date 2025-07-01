@@ -1,13 +1,13 @@
 defmodule JidoFoundation.Bridge.AgentManager do
   @moduledoc """
   Manages Jido agent registration, discovery, and metadata within the Foundation framework.
-  
+
   This module handles all agent-related operations that were previously in the Bridge module,
   providing a focused interface for agent management.
   """
-  
+
   require Logger
-  
+
   @doc """
   Registers a Jido agent with Foundation's registry.
 

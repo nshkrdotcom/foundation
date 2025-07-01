@@ -1,13 +1,13 @@
 defmodule JidoFoundation.Bridge.ExecutionManager do
   @moduledoc """
   Manages protected execution of Jido actions with Foundation infrastructure.
-  
+
   This module provides circuit breakers, retries, and distributed execution
   for Jido agents using Foundation's production-grade infrastructure.
   """
-  
+
   require Logger
-  
+
   @doc """
   Executes a Jido action with Foundation circuit breaker protection.
 

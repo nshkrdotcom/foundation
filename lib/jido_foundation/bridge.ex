@@ -33,7 +33,7 @@ defmodule JidoFoundation.Bridge do
   """
 
   require Logger
-  
+
   # Delegate modules for specific concerns
   alias JidoFoundation.Bridge.{
     AgentManager,
@@ -72,7 +72,9 @@ defmodule JidoFoundation.Bridge do
   @doc """
   Updates metadata for a registered Jido agent.
   """
-  defdelegate update_agent_metadata(agent_pid, updates, opts \\ []), to: AgentManager, as: :update_metadata
+  defdelegate update_agent_metadata(agent_pid, updates, opts \\ []),
+    to: AgentManager,
+    as: :update_metadata
 
   # Telemetry integration - Delegated to SignalManager
 
@@ -86,7 +88,8 @@ defmodule JidoFoundation.Bridge do
         duration: 150
       })
   """
-  defdelegate emit_agent_event(agent_pid, event_type, measurements \\ %{}, metadata \\ %{}), to: SignalManager
+  defdelegate emit_agent_event(agent_pid, event_type, measurements \\ %{}, metadata \\ %{}),
+    to: SignalManager
 
   # Infrastructure integration - Delegated to ExecutionManager
 
@@ -127,7 +130,8 @@ defmodule JidoFoundation.Bridge do
       {:ok, result} = execute_with_retry(MyAction, %{data: "test"})
       {:error, reason} = execute_with_retry(BadAction, %{})
   """
-  defdelegate execute_with_retry(action_module, params \\ %{}, context \\ %{}, opts \\ []), to: ExecutionManager
+  defdelegate execute_with_retry(action_module, params \\ %{}, context \\ %{}, opts \\ []),
+    to: ExecutionManager
 
   @doc """
   Sets up monitoring for a Jido agent.
@@ -168,7 +172,9 @@ defmodule JidoFoundation.Bridge do
 
       {:ok, agents} = find_agents_by_capability(:planning)
   """
-  defdelegate find_agents_by_capability(capability, opts \\ []), to: AgentManager, as: :find_by_capability
+  defdelegate find_agents_by_capability(capability, opts \\ []),
+    to: AgentManager,
+    as: :find_by_capability
 
   @doc """
   Finds Jido agents matching multiple criteria.
@@ -197,7 +203,6 @@ defmodule JidoFoundation.Bridge do
       {:ok, registered} = batch_register_agents(agents)
   """
   defdelegate batch_register_agents(agents, opts \\ []), to: AgentManager, as: :batch_register
-
 
   @doc """
   Stops monitoring for a Jido agent.
@@ -248,7 +253,9 @@ defmodule JidoFoundation.Bridge do
   - `{:ok, subscription_id}` - Unique subscription identifier for unsubscribing
   - `{:error, reason}` - If subscription fails
   """
-  defdelegate subscribe_to_signals(signal_path, handler_pid, opts \\ []), to: SignalManager, as: :subscribe
+  defdelegate subscribe_to_signals(signal_path, handler_pid, opts \\ []),
+    to: SignalManager,
+    as: :subscribe
 
   @doc """
   Unsubscribes a handler from receiving signals using the subscription ID.
@@ -258,7 +265,9 @@ defmodule JidoFoundation.Bridge do
       {:ok, subscription_id} = Bridge.subscribe_to_signals("agent.task.*", handler_pid)
       :ok = Bridge.unsubscribe_from_signals(subscription_id)
   """
-  defdelegate unsubscribe_from_signals(subscription_id, opts \\ []), to: SignalManager, as: :unsubscribe
+  defdelegate unsubscribe_from_signals(subscription_id, opts \\ []),
+    to: SignalManager,
+    as: :unsubscribe
 
   @doc """
   Gets signal replay from the bus for debugging and monitoring.
@@ -430,7 +439,9 @@ defmodule JidoFoundation.Bridge do
         capabilities: [:planning, :execution]
       )
   """
-  defdelegate start_and_register_agent(agent_module, agent_config, bridge_opts \\ []), to: AgentManager, as: :start_and_register
+  defdelegate start_and_register_agent(agent_module, agent_config, bridge_opts \\ []),
+    to: AgentManager,
+    as: :start_and_register
 
   @doc """
   Executes a distributed operation across multiple Jido agents.

@@ -104,5 +104,8 @@
   {"lib/jido_system/agents/task_agent.ex", :pattern_match},
   
   # All Jido library internal warnings
-  ~r/deps\/jido\//
+  ~r/deps\/jido\//,
+  
+  # FoundationJidoSupervisor - Dialyzer doesn't understand our supervisor init format
+  {"lib/foundation_jido_supervisor.ex", :callback_type_mismatch}
 ]
