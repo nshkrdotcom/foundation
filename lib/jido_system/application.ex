@@ -60,6 +60,10 @@ defmodule JidoSystem.Application do
     Logger.info("Starting JidoSystem Agent Infrastructure")
 
     children = [
+      # State persistence supervisor - MUST start before agents
+      # This owns the ETS tables for agent state persistence
+      JidoSystem.Agents.StateSupervisor,
+      
       # Dynamic supervisor for critical agents
       {DynamicSupervisor, name: JidoSystem.AgentSupervisor, strategy: :one_for_one},
 
@@ -71,6 +75,12 @@ defmodule JidoSystem.Application do
 
       # Registry for Bridge agent monitoring
       {Registry, keys: :unique, name: JidoFoundation.MonitorRegistry},
+      
+      # Registry for workflow processes
+      {Registry, keys: :unique, name: JidoSystem.WorkflowRegistry},
+      
+      # Workflow supervisor for process-per-workflow pattern
+      JidoSystem.Supervisors.WorkflowSupervisor,
 
       # Bridge agent monitoring supervisor (OTP compliant replacement for unsupervised processes)
       JidoFoundation.MonitorSupervisor,

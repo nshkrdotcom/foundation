@@ -1,18 +1,24 @@
 defmodule Foundation.AtomicTransaction do
   @moduledoc """
-  Provides atomic transaction support for Foundation operations.
+  Provides transaction support for Foundation operations with manual rollback capabilities.
 
-  This module enables multi-table atomic operations with rollback capabilities
-  and transaction logging. It's designed to work with the current write-through-process,
-  read-from-table pattern while ensuring ACID properties for complex operations.
+  IMPORTANT: Despite the module name, this does NOT provide true atomic transactions
+  at the ETS level. Operations are serialized through the GenServer but ETS changes
+  are NOT automatically rolled back on failure. This module helps track rollback
+  data and provides manual rollback functionality.
 
   ## Features
 
-  - Multi-table atomic operations
-  - Automatic rollback on failure
+  - Serial execution of operations (no interleaving)
+  - Manual rollback support via tracked rollback data
   - Transaction logging for audit trail
-  - Nested transaction support
-  - Deadlock detection and prevention
+  - Operation batching
+  
+  ## Limitations
+  
+  - NO automatic rollback of ETS operations on failure
+  - Partial failures leave ETS in inconsistent state until manual rollback
+  - Not suitable for true ACID requirements
 
   ## Usage
 
@@ -146,7 +152,7 @@ defmodule Foundation.AtomicTransaction do
 
   defp execute_operations(%__MODULE__{operations: ops, registry_pid: registry} = tx) do
     # Use GenServer.call with a special transaction wrapper
-    case GenServer.call(registry, {:atomic_transaction, ops, tx.id}) do
+    case GenServer.call(registry, {:execute_serial_operations, ops, tx.id}) do
       {:ok, rollback_data} ->
         {:ok, %{tx | rollback_data: rollback_data}}
 
