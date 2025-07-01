@@ -188,12 +188,12 @@ defmodule Foundation.MixProject do
 
       ###################################################################################################
       # Jido agent framework integration
-      {:jido, github: "nshkrdotcom/jido", branch: "fix/dialyzer-warnings"},
+      {:jido, github: "nshkrdotcom/jido", branch: "fix/agent-server-terminate-race-condition-v2"},
 
       ## Note: this is only here until the PR's for jido and jido_signal are merged, bc its a dep in jido:
       {:jido_signal,
        github: "nshkrdotcom/jido_signal", branch: "fix/dialyzer-warnings", override: true},
-      {:jido_action, github: "nshkrdotcom/jido_action", branch: "fix/dialyzer-warnings"},
+      #{:jido_action, github: "nshkrdotcom/jido_action", branch: "fix/dialyzer-warnings"},
       ###################################################################################################
 
       # Development and testing

@@ -34,7 +34,7 @@
   "httpoison": {:hex, :httpoison, "2.2.3", "a599d4b34004cc60678999445da53b5e653630651d4da3d14675fedc9dd34bd6", [:mix], [{:hackney, "~> 1.21", [hex: :hackney, repo: "hexpm", optional: false]}], "hexpm", "fa0f2e3646d3762fdc73edb532104c8619c7636a6997d20af4003da6cfc53e53"},
   "idna": {:hex, :idna, "6.1.1", "8a63070e9f7d0c62eb9d9fcb360a7de382448200fbbd1b106cc96d3d8099df8d", [:rebar3], [{:unicode_util_compat, "~> 0.7.0", [hex: :unicode_util_compat, repo: "hexpm", optional: false]}], "hexpm", "92376eb7894412ed19ac475e4a86f7b413c1b9fbb5bd16dccd57934157944cea"},
   "jason": {:hex, :jason, "1.4.4", "b9226785a9aa77b6857ca22832cffa5d5011a667207eb2a0ad56adb5db443b8a", [:mix], [{:decimal, "~> 1.0 or ~> 2.0", [hex: :decimal, repo: "hexpm", optional: true]}], "hexpm", "c5eb0cab91f094599f94d55bc63409236a8ec69a21a67814529e8d5f6cc90b3b"},
-  "jido": {:git, "https://github.com/nshkrdotcom/jido.git", "9da3ff00607ae83375cbe8817d5a1d189b48a409", [branch: "fix/dialyzer-warnings"]},
+  "jido": {:git, "https://github.com/nshkrdotcom/jido.git", "939e39e0f956db15db1a34afe461fc128acc9e1f", [branch: "fix/agent-server-terminate-race-condition-v2"]},
   "jido_action": {:git, "https://github.com/nshkrdotcom/jido_action.git", "b5142dd5859a423c4a56d1cbbf3893f2691c22ca", [branch: "fix/dialyzer-warnings"]},
   "jido_signal": {:git, "https://github.com/nshkrdotcom/jido_signal.git", "7cfb8ab402c609796c7283bce5cf9eb7f7ffcf77", [branch: "fix/dialyzer-warnings"]},
   "joken": {:hex, :joken, "2.6.2", "5daaf82259ca603af4f0b065475099ada1b2b849ff140ccd37f4b6828ca6892a", [:mix], [{:jose, "~> 1.11.10", [hex: :jose, repo: "hexpm", optional: false]}], "hexpm", "5134b5b0a6e37494e46dbf9e4dad53808e5e787904b7c73972651b51cce3d72b"},
