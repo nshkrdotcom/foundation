@@ -309,8 +309,6 @@ defmodule MABEAM.AgentRegistryTest do
 
   describe "process monitoring and automatic cleanup" do
     test "automatically removes agent when process dies", %{registry: registry} do
-      import Foundation.AsyncTestHelpers
-
       # Create a process that we control
       test_pid = self()
 
