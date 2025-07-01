@@ -310,17 +310,19 @@ defmodule MABEAM.AgentRegistryTest do
   describe "process monitoring and automatic cleanup" do
     test "automatically removes agent when process dies", %{registry: registry} do
       import Foundation.AsyncTestHelpers
-      
+
       # Create a process that we control
       test_pid = self()
-      short_lived = spawn(fn -> 
-        # Signal that process is ready
-        send(test_pid, :process_started)
-        # Stay alive until told to exit
-        receive do
-          :exit -> :ok
-        end
-      end)
+
+      short_lived =
+        spawn(fn ->
+          # Signal that process is ready
+          send(test_pid, :process_started)
+          # Stay alive until told to exit
+          receive do
+            :exit -> :ok
+          end
+        end)
 
       # Wait for process to be ready
       assert_receive :process_started, 1000
@@ -333,6 +335,7 @@ defmodule MABEAM.AgentRegistryTest do
 
       # Set up telemetry handler to catch the agent_down event
       ref = make_ref()
+
       :telemetry.attach(
         "test-agent-down-#{inspect(ref)}",
         [:foundation, :mabeam, :registry, :agent_down],
@@ -346,7 +349,7 @@ defmodule MABEAM.AgentRegistryTest do
 
       # Kill the process
       Process.exit(short_lived, :kill)
-      
+
       # Wait for the agent_down telemetry event
       assert_receive {:agent_down_event, %{agent_id: "short_lived"}}, 5000
 
