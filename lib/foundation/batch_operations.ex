@@ -312,16 +312,38 @@ defmodule Foundation.BatchOperations do
     max_concurrency = Keyword.get(opts, :max_concurrency, @default_parallelism)
     timeout = Keyword.get(opts, :timeout, 5000)
 
-    stream_query(criteria, opts)
-    |> Task.async_stream(fun,
-      max_concurrency: max_concurrency,
-      timeout: timeout,
-      on_timeout: :kill_task
-    )
-    |> Enum.map(fn
-      {:ok, result} -> {:ok, result}
-      {:exit, reason} -> {:error, reason}
-    end)
+    # Check if TaskSupervisor is available
+    if Process.whereis(Foundation.TaskSupervisor) do
+      Task.Supervisor.async_stream_nolink(
+        Foundation.TaskSupervisor,
+        stream_query(criteria, opts),
+        fun,
+        max_concurrency: max_concurrency,
+        timeout: timeout,
+        on_timeout: :kill_task
+      )
+      |> Enum.map(fn
+        {:ok, result} -> {:ok, result}
+        {:exit, reason} -> {:error, reason}
+      end)
+    else
+      # Fallback to regular Task.async_stream if supervisor not available
+      Logger.warning(
+        "Foundation.TaskSupervisor not running. Ensure Foundation.Application is started or use test helpers."
+      )
+
+      Task.async_stream(
+        stream_query(criteria, opts),
+        fun,
+        max_concurrency: max_concurrency,
+        timeout: timeout,
+        on_timeout: :kill_task
+      )
+      |> Enum.map(fn
+        {:ok, result} -> {:ok, result}
+        {:exit, reason} -> {:error, reason}
+      end)
+    end
   end
 
   # Private functions
@@ -386,21 +408,43 @@ defmodule Foundation.BatchOperations do
   defp execute_parallel_updates(updates, registry) do
     registry = registry || get_registry_impl()
 
-    updates
-    |> Task.async_stream(
-      fn {id, metadata} ->
-        case Registry.update_metadata(registry, id, metadata) do
-          :ok -> {:ok, id}
-          error -> {:error, {id, error}}
-        end
-      end,
-      max_concurrency: @default_parallelism
-    )
-    |> Enum.map(fn
-      {:ok, result} -> result
-      {:exit, reason} -> {:error, reason}
-    end)
-    |> handle_batch_results(:continue)
+    # Check if TaskSupervisor is available
+    results =
+      if Process.whereis(Foundation.TaskSupervisor) do
+        Task.Supervisor.async_stream_nolink(
+          Foundation.TaskSupervisor,
+          updates,
+          fn {id, metadata} ->
+            case Registry.update_metadata(registry, id, metadata) do
+              :ok -> {:ok, id}
+              error -> {:error, {id, error}}
+            end
+          end,
+          max_concurrency: @default_parallelism
+        )
+        |> Enum.map(fn
+          {:ok, result} -> result
+          {:exit, reason} -> {:error, reason}
+        end)
+      else
+        # Fallback to regular Task.async_stream if supervisor not available
+        Task.async_stream(
+          updates,
+          fn {id, metadata} ->
+            case Registry.update_metadata(registry, id, metadata) do
+              :ok -> {:ok, id}
+              error -> {:error, {id, error}}
+            end
+          end,
+          max_concurrency: @default_parallelism
+        )
+        |> Enum.map(fn
+          {:ok, result} -> result
+          {:exit, reason} -> {:error, reason}
+        end)
+      end
+
+    handle_batch_results(results, :continue)
   end
 
   defp execute_sequential_updates(updates, batch_size, registry) do
@@ -460,13 +504,29 @@ defmodule Foundation.BatchOperations do
   end
 
   defp parallel_indexed_query(indexed_criteria, registry) do
-    indexed_criteria
-    |> Task.async_stream(
-      fn criterion ->
-        Registry.query(registry, [criterion])
-      end,
-      max_concurrency: @default_parallelism
-    )
+    # Check if TaskSupervisor is available
+    stream =
+      if Process.whereis(Foundation.TaskSupervisor) do
+        Task.Supervisor.async_stream_nolink(
+          Foundation.TaskSupervisor,
+          indexed_criteria,
+          fn criterion ->
+            Registry.query(registry, [criterion])
+          end,
+          max_concurrency: @default_parallelism
+        )
+      else
+        # Fallback to regular Task.async_stream if supervisor not available
+        Task.async_stream(
+          indexed_criteria,
+          fn criterion ->
+            Registry.query(registry, [criterion])
+          end,
+          max_concurrency: @default_parallelism
+        )
+      end
+
+    stream
     |> Enum.reduce(nil, fn
       {:ok, {:ok, agents}}, nil -> MapSet.new(agents)
       {:ok, {:ok, agents}}, acc -> MapSet.intersection(acc, MapSet.new(agents))

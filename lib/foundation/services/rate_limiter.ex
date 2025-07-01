@@ -358,6 +358,11 @@ defmodule Foundation.Services.RateLimiter do
         {:noreply, state}
 
       limiter_config ->
+        # Cancel old timer if it exists
+        if old_timer = Map.get(state.cleanup_timers, limiter_id) do
+          Process.cancel_timer(old_timer)
+        end
+
         # Perform cleanup for this specific limiter
         cleanup_count = perform_limiter_cleanup(limiter_id)
 

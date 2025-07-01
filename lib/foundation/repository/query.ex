@@ -127,14 +127,30 @@ defmodule Foundation.Repository.Query do
   # Private functions
 
   defp execute_query(%__MODULE__{} = query, return_type) do
-    # Get all records from ETS
-    all_records = :ets.tab2list(query.table)
+    # Build match specification for efficient ETS querying
+    match_spec = build_match_spec(query.filters)
 
-    # Apply filters
-    filtered = apply_filters(all_records, query.filters)
+    # Execute ETS select with match spec
+    selected_records =
+      case match_spec do
+        nil when query.filters == [] ->
+          # No filters at all, use simple select
+          :ets.select(query.table, [{{:"$1", :"$2", :"$3"}, [], [{{:"$1", :"$2", :"$3"}}]}])
+
+        nil ->
+          # Complex filters, get all records and filter in Elixir
+          all_records =
+            :ets.select(query.table, [{{:"$1", :"$2", :"$3"}, [], [{{:"$1", :"$2", :"$3"}}]}])
+
+          apply_filters(all_records, query.filters)
+
+        _ ->
+          # Simple filters handled by match spec
+          :ets.select(query.table, match_spec)
+      end
 
     # Apply ordering
-    ordered = apply_ordering(filtered, query.order)
+    ordered = apply_ordering(selected_records, query.order)
 
     # Apply offset and limit
     paginated = apply_pagination(ordered, query.offset, query.limit)
@@ -154,8 +170,46 @@ defmodule Foundation.Repository.Query do
         end
 
       :count ->
-        {:ok, length(filtered)}
+        {:ok, length(selected_records)}
     end
+  end
+
+  defp build_match_spec([]), do: nil
+
+  defp build_match_spec(filters) do
+    # Build ETS match specification for common cases
+    # For complex filters, we'll fall back to post-filtering
+    case build_simple_match_spec(filters) do
+      {:ok, match_spec} ->
+        match_spec
+
+      :complex ->
+        # For complex filters, get all and filter in Elixir
+        # This is still better than tab2list as we can limit the selection
+        nil
+    end
+  end
+
+  defp build_simple_match_spec(filters) do
+    # Try to build a simple match spec for equality filters
+    # This handles the most common case efficiently
+    if Enum.all?(filters, fn {_field, op, _val} -> op == :eq end) do
+      # Build guards for equality checks
+      guards =
+        Enum.map(filters, fn {field, :eq, value} ->
+          {:==, {:map_get, field, :"$2"}, value}
+        end)
+
+      match_spec = [
+        {{:"$1", :"$2", :"$3"}, guards, [{{:"$1", :"$2", :"$3"}}]}
+      ]
+
+      {:ok, match_spec}
+    else
+      :complex
+    end
+  rescue
+    _ -> :complex
   end
 
   defp apply_filters(records, filters) do

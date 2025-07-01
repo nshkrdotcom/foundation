@@ -218,14 +218,27 @@ defmodule Foundation.EventSystem do
       }
     }
 
-    # Emit through signal bus if available
+    # Emit through signal bus if available with backpressure handling
     case Process.whereis(:foundation_signal_bus) do
       nil ->
         Logger.debug("Signal bus not available, event not routed: #{inspect(signal_type)}")
         :ok
 
-      _pid ->
-        JidoFoundation.Bridge.emit_signal(self(), signal)
+      pid ->
+        # Check process message queue length for backpressure
+        case Process.info(pid, :message_queue_len) do
+          {:message_queue_len, queue_len} when queue_len > 10_000 ->
+            # Signal bus is overloaded, drop event and log warning
+            Logger.warning(
+              "Signal bus overloaded (#{queue_len} messages), dropping event: #{inspect(signal_type)}"
+            )
+
+            {:error, :backpressure}
+
+          _ ->
+            # Normal operation, emit signal
+            JidoFoundation.Bridge.emit_signal(self(), signal)
+        end
     end
   end
 
@@ -243,8 +256,20 @@ defmodule Foundation.EventSystem do
       :ok
     rescue
       e ->
+        # Capture full error context including stacktrace
+        stacktrace = __STACKTRACE__
         Logger.error("Custom event handler failed: #{Exception.message(e)}")
-        {:error, {:handler_failed, e}}
+        Logger.debug("Handler error stacktrace: #{inspect(stacktrace)}")
+
+        # Return full error information
+        {:error,
+         {:handler_failed,
+          %{
+            exception: e,
+            message: Exception.message(e),
+            stacktrace: stacktrace,
+            handler_args: {type, name, data}
+          }}}
     end
   end
 

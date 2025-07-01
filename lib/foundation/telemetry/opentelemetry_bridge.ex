@@ -413,6 +413,11 @@ defmodule Foundation.Telemetry.OpenTelemetryBridge do
 
   @impl true
   def handle_info(:cleanup_stale_contexts, state) do
+    # Cancel old timer if it exists
+    if state.cleanup_timer do
+      Process.cancel_timer(state.cleanup_timer)
+    end
+
     # Clean up contexts older than max_context_age_ms
     now = System.monotonic_time(:millisecond)
     max_age = state.max_context_age_ms

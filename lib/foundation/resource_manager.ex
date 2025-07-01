@@ -40,6 +40,18 @@ defmodule Foundation.ResourceManager do
   require Logger
   alias Foundation.Telemetry
 
+  # Define child spec for proper supervision
+  def child_spec(opts) do
+    %{
+      id: __MODULE__,
+      start: {__MODULE__, :start_link, [opts]},
+      restart: :permanent,
+      # Longer shutdown for resource cleanup
+      shutdown: 10000,
+      type: :worker
+    }
+  end
+
   @default_limits %{
     max_memory_mb: 1024,
     max_ets_entries: 1_000_000,
@@ -145,7 +157,10 @@ defmodule Foundation.ResourceManager do
     new_state = %{state | monitored_tables: new_tables}
 
     # Immediately measure the new table
-    updated_state = measure_table_usage(new_state, table_name)
+    measured_state = measure_table_usage(new_state, table_name)
+
+    # Check and update backpressure state after measuring
+    updated_state = update_backpressure_state(measured_state)
 
     {:reply, :ok, updated_state}
   end
@@ -450,9 +465,25 @@ defmodule Foundation.ResourceManager do
   defp trigger_alert(state, alert_type, data) do
     Enum.each(state.alert_callbacks, fn callback ->
       # Use supervised task to avoid blocking and ensure proper supervision
-      Foundation.TaskHelper.spawn_supervised_safe(fn ->
-        callback.(alert_type, data)
-      end)
+      case Foundation.TaskHelper.spawn_supervised_safe(fn ->
+             callback.(alert_type, data)
+           end) do
+        {:ok, _pid} ->
+          :ok
+
+        {:error, :task_supervisor_not_running} ->
+          # Fallback: execute callback directly in test environments
+          # This ensures tests work without full supervision tree
+          try do
+            callback.(alert_type, data)
+          rescue
+            error ->
+              Logger.error("Alert callback failed: #{Exception.message(error)}")
+          end
+
+        {:error, reason} ->
+          Logger.error("Failed to spawn alert callback: #{inspect(reason)}")
+      end
     end)
 
     # Also emit telemetry

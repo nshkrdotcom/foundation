@@ -31,7 +31,8 @@ defmodule Foundation.PerformanceMonitor do
             start_time: nil,
             last_cleanup: nil,
             cached_summary: nil,
-            cache_timestamp: nil
+            cache_timestamp: nil,
+            cleanup_timer: nil
 
   # --- API ---
 
@@ -223,10 +224,10 @@ defmodule Foundation.PerformanceMonitor do
     }
 
     # Schedule periodic cleanup
-    Process.send_after(self(), :cleanup, 60_000)
+    cleanup_timer = Process.send_after(self(), :cleanup, 60_000)
 
     Logger.info("Foundation.PerformanceMonitor started")
-    {:ok, state}
+    {:ok, %{state | cleanup_timer: cleanup_timer}}
   end
 
   @impl true
@@ -273,18 +274,38 @@ defmodule Foundation.PerformanceMonitor do
 
   @impl true
   def handle_info(:cleanup, state) do
+    # Cancel old timer if it exists
+    if state.cleanup_timer do
+      Process.cancel_timer(state.cleanup_timer)
+    end
+
     # Periodic cleanup of old metrics
     current_time = System.monotonic_time(:second)
 
     # Cleanup operations older than 1 hour
     cleaned_operations = cleanup_old_operations(state.operations, current_time)
 
-    new_state = %{state | operations: cleaned_operations, last_cleanup: current_time}
+    # Schedule next cleanup and store timer reference
+    new_timer = Process.send_after(self(), :cleanup, 60_000)
 
-    # Schedule next cleanup
-    Process.send_after(self(), :cleanup, 60_000)
+    new_state = %{
+      state
+      | operations: cleaned_operations,
+        last_cleanup: current_time,
+        cleanup_timer: new_timer
+    }
 
     {:noreply, new_state}
+  end
+
+  @impl true
+  def terminate(_reason, state) do
+    # Cancel cleanup timer if it exists
+    if state.cleanup_timer do
+      Process.cancel_timer(state.cleanup_timer)
+    end
+
+    :ok
   end
 
   # --- Private Functions ---

@@ -387,14 +387,31 @@ defmodule MLFoundation.AgentPatterns.EnsembleAgent do
   end
 
   defp collect_responses(members, input) do
-    members
-    |> Task.async_stream(
-      fn member ->
-        get_prediction(member, input)
-      end,
-      max_concurrency: length(members),
-      timeout: 5000
-    )
+    # Check if TaskSupervisor is available
+    stream =
+      if Process.whereis(Foundation.TaskSupervisor) do
+        Task.Supervisor.async_stream_nolink(
+          Foundation.TaskSupervisor,
+          members,
+          fn member ->
+            get_prediction(member, input)
+          end,
+          max_concurrency: length(members),
+          timeout: 5000
+        )
+      else
+        # Fallback to regular Task.async_stream if supervisor not available
+        Task.async_stream(
+          members,
+          fn member ->
+            get_prediction(member, input)
+          end,
+          max_concurrency: length(members),
+          timeout: 5000
+        )
+      end
+
+    stream
     |> Enum.map(fn
       {:ok, result} -> result
       {:exit, _reason} -> {:error, :timeout}

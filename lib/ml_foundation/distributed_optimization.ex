@@ -545,8 +545,9 @@ defmodule MLFoundation.DistributedOptimization.FederatedServer do
 
       # Distribute model to clients
       client_updates =
-        selected_clients
-        |> Task.async_stream(
+        Task.Supervisor.async_stream_nolink(
+          Foundation.TaskSupervisor,
+          selected_clients,
           fn client ->
             GenServer.call(client, {:train_local, current_model, state.client_epochs}, :infinity)
           end,
@@ -833,8 +834,9 @@ defmodule MLFoundation.DistributedOptimization.PBTCoordinator do
     Enum.reduce_while(1..max_steps, state, fn step, acc_state ->
       # Train population members in parallel
       performances =
-        state.population
-        |> Task.async_stream(
+        Task.Supervisor.async_stream_nolink(
+          Foundation.TaskSupervisor,
+          state.population,
           fn member ->
             performance = GenServer.call(member, {:train_step, objective_fn})
             {member, performance}
@@ -1103,9 +1105,9 @@ defmodule MLFoundation.DistributedOptimization.CSPCoordinator do
 
     # Search in parallel
     solutions =
-      search_spaces
-      |> Enum.zip(state.solvers)
-      |> Task.async_stream(
+      Task.Supervisor.async_stream_nolink(
+        Foundation.TaskSupervisor,
+        Enum.zip(search_spaces, state.solvers),
         fn {space, solver} ->
           GenServer.call(solver, {:search_backtrack, space, max_solutions}, :infinity)
         end,

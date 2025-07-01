@@ -57,6 +57,17 @@ defmodule Foundation.Services.ConnectionManager do
   require Foundation.ErrorHandling
   alias Foundation.ErrorHandling
 
+  # Define child spec for proper supervision
+  def child_spec(opts) do
+    %{
+      id: Keyword.get(opts, :name, __MODULE__),
+      start: {__MODULE__, :start_link, [opts]},
+      restart: :permanent,
+      shutdown: 5000,
+      type: :worker
+    }
+  end
+
   @type pool_id :: atom() | String.t()
   @type scheme :: :http | :https
   @type pool_config :: %{
@@ -120,6 +131,10 @@ defmodule Foundation.Services.ConnectionManager do
   @doc """
   Executes an HTTP request using the specified pool.
 
+  ## Options
+
+  - `:timeout` - GenServer call timeout in milliseconds (default: 60_000)
+
   ## Examples
 
       request = %{
@@ -130,9 +145,22 @@ defmodule Foundation.Services.ConnectionManager do
       }
 
       {:ok, response} = ConnectionManager.execute_request(:user_api, request)
+
+      # With custom timeout
+      {:ok, response} = ConnectionManager.execute_request(:user_api, request, timeout: 120_000)
   """
-  @spec execute_request(pool_id(), http_request()) :: {:ok, http_response()} | {:error, term()}
-  def execute_request(pool_id, request, server \\ __MODULE__) do
+  @spec execute_request(pool_id(), http_request(), keyword() | GenServer.server()) ::
+          {:ok, http_response()} | {:error, term()}
+  def execute_request(pool_id, request, opts_or_server \\ __MODULE__)
+
+  def execute_request(pool_id, request, opts) when is_list(opts) do
+    server = Keyword.get(opts, :server, __MODULE__)
+    timeout = Keyword.get(opts, :timeout, 60_000)
+    GenServer.call(server, {:execute_request, pool_id, request}, timeout)
+  end
+
+  def execute_request(pool_id, request, server) when is_atom(server) or is_pid(server) do
+    # Backward compatibility: when third arg is a server name/pid
     GenServer.call(server, {:execute_request, pool_id, request}, 60_000)
   end
 
@@ -225,20 +253,41 @@ defmodule Foundation.Services.ConnectionManager do
         # We spawn a task that will send the result back
         parent = self()
 
-        Task.Supervisor.start_child(Foundation.TaskSupervisor, fn ->
-          start_time = System.monotonic_time(:millisecond)
-          result = execute_http_request(state.finch_name, pool_config, request)
-          duration = System.monotonic_time(:millisecond) - start_time
+        case Task.Supervisor.start_child(Foundation.TaskSupervisor, fn ->
+               start_time = System.monotonic_time(:millisecond)
+               result = execute_http_request(state.finch_name, pool_config, request)
+               duration = System.monotonic_time(:millisecond) - start_time
 
-          # Send the result back to update stats and reply
-          send(parent, {:request_completed, from, pool_id, request, result, duration})
-        end)
+               # Send the result back to update stats and reply
+               send(parent, {:request_completed, from, pool_id, request, result, duration})
+             end) do
+          {:ok, _task} ->
+            # Update active requests immediately
+            updated_stats = Map.update!(state.stats, :active_requests, &(&1 + 1))
 
-        # Update active requests immediately
-        updated_stats = Map.update!(state.stats, :active_requests, &(&1 + 1))
+            # Don't reply yet - will reply in handle_info
+            {:noreply, %{state | stats: updated_stats}}
 
-        # Don't reply yet - will reply in handle_info
-        {:noreply, %{state | stats: updated_stats}}
+          {:error, reason} ->
+            # Task supervisor is overloaded or unavailable, fall back to sync execution
+            Logger.warning(
+              "Task supervisor unavailable: #{inspect(reason)}, executing request synchronously"
+            )
+
+            start_time = System.monotonic_time(:millisecond)
+            result = execute_http_request(state.finch_name, pool_config, request)
+            duration = System.monotonic_time(:millisecond) - start_time
+
+            # Update stats
+            final_stats =
+              state.stats
+              |> Map.update!(:total_requests, &(&1 + 1))
+
+            # Emit telemetry
+            emit_request_telemetry(pool_id, request, result, duration)
+
+            {:reply, result, %{state | stats: final_stats}}
+        end
     end
   end
 

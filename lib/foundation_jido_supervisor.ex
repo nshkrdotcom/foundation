@@ -71,6 +71,11 @@ defmodule FoundationJidoSupervisor do
 
     # Use rest_for_one: if Foundation crashes, JidoSystem restarts too
     # This ensures JidoSystem always has Foundation services available
+    #
+    # Shutdown order (reverse of startup):
+    # 1. JidoSystem services shutdown first (SystemCommandManager -> JidoSystem.AgentSupervisor)
+    # 2. Foundation services shutdown last (Services.Supervisor -> TaskSupervisor)
+    # This prevents JidoSystem from trying to use Foundation services during shutdown
     supervisor_flags = %{
       strategy: :rest_for_one,
       max_restarts: 3,

@@ -730,14 +730,29 @@ defmodule MLFoundation.TeamOrchestration.EnsembleCoordinator do
 
   defp train_parallel(learners, data, _opts) do
     Task.async(fn ->
-      learners
-      |> Task.async_stream(
-        fn learner ->
-          GenServer.call(learner, {:train, data}, :infinity)
-        end,
-        timeout: :infinity
-      )
-      |> Enum.map(fn {:ok, result} -> result end)
+      # Check if TaskSupervisor is available
+      stream =
+        if Process.whereis(Foundation.TaskSupervisor) do
+          Task.Supervisor.async_stream_nolink(
+            Foundation.TaskSupervisor,
+            learners,
+            fn learner ->
+              GenServer.call(learner, {:train, data}, :infinity)
+            end,
+            timeout: :infinity
+          )
+        else
+          # Fallback to regular Task.async_stream if supervisor not available
+          Task.async_stream(
+            learners,
+            fn learner ->
+              GenServer.call(learner, {:train, data}, :infinity)
+            end,
+            timeout: :infinity
+          )
+        end
+
+      stream |> Enum.map(fn {:ok, result} -> result end)
     end)
   end
 
@@ -866,17 +881,31 @@ defmodule MLFoundation.TeamOrchestration.RandomSearchCoordinator do
         end)
 
       # Evaluate in parallel
+      # Check if TaskSupervisor is available
       results =
-        configs
-        |> Enum.zip(state.workers)
-        |> Task.async_stream(
-          fn {config, worker} ->
-            score = GenServer.call(worker, {:evaluate, config}, :infinity)
-            {config, score}
-          end,
-          timeout: :infinity
-        )
-        |> Enum.map(fn {:ok, result} -> result end)
+        if Process.whereis(Foundation.TaskSupervisor) do
+          Task.Supervisor.async_stream_nolink(
+            Foundation.TaskSupervisor,
+            Enum.zip(configs, state.workers),
+            fn {config, worker} ->
+              score = GenServer.call(worker, {:evaluate, config}, :infinity)
+              {config, score}
+            end,
+            timeout: :infinity
+          )
+          |> Enum.map(fn {:ok, result} -> result end)
+        else
+          # Fallback to regular Task.async_stream if supervisor not available
+          Task.async_stream(
+            Enum.zip(configs, state.workers),
+            fn {config, worker} ->
+              score = GenServer.call(worker, {:evaluate, config}, :infinity)
+              {config, score}
+            end,
+            timeout: :infinity
+          )
+          |> Enum.map(fn {:ok, result} -> result end)
+        end
 
       # Update best
       {batch_best_config, batch_best_score} = Enum.max_by(results, fn {_c, s} -> s end)
@@ -920,16 +949,29 @@ defmodule MLFoundation.TeamOrchestration.ValidationCoordinator do
     splits = create_validation_splits(data, state.strategy)
 
     # Distribute validation to workers
+    # Check if TaskSupervisor is available
     results =
-      splits
-      |> Enum.zip(Stream.cycle(state.validators))
-      |> Task.async_stream(
-        fn {{train, test}, validator} ->
-          GenServer.call(validator, {:validate_fold, model, train, test}, :infinity)
-        end,
-        timeout: :infinity
-      )
-      |> Enum.map(fn {:ok, result} -> result end)
+      if Process.whereis(Foundation.TaskSupervisor) do
+        Task.Supervisor.async_stream_nolink(
+          Foundation.TaskSupervisor,
+          Enum.zip(splits, Stream.cycle(state.validators)),
+          fn {{train, test}, validator} ->
+            GenServer.call(validator, {:validate_fold, model, train, test}, :infinity)
+          end,
+          timeout: :infinity
+        )
+        |> Enum.map(fn {:ok, result} -> result end)
+      else
+        # Fallback to regular Task.async_stream if supervisor not available
+        Task.async_stream(
+          Enum.zip(splits, Stream.cycle(state.validators)),
+          fn {{train, test}, validator} ->
+            GenServer.call(validator, {:validate_fold, model, train, test}, :infinity)
+          end,
+          timeout: :infinity
+        )
+        |> Enum.map(fn {:ok, result} -> result end)
+      end
 
     # Aggregate metrics
     aggregate_validation_metrics(results, state.metrics)

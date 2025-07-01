@@ -41,14 +41,17 @@ defmodule Foundation.ErrorHandler do
       :recovery_strategy
     ]
 
+    @type error_category :: :transient | :permanent | :resource | :validation | :system
+    @type recovery_strategy :: :retry | :circuit_break | :fallback | :propagate | :compensate | nil
+
     @type t :: %__MODULE__{
-            category: atom(),
+            category: error_category(),
             reason: term(),
             context: map() | nil,
             stacktrace: list() | nil,
             timestamp: DateTime.t(),
             retry_count: non_neg_integer(),
-            recovery_strategy: atom() | nil
+            recovery_strategy: recovery_strategy()
           }
   end
 
@@ -332,11 +335,30 @@ defmodule Foundation.ErrorHandler do
     end
   end
 
-  # Circuit breaker helpers (simplified - in production use a proper library)
+  # Circuit breaker helpers using ETS for atomic operations
+  @circuit_breaker_table :foundation_circuit_breakers
+
+  defp ensure_circuit_breaker_table do
+    case :ets.whereis(@circuit_breaker_table) do
+      :undefined ->
+        # Create table if it doesn't exist (race-safe)
+        try do
+          :ets.new(@circuit_breaker_table, [:named_table, :public, :set])
+        rescue
+          # Table already exists
+          ArgumentError -> :ok
+        end
+
+      _ ->
+        :ok
+    end
+  end
 
   defp check_circuit_breaker(name) do
-    case :persistent_term.get({:circuit_breaker, name}, nil) do
-      %{state: :open, opened_at: opened_at} ->
+    ensure_circuit_breaker_table()
+
+    case :ets.lookup(@circuit_breaker_table, name) do
+      [{^name, state, _failure_count, opened_at}] when state == :open ->
         # Check if enough time has passed to half-open
         if System.monotonic_time(:second) - opened_at > 30 do
           # Allow one request through
@@ -351,34 +373,28 @@ defmodule Foundation.ErrorHandler do
   end
 
   defp record_circuit_breaker_success(name) do
-    :persistent_term.put({:circuit_breaker, name}, %{
-      state: :closed,
-      failure_count: 0,
-      last_success: System.monotonic_time(:second)
-    })
+    ensure_circuit_breaker_table()
+
+    # Atomically reset the circuit breaker
+    :ets.insert(@circuit_breaker_table, {name, :closed, 0, 0})
   end
 
   defp record_circuit_breaker_failure(name) do
-    current =
-      :persistent_term.get({:circuit_breaker, name}, %{
-        state: :closed,
-        failure_count: 0
-      })
+    ensure_circuit_breaker_table()
 
-    failure_count = current.failure_count + 1
+    # Atomically increment failure count
+    failure_count =
+      case :ets.update_counter(@circuit_breaker_table, name, {3, 1}, {name, :closed, 0, 0}) do
+        count when is_integer(count) -> count
+        _ -> 1
+      end
 
     if failure_count >= 5 do
-      # Open the circuit
-      :persistent_term.put({:circuit_breaker, name}, %{
-        state: :open,
-        failure_count: failure_count,
-        opened_at: System.monotonic_time(:second)
-      })
-    else
-      :persistent_term.put({:circuit_breaker, name}, %{
-        state: :closed,
-        failure_count: failure_count
-      })
+      # Open the circuit atomically
+      :ets.insert(
+        @circuit_breaker_table,
+        {name, :open, failure_count, System.monotonic_time(:second)}
+      )
     end
   end
 

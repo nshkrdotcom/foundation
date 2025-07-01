@@ -112,21 +112,29 @@ defmodule Foundation.Infrastructure.CircuitBreaker do
   @impl true
   def init(opts) do
     # Initialize :fuse application if not started
-    ensure_fuse_started()
+    case ensure_fuse_started() do
+      :ok ->
+        default_config = %CircuitConfig{
+          failure_threshold: Keyword.get(opts, :default_failure_threshold, 5),
+          success_threshold: Keyword.get(opts, :default_success_threshold, 3),
+          timeout: Keyword.get(opts, :default_timeout, 60_000),
+          reset_timeout: Keyword.get(opts, :default_reset_timeout, 60_000)
+        }
 
-    default_config = %CircuitConfig{
-      failure_threshold: Keyword.get(opts, :default_failure_threshold, 5),
-      success_threshold: Keyword.get(opts, :default_success_threshold, 3),
-      timeout: Keyword.get(opts, :default_timeout, 60_000),
-      reset_timeout: Keyword.get(opts, :default_reset_timeout, 60_000)
-    }
+        state = %State{
+          circuits: %{},
+          default_config: default_config
+        }
 
-    state = %State{
-      circuits: %{},
-      default_config: default_config
-    }
+        {:ok, state}
 
-    {:ok, state}
+      {:error, reason} ->
+        Logger.error(
+          "Failed to start :fuse application: #{inspect(reason)}. Circuit breaker service cannot start."
+        )
+
+        {:stop, {:fuse_not_available, reason}}
+    end
   end
 
   @impl true
@@ -192,8 +200,12 @@ defmodule Foundation.Infrastructure.CircuitBreaker do
 
   defp ensure_fuse_started do
     case Application.ensure_all_started(:fuse) do
-      {:ok, _} -> :ok
-      {:error, _} -> Logger.warning("Failed to start :fuse application")
+      {:ok, _} ->
+        :ok
+
+      {:error, reason} = error ->
+        Logger.warning("Failed to start :fuse application: #{inspect(reason)}")
+        error
     end
   end
 
