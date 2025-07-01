@@ -116,11 +116,20 @@ defmodule Foundation.Infrastructure.CircuitBreakerTest do
       {:ok, status} = CircuitBreaker.get_status(service_id)
       assert status == :open
 
-      # Wait for recovery timeout (150ms as configured)
-      :timer.sleep(150)
-
-      # Reset the circuit manually (since :fuse doesn't auto-transition to half-open)
-      :ok = CircuitBreaker.reset(service_id)
+      # Wait for recovery timeout to pass
+      # The circuit should be ready for reset after the configured timeout (100ms)
+      # Add a small buffer to ensure we're past the timeout
+      wait_for(
+        fn ->
+          # Try to reset the circuit - if enough time has passed, it should succeed
+          case CircuitBreaker.reset(service_id) do
+            :ok -> true
+            _ -> nil
+          end
+        end,
+        1000,
+        10
+      )
 
       # Next call should be allowed
       result = CircuitBreaker.call(service_id, fn -> {:ok, :success} end)

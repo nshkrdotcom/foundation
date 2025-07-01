@@ -54,8 +54,8 @@ defmodule Foundation.Infrastructure.CacheTelemetryTest do
 
       Cache.put(:expiring_key, "value", cache: fast_cache, ttl: 10)
 
-      # Wait just slightly longer than TTL to ensure expiry
-      # This is the minimal sleep needed for time-based expiry
+      # Wait for the TTL to expire - this is testing actual time-based expiry
+      # Using a minimal sleep is necessary here as we're testing TTL functionality
       :timer.sleep(15)
 
       {_event, _measurements, metadata, result} =

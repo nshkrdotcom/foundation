@@ -96,8 +96,9 @@ defmodule Foundation.SerialOperationsTest do
     test "handles process death during transaction", %{registry: registry} do
       # Create a process that will die
       pid = spawn(fn -> :ok end)
-      # Ensure process is dead
-      :timer.sleep(10)
+      # Ensure process is dead by monitoring it
+      ref = Process.monitor(pid)
+      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, 1000
 
       result =
         SerialOperations.transact(registry, fn tx ->

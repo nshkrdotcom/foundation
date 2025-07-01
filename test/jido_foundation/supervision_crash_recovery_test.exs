@@ -47,8 +47,19 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
     initial_process_count = :erlang.system_info(:process_count)
 
     on_exit(fn ->
-      # Wait for cleanup (minimal delay)
-      :timer.sleep(20)
+      # Wait for processes to terminate
+      wait_for(
+        fn ->
+          current_count = :erlang.system_info(:process_count)
+          # Allow some tolerance for normal process fluctuation
+          if current_count <= initial_process_count + 5 do
+            true
+          else
+            nil
+          end
+        end,
+        1000
+      )
 
       # Verify no process leaks
       final_process_count = :erlang.system_info(:process_count)
@@ -134,8 +145,7 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
           :test_crash_pool,
           [1, 2, 3],
           fn i ->
-            # Minimal processing time
-            :timer.sleep(10)
+            # Just compute result
             i * 10
           end,
           timeout: 2000

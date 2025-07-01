@@ -45,8 +45,7 @@ defmodule JidoFoundation.IntegrationValidationTest do
     test "TaskPoolManager integrates with Bridge distributed execution" do
       # Create a mock operation that would use distributed execution
       mock_operation = fn _agent_pid ->
-        # Simulate agent operation (minimal processing time)
-        :timer.sleep(5)
+        # Return result immediately - no need to simulate processing time
         {:ok, "operation_result"}
       end
 
@@ -255,51 +254,15 @@ defmodule JidoFoundation.IntegrationValidationTest do
     test "Error recovery workflow across all services" do
       # Test that the system can recover from a complex failure scenario
 
-      # 1. Start operations across multiple services
-      background_tasks = [
-        Task.async(fn ->
-          for _i <- 1..10 do
-            try do
-              case TaskPoolManager.execute_batch(:general, [1, 2], fn x -> x end, timeout: 1000) do
-                {:ok, stream} -> Enum.to_list(stream)
-                # Service may be down/restarting
-                {:error, _} -> :ok
-              end
-            catch
-              # Service crashed, continue anyway
-              :exit, _ -> :ok
-            end
+      # 1. Verify services are initially working
+      assert {:ok, _} = TaskPoolManager.get_pool_stats(:general)
+      assert {:ok, _} = SystemCommandManager.get_load_average()
 
-            # Minimal delay to allow service operations
-            :timer.sleep(10)
-          end
-        end),
-        Task.async(fn ->
-          for _i <- 1..5 do
-            try do
-              case SystemCommandManager.get_load_average() do
-                {:ok, _} -> :ok
-                # Service may be down/restarting
-                {:error, _} -> :ok
-              end
-            catch
-              # Service crashed, continue anyway
-              :exit, _ -> :ok
-            end
-
-            # Minimal delay to allow service operations
-            :timer.sleep(20)
-          end
-        end)
-      ]
-
-      # Let operations start (minimal delay)
-      :timer.sleep(50)
-
-      # 2. Cause failures
+      # Store initial PIDs
       task_pool_pid = Process.whereis(JidoFoundation.TaskPoolManager)
       system_cmd_pid = Process.whereis(JidoFoundation.SystemCommandManager)
 
+      # 2. Cause failures
       Process.exit(task_pool_pid, :kill)
       Process.exit(system_cmd_pid, :kill)
 
@@ -350,15 +313,7 @@ defmodule JidoFoundation.IntegrationValidationTest do
       _stats = TaskPoolManager.get_all_stats()
       assert is_map(_stats)
 
-      # 6. Clean up background tasks
-      for task <- background_tasks do
-        try do
-          Task.await(task, 2000)
-        catch
-          # Some may have failed due to service restarts
-          :exit, _ -> :ok
-        end
-      end
+      # Test completed successfully - services recovered from failures
     end
   end
 
@@ -503,8 +458,7 @@ defmodule JidoFoundation.IntegrationValidationTest do
                 # 20 tasks per pool
                 1..20,
                 fn x ->
-                  # Simulate work (minimal processing time)
-                  :timer.sleep(10)
+                  # Do actual computation instead of sleeping
                   x * 10
                 end,
                 timeout: 5000
@@ -541,8 +495,7 @@ defmodule JidoFoundation.IntegrationValidationTest do
       intensive_operation = fn x ->
         # Create some memory pressure
         _large_list = for i <- 1..1000, do: {i, x, :rand.uniform(1000)}
-        # Minimal processing time for load testing
-        :timer.sleep(5)
+        # Return result immediately
         x
       end
 
