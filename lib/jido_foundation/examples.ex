@@ -212,7 +212,9 @@ defmodule JidoFoundation.Examples do
     @type agent_pid :: pid()
     @type work_chunk :: [work_item()]
     
-    @spec distribute_work([work_item()], capability()) :: {:ok, [term()]} | {:error, atom()}
+    @spec distribute_work([work_item()], capability()) :: 
+      {:ok, [term()]} | 
+      {:error, :no_agents_available | :task_supervisor_not_available}
     def distribute_work(work_items, capability_required) do
       # Find all healthy agents with required capability
       case JidoFoundation.Bridge.find_agents([
@@ -229,20 +231,23 @@ defmodule JidoFoundation.Examples do
           work_chunks = chunk_work(work_items, length(agent_pids))
 
           # Assign work to each agent in parallel
-          # ALWAYS require supervisor - fail fast if not available
+          # Check supervisor availability
           case Process.whereis(Foundation.TaskSupervisor) do
             nil ->
-              raise "Foundation.TaskSupervisor not running. Ensure Foundation.Application is started."
+              Logger.error("Foundation.TaskSupervisor not running. Ensure Foundation.Application is started.")
+              {:error, :task_supervisor_not_available}
 
             supervisor when is_pid(supervisor) ->
-              # Type annotation to help Dialyzer understand the structure
-              work_assignments = Enum.zip(work_chunks, agent_pids)
+              # Create index-based processing to avoid tuple inference issues
+              indexed_chunks = Enum.with_index(work_chunks)
+              agent_array = List.to_tuple(agent_pids)
               
               results =
-                work_assignments
+                indexed_chunks
                 |> Task.Supervisor.async_stream_nolink(
                   Foundation.TaskSupervisor,
-                  fn {chunk, agent_pid} ->
+                  fn {chunk, index} ->
+                    agent_pid = elem(agent_array, index)
                     GenServer.call(agent_pid, {:process_batch, chunk}, 10_000)
                   end,
                   max_concurrency: length(agent_pids)
