@@ -583,4 +583,23 @@ defmodule Foundation.Services.RateLimiter do
         :ok
     end
   end
+
+  @impl true
+  def terminate(_reason, state) do
+    # Cancel all cleanup timers
+    Enum.each(state.cleanup_timers, fn {_limiter_id, timer_ref} ->
+      if timer_ref do
+        Process.cancel_timer(timer_ref)
+      end
+    end)
+
+    # Delete ETS table if it exists
+    try do
+      :ets.delete(:rate_limit_buckets)
+    rescue
+      ArgumentError -> :ok  # Table doesn't exist or already deleted
+    end
+
+    :ok
+  end
 end

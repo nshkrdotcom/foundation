@@ -72,6 +72,13 @@ defmodule MABEAM.AgentCoordination do
       cleanup_interval: cleanup_interval
     }
 
+    # Register tables with ResourceManager if available
+    if Process.whereis(Foundation.ResourceManager) do
+      Foundation.ResourceManager.monitor_table(state.consensus_table)
+      Foundation.ResourceManager.monitor_table(state.barrier_table)
+      Foundation.ResourceManager.monitor_table(state.lock_table)
+    end
+
     # Schedule periodic cleanup
     cleanup_timer = Process.send_after(self(), :cleanup_expired, cleanup_interval)
 

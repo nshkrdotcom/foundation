@@ -386,8 +386,10 @@ defmodule MABEAM.AgentRegistry do
   def handle_call({:atomic_transaction, operations, tx_id}, _from, state) do
     Logger.debug("Executing atomic transaction #{tx_id} with #{length(operations)} operations")
 
-    # Execute all operations within this single GenServer call
-    # This ensures atomicity through GenServer serialization
+    # IMPORTANT: This function provides atomicity ONLY through GenServer serialization.
+    # ETS operations are NOT rolled back on failure - the caller must handle cleanup.
+    # The "atomic" guarantee is that all operations run without interleaving with other
+    # GenServer calls, NOT that changes are rolled back on failure.
     result = execute_transaction_operations(operations, state, [], tx_id)
 
     case result do
@@ -395,7 +397,9 @@ defmodule MABEAM.AgentRegistry do
         {:reply, {:ok, rollback_data}, new_state}
 
       {:error, reason, rollback_data, _partial_state} ->
-        # Transaction failed - state unchanged due to functional approach
+        # Transaction failed - GenServer state unchanged, but ETS changes persist!
+        # Caller must use rollback_data to manually undo changes if needed.
+        Logger.warning("Transaction #{tx_id} failed: #{inspect(reason)}. ETS changes NOT rolled back.")
         {:reply, {:error, reason, rollback_data}, state}
     end
   end

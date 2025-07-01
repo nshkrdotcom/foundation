@@ -88,11 +88,13 @@ defmodule JidoSystem.Application do
       JidoFoundation.SystemCommandManager
     ]
 
-    # Use more lenient restart limits for testing environments
-    # Note: This must be determined at compile time since Mix is not available at runtime
+    # IMPORTANT: These supervision limits differ between test and production environments.
+    # This is a known architectural flaw that masks real issues in tests.
+    # TODO: Tests should use isolated supervisors for crash testing rather than
+    # relying on lenient application-wide supervision limits.
     {max_restarts, max_seconds} =
       case Application.get_env(:foundation, :environment, :prod) do
-        # Allow many restarts in tests
+        # Tests use lenient limits - this masks supervisor issues!
         :test -> {100, 10}
         # Production limits
         _ -> {3, 5}

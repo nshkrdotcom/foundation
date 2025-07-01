@@ -200,15 +200,24 @@ defmodule Foundation.Infrastructure.Cache do
 
     :ets.new(table_name, @table_options)
 
-    # Schedule periodic cleanup
-    if cleanup_interval != :infinity do
-      schedule_cleanup(cleanup_interval)
+    # Register table with ResourceManager if available
+    if Process.whereis(Foundation.ResourceManager) do
+      Foundation.ResourceManager.monitor_table(table_name)
     end
+
+    # Schedule periodic cleanup
+    cleanup_timer = 
+      if cleanup_interval != :infinity do
+        schedule_cleanup(cleanup_interval)
+      else
+        nil
+      end
 
     state = %{
       table: table_name,
       max_size: max_size,
-      cleanup_interval: cleanup_interval
+      cleanup_interval: cleanup_interval,
+      cleanup_timer: cleanup_timer
     }
 
     Telemetry.emit(
@@ -257,9 +266,26 @@ defmodule Foundation.Infrastructure.Cache do
     %{table: table, cleanup_interval: interval} = state
 
     cleanup_expired_entries(table)
-    schedule_cleanup(interval)
+    new_timer = schedule_cleanup(interval)
 
-    {:noreply, state}
+    {:noreply, %{state | cleanup_timer: new_timer}}
+  end
+
+  @impl true
+  def terminate(_reason, state) do
+    # Cancel cleanup timer if it exists
+    if state.cleanup_timer do
+      Process.cancel_timer(state.cleanup_timer)
+    end
+
+    # Delete ETS table - named tables need explicit cleanup
+    try do
+      :ets.delete(state.table)
+    rescue
+      ArgumentError -> :ok  # Table already deleted
+    end
+
+    :ok
   end
 
   # Helper functions

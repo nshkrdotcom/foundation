@@ -130,8 +130,8 @@ defmodule Foundation.Services.ConnectionManager do
       {:ok, response} = ConnectionManager.execute_request(:user_api, request)
   """
   @spec execute_request(pool_id(), http_request()) :: {:ok, http_response()} | {:error, term()}
-  def execute_request(pool_id, request) do
-    GenServer.call(__MODULE__, {:execute_request, pool_id, request}, 60_000)
+  def execute_request(pool_id, request, server \\ __MODULE__) do
+    GenServer.call(server, {:execute_request, pool_id, request}, 60_000)
   end
 
   @doc """
@@ -212,33 +212,29 @@ defmodule Foundation.Services.ConnectionManager do
   end
 
   @impl true
-  def handle_call({:execute_request, pool_id, request}, _from, state) do
+  def handle_call({:execute_request, pool_id, request}, from, state) do
     case Map.get(state.pools, pool_id) do
       nil ->
         {:reply, {:error, :pool_not_found}, state}
 
       pool_config ->
-        start_time = System.monotonic_time(:millisecond)
+        # Execute in a separate process to avoid blocking
+        # We spawn a task that will send the result back
+        parent = self()
+        Task.Supervisor.start_child(Foundation.TaskSupervisor, fn ->
+          start_time = System.monotonic_time(:millisecond)
+          result = execute_http_request(state.finch_name, pool_config, request)
+          duration = System.monotonic_time(:millisecond) - start_time
+          
+          # Send the result back to update stats and reply
+          send(parent, {:request_completed, from, pool_id, request, result, duration})
+        end)
+        
+        # Update active requests immediately
         updated_stats = Map.update!(state.stats, :active_requests, &(&1 + 1))
-
-        # Execute in a supervised task to avoid blocking, but wait for result
-        task_result =
-          Task.Supervisor.async_nolink(Foundation.TaskSupervisor, fn ->
-            execute_http_request(state.finch_name, pool_config, request)
-          end)
-          |> Task.await(pool_config.timeout)
-
-        duration = System.monotonic_time(:millisecond) - start_time
-
-        # Update statistics
-        final_stats =
-          updated_stats
-          |> Map.update!(:active_requests, &(&1 - 1))
-          |> Map.update!(:total_requests, &(&1 + 1))
-
-        emit_request_telemetry(pool_id, request, task_result, duration)
-
-        {:reply, task_result, %{state | stats: final_stats}}
+        
+        # Don't reply yet - will reply in handle_info
+        {:noreply, %{state | stats: updated_stats}}
     end
   end
 
@@ -273,6 +269,23 @@ defmodule Foundation.Services.ConnectionManager do
     }
 
     {:reply, {:ok, stats}, state}
+  end
+
+  @impl true
+  def handle_info({:request_completed, from, pool_id, request, result, duration}, state) do
+    # Update statistics
+    final_stats =
+      state.stats
+      |> Map.update!(:active_requests, &(&1 - 1))
+      |> Map.update!(:total_requests, &(&1 + 1))
+    
+    # Emit telemetry
+    emit_request_telemetry(pool_id, request, result, duration)
+    
+    # Reply to the waiting caller
+    GenServer.reply(from, result)
+    
+    {:noreply, %{state | stats: final_stats}}
   end
 
   # Private Implementation

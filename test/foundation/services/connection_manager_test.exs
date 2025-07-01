@@ -103,8 +103,8 @@ defmodule Foundation.Services.ConnectionManagerTest do
         body: nil
       }
 
-      # Make request through connection manager
-      assert {:ok, response} = GenServer.call(pid, {:execute_request, :test_pool, request}, 10_000)
+      # Make request through connection manager using public API
+      assert {:ok, response} = ConnectionManager.execute_request(:test_pool, request, pid)
       assert response.status == 200
 
       GenServer.stop(pid)
@@ -133,8 +133,7 @@ defmodule Foundation.Services.ConnectionManagerTest do
       }
 
       # Should handle connection failure gracefully
-      assert {:error, _reason} =
-               GenServer.call(pid, {:execute_request, :failure_pool, request}, 5_000)
+      assert {:error, _reason} = ConnectionManager.execute_request(:failure_pool, request, pid)
 
       GenServer.stop(pid)
     end
