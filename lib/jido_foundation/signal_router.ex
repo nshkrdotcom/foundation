@@ -48,7 +48,7 @@ defmodule JidoFoundation.SignalRouter do
   use GenServer
   require Logger
 
-  defstruct [:subscriptions, :telemetry_attached, :telemetry_handler_id, :backpressure_config]
+  defstruct [:subscriptions, :telemetry_attached, :telemetry_handler_id, :backpressure_config, :monitors]
 
   # Default backpressure configuration
   @default_backpressure %{
@@ -129,7 +129,8 @@ defmodule JidoFoundation.SignalRouter do
       subscriptions: %{},
       telemetry_attached: false,
       telemetry_handler_id: handler_id,
-      backpressure_config: backpressure_config
+      backpressure_config: backpressure_config,
+      monitors: %{}
     }
 
     state =
@@ -149,8 +150,16 @@ defmodule JidoFoundation.SignalRouter do
 
   @impl true
   def handle_call({:subscribe, signal_type, handler_pid}, _from, state) do
-    # Monitor the handler so we can clean up if it dies
-    Process.monitor(handler_pid)
+    # Check if we're already monitoring this process
+    already_monitoring? = Enum.any?(state.monitors, fn {_ref, pid} -> pid == handler_pid end)
+    
+    # Only monitor if not already monitoring
+    new_monitors = if already_monitoring? do
+      state.monitors
+    else
+      monitor_ref = Process.monitor(handler_pid)
+      Map.put(state.monitors, monitor_ref, handler_pid)
+    end
 
     current_handlers = Map.get(state.subscriptions, signal_type, [])
     new_handlers = [handler_pid | current_handlers] |> Enum.uniq()
@@ -165,7 +174,7 @@ defmodule JidoFoundation.SignalRouter do
       %{signal_type: signal_type, handler_pid: handler_pid, operation: :subscribe}
     )
 
-    {:reply, :ok, %{state | subscriptions: new_subscriptions}}
+    {:reply, :ok, %{state | subscriptions: new_subscriptions, monitors: new_monitors}}
   end
 
   @impl true
@@ -173,6 +182,25 @@ defmodule JidoFoundation.SignalRouter do
     current_handlers = Map.get(state.subscriptions, signal_type, [])
     new_handlers = List.delete(current_handlers, handler_pid)
     new_subscriptions = Map.put(state.subscriptions, signal_type, new_handlers)
+    
+    # Check if this handler is still subscribed to any other signals
+    still_subscribed? = Enum.any?(new_subscriptions, fn {_type, handlers} ->
+      handler_pid in handlers
+    end)
+    
+    # If not subscribed to anything else, stop monitoring and clean up
+    new_monitors = if still_subscribed? do
+      state.monitors
+    else
+      # Find and remove the monitor
+      case Enum.find(state.monitors, fn {_ref, pid} -> pid == handler_pid end) do
+        {ref, ^handler_pid} ->
+          Process.demonitor(ref, [:flush])
+          Map.delete(state.monitors, ref)
+        nil ->
+          state.monitors
+      end
+    end
 
     Logger.debug("Unsubscribed #{inspect(handler_pid)} from signal type '#{signal_type}'")
 
@@ -183,7 +211,7 @@ defmodule JidoFoundation.SignalRouter do
       %{signal_type: signal_type, handler_pid: handler_pid, operation: :unsubscribe}
     )
 
-    {:reply, :ok, %{state | subscriptions: new_subscriptions}}
+    {:reply, :ok, %{state | subscriptions: new_subscriptions, monitors: new_monitors}}
   end
 
   @impl true
@@ -236,19 +264,29 @@ defmodule JidoFoundation.SignalRouter do
   end
 
   @impl true
-  def handle_info({:DOWN, _ref, :process, dead_pid, _reason}, state) do
+  def handle_info({:DOWN, ref, :process, dead_pid, reason}, state) do
+    Logger.debug("SignalRouter received DOWN for process #{inspect(dead_pid)}, reason: #{inspect(reason)}")
+    
+    # CRITICAL: Always demonitor with flush to prevent memory leaks
+    Process.demonitor(ref, [:flush])
+    
+    # Remove from monitors map
+    new_monitors = Map.delete(state.monitors, ref)
+    
     # Clean up subscriptions for dead processes
     new_subscriptions =
       state.subscriptions
       |> Enum.map(fn {signal_type, handlers} ->
-        {signal_type, List.delete(handlers, dead_pid)}
+        filtered_handlers = List.delete(handlers, dead_pid)
+        Logger.debug("Signal type '#{signal_type}': removed #{inspect(dead_pid)}, remaining: #{inspect(filtered_handlers)}")
+        {signal_type, filtered_handlers}
       end)
       |> Enum.reject(fn {_signal_type, handlers} -> Enum.empty?(handlers) end)
       |> Enum.into(%{})
 
     Logger.debug("Cleaned up subscriptions for dead process #{inspect(dead_pid)}")
 
-    {:noreply, %{state | subscriptions: new_subscriptions}}
+    {:noreply, %{state | subscriptions: new_subscriptions, monitors: new_monitors}}
   end
 
   @impl true

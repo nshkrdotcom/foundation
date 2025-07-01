@@ -328,7 +328,10 @@ defmodule JidoFoundation.CoordinationManager do
   end
 
   @impl true
-  def handle_info({:DOWN, _ref, :process, pid, reason}, state) do
+  def handle_info({:DOWN, ref, :process, pid, reason}, state) do
+    # CRITICAL: Always demonitor with flush to prevent memory leaks
+    Process.demonitor(ref, [:flush])
+    
     Logger.info("Monitored process #{inspect(pid)} went down: #{inspect(reason)}")
 
     # Clean up monitoring data

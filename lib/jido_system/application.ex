@@ -7,10 +7,11 @@ defmodule JidoSystem.Application do
 
   ## Supervision Strategy
 
-  Uses a :one_for_one strategy with proper supervisors for:
-  - Critical agent supervision via DynamicSupervisor
-  - Agent health monitoring services
-  - Error persistence and metrics collection
+  Uses a :rest_for_one strategy to ensure proper dependency ordering:
+  - State persistence must start before any agents
+  - Registries must start before services that use them
+  - Infrastructure services must start before agents
+  - If a dependency crashes, all dependent services restart
 
   ## Integration with Foundation
 
@@ -59,58 +60,43 @@ defmodule JidoSystem.Application do
   def start(_type, _args) do
     Logger.info("Starting JidoSystem Agent Infrastructure")
 
+    # CRITICAL: Order matters with :rest_for_one strategy!
+    # If a child crashes, all children started after it will be restarted
     children = [
-      # State persistence supervisor - MUST start before agents
+      # 1. State persistence supervisor - MUST start first
       # This owns the ETS tables for agent state persistence
       JidoSystem.Agents.StateSupervisor,
 
-      # Dynamic supervisor for critical agents
-      {DynamicSupervisor, name: JidoSystem.AgentSupervisor, strategy: :one_for_one},
-
-      # Error persistence service
-      JidoSystem.ErrorStore,
-
-      # Agent health monitoring
-      JidoSystem.HealthMonitor,
-
-      # Registry for Bridge agent monitoring
+      # 2. Registries - needed by many other processes
       {Registry, keys: :unique, name: JidoFoundation.MonitorRegistry},
-
-      # Registry for workflow processes
       {Registry, keys: :unique, name: JidoSystem.WorkflowRegistry},
 
-      # Workflow supervisor for process-per-workflow pattern
+      # 3. Core infrastructure services
+      JidoSystem.ErrorStore,
+      JidoSystem.HealthMonitor,
+
+      # 4. Manager services (depend on registries)
+      JidoFoundation.SchedulerManager,
+      JidoFoundation.TaskPoolManager,
+      JidoFoundation.SystemCommandManager,
+      JidoFoundation.CoordinationManager,
+      
+      # 5. Supervisors that use the managers
+      JidoFoundation.MonitorSupervisor,
       JidoSystem.Supervisors.WorkflowSupervisor,
 
-      # Bridge agent monitoring supervisor (OTP compliant replacement for unsupervised processes)
-      JidoFoundation.MonitorSupervisor,
-
-      # Agent coordination manager (OTP compliant replacement for raw message passing)
-      JidoFoundation.CoordinationManager,
-
-      # Scheduler manager (OTP compliant replacement for agent self-scheduling)
-      JidoFoundation.SchedulerManager,
-
-      # Task pool manager (OTP compliant replacement for Task.async_stream)
-      JidoFoundation.TaskPoolManager,
-
-      # System command manager (OTP compliant replacement for direct System.cmd usage)
-      JidoFoundation.SystemCommandManager
+      # 6. Dynamic supervisor for agents - LAST
+      # Agents depend on all infrastructure being available
+      {DynamicSupervisor, name: JidoSystem.AgentSupervisor, strategy: :one_for_one}
     ]
 
-    # TEMPORARY: Revert to test-aware supervision until crash recovery tests are updated
-    # TODO: Update crash recovery tests to use TestSupervisor for intentional crashes
-    {max_restarts, max_seconds} =
-      case Application.get_env(:foundation, :environment, :prod) do
-        :test -> {100, 10}
-        _ -> {3, 5}
-      end
-
+    # FIXED: Use consistent supervision strategy for all environments
+    # Tests should use Foundation.TestSupervisor for controlled crashes
     opts = [
-      strategy: :one_for_one,
+      strategy: :rest_for_one,  # CRITICAL: Dependencies respected!
       name: JidoSystem.Supervisor,
-      max_restarts: max_restarts,
-      max_seconds: max_seconds
+      max_restarts: 3,
+      max_seconds: 5
     ]
 
     case Supervisor.start_link(children, opts) do

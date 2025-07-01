@@ -94,7 +94,7 @@ defmodule JidoFoundation.IntegrationValidationTest do
   end
 
   describe "Error boundary validation" do
-    test "Service failures don't cascade across supervision boundaries" do
+    test "Service failures cause proper dependent restarts with :rest_for_one" do
       # Get initial states
       task_pool_pid = Process.whereis(JidoFoundation.TaskPoolManager)
       system_cmd_pid = Process.whereis(JidoFoundation.SystemCommandManager)
@@ -107,32 +107,36 @@ defmodule JidoFoundation.IntegrationValidationTest do
       # Kill TaskPoolManager
       Process.exit(task_pool_pid, :kill)
 
-      # Wait for restart using async helpers
-      new_task_pool_pid =
+      # Wait for all services to restart using async helpers
+      # With :rest_for_one, TaskPoolManager crash SHOULD restart downstream services
+      {new_task_pool_pid, new_system_cmd_pid, new_coordination_pid} =
         wait_for(
           fn ->
-            case Process.whereis(JidoFoundation.TaskPoolManager) do
-              # Still the old PID (shouldn't happen after kill)
-              ^task_pool_pid -> nil
-              # Process dead, waiting for restart
-              nil -> nil
-              # New PID - restarted
-              pid when is_pid(pid) -> pid
+            task_pool = Process.whereis(JidoFoundation.TaskPoolManager)
+            system_cmd = Process.whereis(JidoFoundation.SystemCommandManager)
+            coordination = Process.whereis(JidoFoundation.CoordinationManager)
+            
+            # All must be new PIDs
+            if is_pid(task_pool) && task_pool != task_pool_pid &&
+               is_pid(system_cmd) && system_cmd != system_cmd_pid &&
+               is_pid(coordination) && coordination != coordination_pid do
+              {task_pool, system_cmd, coordination}
+            else
+              nil
             end
           end,
           5000
         )
 
-      # Verify other services are still alive
-      assert Process.alive?(system_cmd_pid),
-             "SystemCommandManager should survive TaskPoolManager crash"
-
-      assert Process.alive?(coordination_pid),
-             "CoordinationManager should survive TaskPoolManager crash"
-
-      # Verify TaskPoolManager restarted
+      # Verify all services restarted with new PIDs (correct :rest_for_one behavior)
       assert is_pid(new_task_pool_pid)
       assert new_task_pool_pid != task_pool_pid
+      
+      assert is_pid(new_system_cmd_pid)
+      assert new_system_cmd_pid != system_cmd_pid
+      
+      assert is_pid(new_coordination_pid)
+      assert new_coordination_pid != coordination_pid
 
       # Verify functionality is restored
       _stats = TaskPoolManager.get_all_stats()
@@ -261,37 +265,27 @@ defmodule JidoFoundation.IntegrationValidationTest do
       # Store initial PIDs
       task_pool_pid = Process.whereis(JidoFoundation.TaskPoolManager)
       system_cmd_pid = Process.whereis(JidoFoundation.SystemCommandManager)
+      coordination_pid = Process.whereis(JidoFoundation.CoordinationManager)
 
-      # 2. Cause failures
+      # 2. Cause failure - with :rest_for_one, killing TaskPoolManager 
+      # will also restart SystemCommandManager and CoordinationManager
       Process.exit(task_pool_pid, :kill)
-      Process.exit(system_cmd_pid, :kill)
 
-      # 3. Wait for recovery using async helpers
-      new_task_pool_pid =
+      # 3. Wait for all dependent services to restart
+      {new_task_pool_pid, new_system_cmd_pid, _new_coordination_pid} =
         wait_for(
           fn ->
-            case Process.whereis(JidoFoundation.TaskPoolManager) do
-              # Still old PID
-              ^task_pool_pid -> nil
-              # Dead, waiting for restart
-              nil -> nil
-              # Restarted
-              pid when is_pid(pid) -> pid
-            end
-          end,
-          5000
-        )
-
-      new_system_cmd_pid =
-        wait_for(
-          fn ->
-            case Process.whereis(JidoFoundation.SystemCommandManager) do
-              # Still old PID
-              ^system_cmd_pid -> nil
-              # Dead, waiting for restart
-              nil -> nil
-              # Restarted
-              pid when is_pid(pid) -> pid
+            task_pool = Process.whereis(JidoFoundation.TaskPoolManager)
+            system_cmd = Process.whereis(JidoFoundation.SystemCommandManager)
+            coordination = Process.whereis(JidoFoundation.CoordinationManager)
+            
+            # All must be new PIDs (rest_for_one restarts all downstream)
+            if is_pid(task_pool) && task_pool != task_pool_pid &&
+               is_pid(system_cmd) && system_cmd != system_cmd_pid &&
+               is_pid(coordination) && coordination != coordination_pid do
+              {task_pool, system_cmd, coordination}
+            else
+              nil
             end
           end,
           5000

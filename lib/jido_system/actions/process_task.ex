@@ -61,118 +61,94 @@ defmodule JidoSystem.Actions.ProcessTask do
       agent_id: Map.get(context, :agent_id)
     })
 
-    try do
-      # Validate task parameters
-      case validate_task_params(params) do
-        :ok ->
-          # Process with circuit breaker protection if enabled
-          result =
-            if params.circuit_breaker do
-              process_with_circuit_breaker(params, context)
-            else
-              process_task_direct(params, context)
-            end
-
-          case result do
-            {:ok, task_result} ->
-              duration = System.monotonic_time(:microsecond) - start_time
-
-              Logger.info("Task completed successfully",
-                task_id: task_id,
-                duration_ms: div(duration, 1000)
-              )
-
-              # Emit success telemetry
-              :telemetry.execute(
-                [:jido_system, :task, :completed],
-                %{
-                  duration: duration,
-                  count: 1
-                },
-                %{
-                  task_id: task_id,
-                  task_type: task_type,
-                  result: :success,
-                  agent_id: Map.get(context, :agent_id)
-                }
-              )
-
-              {:ok,
-               %{
-                 task_id: task_id,
-                 result: task_result,
-                 duration: duration,
-                 status: :completed,
-                 completed_at: DateTime.utc_now()
-               }}
-
-            {:error, reason} ->
-              duration = System.monotonic_time(:microsecond) - start_time
-
-              Logger.error("Task processing failed",
-                task_id: task_id,
-                reason: inspect(reason),
-                duration_ms: div(duration, 1000)
-              )
-
-              # Emit failure telemetry
-              :telemetry.execute(
-                [:jido_system, :task, :failed],
-                %{
-                  duration: duration,
-                  count: 1
-                },
-                %{
-                  task_id: task_id,
-                  task_type: task_type,
-                  reason: reason,
-                  agent_id: Map.get(context, :agent_id)
-                }
-              )
-
-              {:error,
-               %{
-                 task_id: task_id,
-                 error: reason,
-                 duration: duration,
-                 status: :failed,
-                 failed_at: DateTime.utc_now()
-               }}
+    # Let unexpected exceptions crash - OTP supervisor will restart the process
+    # Only catch specific, expected exceptions if needed in execute_task_logic
+    
+    # Validate task parameters
+    case validate_task_params(params) do
+      :ok ->
+        # Process with circuit breaker protection if enabled
+        result =
+          if params.circuit_breaker do
+            process_with_circuit_breaker(params, context)
+          else
+            process_task_direct(params, context)
           end
 
-        {:error, validation_error} ->
-          Logger.warning("Task validation failed",
-            task_id: task_id,
-            error: inspect(validation_error)
-          )
+        case result do
+          {:ok, task_result} ->
+            duration = System.monotonic_time(:microsecond) - start_time
 
-          {:error, {:validation_failed, validation_error}}
-      end
-    rescue
-      e ->
-        duration = System.monotonic_time(:microsecond) - start_time
+            Logger.info("Task completed successfully",
+              task_id: task_id,
+              duration_ms: div(duration, 1000)
+            )
 
-        Logger.error("Task processing crashed",
+            # Emit success telemetry
+            :telemetry.execute(
+              [:jido_system, :task, :completed],
+              %{
+                duration: duration,
+                count: 1
+              },
+              %{
+                task_id: task_id,
+                task_type: task_type,
+                result: :success,
+                agent_id: Map.get(context, :agent_id)
+              }
+            )
+
+            {:ok,
+             %{
+               task_id: task_id,
+               result: task_result,
+               duration: duration,
+               status: :completed,
+               completed_at: DateTime.utc_now()
+             }}
+
+          {:error, reason} ->
+            duration = System.monotonic_time(:microsecond) - start_time
+
+            Logger.error("Task processing failed",
+              task_id: task_id,
+              reason: inspect(reason),
+              duration_ms: div(duration, 1000)
+            )
+
+            # Emit failure telemetry
+            :telemetry.execute(
+              [:jido_system, :task, :failed],
+              %{
+                duration: duration,
+                count: 1
+              },
+              %{
+                task_id: task_id,
+                task_type: task_type,
+                reason: reason,
+                agent_id: Map.get(context, :agent_id)
+              }
+            )
+
+            {:error,
+             %{
+               task_id: task_id,
+               error: reason,
+               duration: duration,
+               status: :failed,
+               failed_at: DateTime.utc_now()
+             }}
+        end
+
+      {:error, validation_error} ->
+        Logger.warning("Task validation failed",
           task_id: task_id,
-          error: inspect(e),
-          stacktrace: __STACKTRACE__
+          error: inspect(validation_error)
         )
 
-        # Emit error telemetry
-        :telemetry.execute(
-          [:jido_system, :task, :error],
-          %{
-            duration: duration,
-            count: 1
-          },
-          %{
-            task_id: task_id,
-            error: inspect(e),
-            agent_id: Map.get(context, :agent_id)
-          }
-        )
-
-        {:error, {:processing_crashed, e}}
+        {:error, {:validation_failed, validation_error}}
     end
   end
 
@@ -433,22 +409,19 @@ defmodule JidoSystem.Actions.ProcessTask do
     input_data = params.input_data
     transformations = Map.get(params.options, :transformations, [])
 
-    try do
-      transformed_data =
-        Enum.reduce(transformations, input_data, fn transform, data ->
-          apply_transformation(transform, data)
-        end)
+    # Let it crash if transformation logic has bugs
+    # Only catch specific, expected errors if needed
+    transformed_data =
+      Enum.reduce(transformations, input_data, fn transform, data ->
+        apply_transformation(transform, data)
+      end)
 
-      {:ok,
-       %{
-         original_data: input_data,
-         transformed_data: transformed_data,
-         transformations_applied: transformations
-       }}
-    rescue
-      e ->
-        {:error, {:transformation_failed, e}}
-    end
+    {:ok,
+     %{
+       original_data: input_data,
+       transformed_data: transformed_data,
+       transformations_applied: transformations
+     }}
   end
 
   defp process_analysis_task(params, _context) do

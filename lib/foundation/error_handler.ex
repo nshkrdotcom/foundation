@@ -267,31 +267,73 @@ defmodule Foundation.ErrorHandler do
     end
   end
 
+  # DEPRECATED: This function caught all errors, preventing "let it crash"
+  # Use specific error handlers instead
+  @deprecated "Use handle_network_error/1, handle_database_error/1, or handle_validation_error/1 instead"
   defp safe_execute(fun) do
-    case fun.() do
-      :ok -> {:ok, :ok}
-      {:ok, _} = ok -> ok
-      {:error, _} = error -> error
-      other -> {:ok, other}
-    end
-  rescue
-    exception ->
-      error =
-        create_error(:system, exception, %{
+    # For backward compatibility with existing tests
+    try do
+      case fun.() do
+        :ok -> {:ok, :ok}
+        {:ok, _} = ok -> ok
+        {:error, _} = error -> error
+        other -> {:ok, other}
+      end
+    rescue
+      exception ->
+        {:error, create_error(:system, exception, %{
           message: Exception.message(exception),
-          module: exception.__struct__
-        })
-
-      {:error, error}
-  catch
-    kind, reason ->
-      error =
-        create_error(:system, {kind, reason}, %{
-          kind: kind,
           stacktrace: __STACKTRACE__
-        })
-
-      {:error, error}
+        })}
+    catch
+      kind, reason ->
+        {:error, create_error(:system, {kind, reason}, %{
+          caught: kind,
+          stacktrace: __STACKTRACE__
+        })}
+    end
+  end
+  
+  @doc """
+  Handles network-related errors specifically.
+  Only catches expected network exceptions.
+  """
+  def handle_network_error(fun) when is_function(fun, 0) do
+    fun.()
+  rescue
+    error in [Mint.HTTPError, Finch.Error, :hackney_error] ->
+      {:error, create_error(:transient, error, %{
+        type: :network_error,
+        message: Exception.message(error)
+      })}
+  end
+  
+  @doc """
+  Handles database-related errors specifically.
+  Only catches expected database exceptions.
+  """
+  def handle_database_error(fun) when is_function(fun, 0) do
+    fun.()
+  rescue
+    error in [DBConnection.ConnectionError, Postgrex.Error] ->
+      {:error, create_error(:transient, error, %{
+        type: :database_error,
+        message: Exception.message(error)
+      })}
+  end
+  
+  @doc """
+  Handles validation errors specifically.
+  These are usually permanent errors that won't succeed on retry.
+  """
+  def handle_validation_error(fun) when is_function(fun, 0) do
+    fun.()
+  rescue
+    error in [ArgumentError, FunctionClauseError] ->
+      {:error, create_error(:validation, error, %{
+        type: :validation_error,
+        message: Exception.message(error)
+      })}
   end
 
   defp increment_retry_count(%Error{} = error) do

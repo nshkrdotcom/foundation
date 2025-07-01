@@ -528,19 +528,33 @@ defmodule Foundation.Services.RateLimiter do
     # Ensure ETS table exists
     ensure_rate_limit_table()
 
-    # Atomically increment and check in one operation
-    try do
-      new_count = :ets.update_counter(:rate_limit_buckets, bucket_key, {2, 1}, {bucket_key, 0})
-
-      if new_count > limiter_config.limit do
-        # Exceeded limit, decrement back
-        :ets.update_counter(:rate_limit_buckets, bucket_key, {2, -1})
-        {:deny, new_count - 1}
-      else
-        {:allow, new_count}
-      end
-    rescue
-      _ -> {:allow, 0}
+    # Try to get current count and check limit atomically
+    case :ets.lookup(:rate_limit_buckets, bucket_key) do
+      [] ->
+        # First request in window - insert with count 1
+        case :ets.insert_new(:rate_limit_buckets, {bucket_key, 1}) do
+          true -> 
+            {:allow, 1}
+          false ->
+            # Another process inserted first, retry
+            check_and_increment_rate_limit(limiter_key, limiter_config, current_time)
+        end
+        
+      [{^bucket_key, count}] when count < limiter_config.limit ->
+        # Under limit - try to increment atomically
+        new_count = :ets.update_counter(:rate_limit_buckets, bucket_key, {2, 1})
+        if new_count <= limiter_config.limit do
+          {:allow, new_count}
+        else
+          # We went over - another process also incremented
+          # This is the race condition we're trying to minimize
+          # In worst case, we might go slightly over limit
+          {:deny, new_count}
+        end
+        
+      [{^bucket_key, count}] ->
+        # Already at or over limit
+        {:deny, count}
     end
   end
 

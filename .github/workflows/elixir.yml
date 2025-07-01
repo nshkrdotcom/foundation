@@ -149,6 +149,22 @@ jobs:
         MIX_ENV: dev
       run: mix dialyzer
 
+    # Step: Run Credo for code quality checks
+    - name: Run Credo
+      run: mix credo --strict
+
+    # Step: Check OTP compliance - ban dangerous patterns
+    - name: Check OTP compliance
+      run: |
+        echo "Checking for banned Process.spawn usage..."
+        ! grep -r "Process\.spawn\|spawn(" lib/ --include="*.ex" || (echo "ERROR: Found Process.spawn usage!" && exit 1)
+        
+        echo "Checking for Process.put/get usage..."
+        ! grep -r "Process\.put\|Process\.get" lib/ --include="*.ex" || (echo "ERROR: Found Process dictionary usage!" && exit 1)
+        
+        echo "OTP compliance checks passed!"
+      shell: bash
+
     # Step: Execute the tests.
     - name: Run tests
       run: mix test
