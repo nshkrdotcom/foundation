@@ -107,7 +107,11 @@ defmodule Foundation.ContaminationDetectionTest do
       # Spawn some processes
       pids =
         for _ <- 1..5 do
-          spawn(fn -> :timer.sleep(50) end)
+          spawn(fn ->
+            receive do
+              :stop -> :ok
+            end
+          end)
         end
 
       # Verify processes were created

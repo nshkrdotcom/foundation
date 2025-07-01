@@ -58,8 +58,10 @@ defmodule JidoSystem.Agents.FinalPersistenceDemoTest do
     assert agent1.state.value == "initial"
 
     # Stop the agent first (triggers shutdown which saves current state)
+    # Monitor the process to ensure it has terminated
+    ref = Process.monitor(pid1)
     GenServer.stop(pid1)
-    Process.sleep(10)
+    assert_receive {:DOWN, ^ref, :process, ^pid1, :normal}, 1000
 
     # Now manually update the saved state to simulate a previous run
     storage = :persistent_term.get(persist_ref)
