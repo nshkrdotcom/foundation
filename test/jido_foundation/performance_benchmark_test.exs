@@ -187,8 +187,11 @@ defmodule JidoFoundation.PerformanceBenchmarkTest do
               # More items
               1..50,
               fn x ->
-                # Simulate CPU work
-                :timer.sleep(Enum.random(1..5))
+                # Simulate CPU work with actual computation
+                # Calculate fibonacci to create variable CPU load
+                _result =
+                  Enum.reduce(1..Enum.random(100..500), [1, 1], fn _, [a, b] -> [b, a + b] end)
+
                 x * x
               end,
               max_concurrency: System.schedulers_online() * 2,
@@ -236,8 +239,8 @@ defmodule JidoFoundation.PerformanceBenchmarkTest do
               pool_name,
               1..10,
               fn x ->
-                # Reduced random processing time for faster tests
-                :timer.sleep(Enum.random(1..5))
+                # Simulate work with actual computation
+                _result = Enum.reduce(1..Enum.random(50..200), 0, fn i, acc -> acc + i end)
                 x + 100
               end,
               timeout: 1500
@@ -387,8 +390,8 @@ defmodule JidoFoundation.PerformanceBenchmarkTest do
                   TaskPoolManager.get_all_stats()
               end
 
-              # Minimal delay for operation spacing
-              :timer.sleep(5)
+              # Yield to allow other operations
+              :erlang.yield()
             end
           end)
         end
@@ -402,8 +405,7 @@ defmodule JidoFoundation.PerformanceBenchmarkTest do
               :monitoring,
               [1, 2, 3, 4],
               fn x ->
-                # Minimal processing delay
-                :timer.sleep(2)
+                # Do actual computation instead of sleep
                 x * 10
               end,
               timeout: 2000

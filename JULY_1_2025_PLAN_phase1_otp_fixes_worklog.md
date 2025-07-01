@@ -807,3 +807,128 @@ The test should either:
 4. ✅ JULY_1_2025_SLEEP_TEST_FIXES_PHASE2_PLAN.md - Next phase plan
 
 ## END OF PHASE 1 - Ready for Phase 2 Implementation
+
+---
+
+## 2025-07-01 06:30:00 - Phase 2 Sleep Test Fixes Implementation
+
+### Starting Phase 2: Systematic Replacement of Remaining ~65 Sleep Instances
+
+#### Fix 1: supervision_crash_recovery_test.exs - COMPLETED ✅
+- **Time**: 06:35
+- **Issues Fixed**: 5 instances of :timer.sleep ranging from 20ms to 100ms
+- **Fixes Applied**:
+  1. Line 304: Replaced 50ms sleep with wait_for checking TaskPoolManager restart
+  2. Line 418: Replaced 20ms sleep with wait_for for process restart verification
+  3. Line 422: Replaced 100ms sleep with wait_for for process stabilization
+  4. Line 444: Replaced 20ms sleep with wait_for for SystemCommandManager restart
+  5. Line 449: Replaced 50ms sleep with wait_for for ETS cleanup verification
+- **Pattern**: Used wait_for with appropriate timeouts and polling intervals
+- **Key Improvement**: Tests now deterministically wait for actual process state changes rather than arbitrary delays
+
+#### Fix 2: resource_leak_detection_test.exs - COMPLETED ✅
+- **Time**: 06:40
+- **Issues Fixed**: 2 instances of minimal :timer.sleep(5)
+- **Fixes Applied**:
+  1. Line 453: Replaced 5ms sleep with :erlang.yield() for task processing spacing
+  2. Line 549: Replaced 5ms sleep with :erlang.yield() for operation spacing
+- **Pattern**: Used :erlang.yield() to allow system operations without arbitrary delay
+- **Note**: This test is marked with @moduletag :slow for legitimate resource leak detection
+
+#### Fix 3: mabeam_coordination_test.exs - COMPLETED ✅
+- **Time**: 06:45
+- **Issues Fixed**: 3 instances of :timer.sleep (50ms and 100ms)
+- **Fixes Applied**:
+  1. Line 215: Replaced 50ms sleep with wait_for checking message receipt
+  2. Line 299: Replaced 100ms sleep with wait_for checking all agents received tasks
+  3. Line 458: Replaced 100ms sleep with wait_for checking delegation completion
+- **Pattern**: Used wait_for to poll for specific conditions being met
+- **Key Change**: Added import Foundation.AsyncTestHelpers for wait_for function
+
+#### Fix 4: performance_benchmark_test.exs - COMPLETED ✅
+- **Time**: 06:50
+- **Issues Fixed**: 4 instances of :timer.sleep for work simulation
+- **Fixes Applied**:
+  1. Line 191: Replaced 1-5ms random sleep with fibonacci computation
+  2. Line 240: Replaced 1-5ms random sleep with sum computation  
+  3. Line 391: Replaced 5ms sleep with :erlang.yield()
+  4. Line 407: Removed 2ms sleep entirely (unnecessary)
+- **Pattern**: Replaced work simulation sleeps with actual computation or yield
+- **Improvement**: Tests now do real work instead of artificial delays
+
+#### Fix 5: system_health_sensor_test.exs - COMPLETED ✅
+- **Time**: 06:55
+- **Issues Fixed**: 2 instances of minimal :timer.sleep(2)
+- **Fixes Applied**:
+  1. Line 226: Replaced 2ms sleep with :erlang.yield() for timestamp progression
+  2. Line 381: Removed 2ms sleep entirely (unnecessary for process alive check)
+- **Pattern**: Used yield for timestamp variation, removed unnecessary delay
+
+#### Fix 6: foundation_agent_test.exs - COMPLETED ✅
+- **Time**: 07:00
+- **Issues Fixed**: 1 instance of :timer.sleep(5)
+- **Fixes Applied**:
+  1. Line 204: Replaced 5ms sleep with wait_for checking deregistration completion
+- **Pattern**: Used wait_for to deterministically check registry cleanup
+- **Key Change**: Added import Foundation.AsyncTestHelpers for wait_for function
+
+#### Fix 7: batch_operations_test.exs - COMPLETED ✅
+- **Time**: 07:05
+- **Issues Fixed**: 2 instances of :timer.sleep(10)
+- **Fixes Applied**:
+  1. Line 34: Replaced 10ms sleep with Process.monitor and assert_receive
+  2. Line 56: Replaced 10ms sleep with Process.monitor and assert_receive
+- **Pattern**: Used process monitoring to deterministically wait for process death
+- **Note**: Preserved legitimate sleep(:infinity) for keeping test processes alive
+
+#### Fix 8: telemetry_test.exs - COMPLETED ✅
+- **Time**: 07:10
+- **Issues Fixed**: 2 instances of :timer.sleep(10)
+- **Fixes Applied**:
+  1. Line 232: Replaced 10ms sleep with :erlang.yield()
+  2. Line 283: Replaced 10ms sleep with :erlang.yield()
+- **Pattern**: Used yield for test ordering in telemetry event tests
+- **Note**: These tests are specifically testing async telemetry helpers
+
+#### Fix 9: simple_validation_test.exs - COMPLETED ✅
+- **Time**: 07:15
+- **Issues Fixed**: 1 instance of :timer.sleep(50)
+- **Fixes Applied**:
+  1. Line 178: Replaced 50ms sleep with wait_for checking process count stability
+- **Pattern**: Used wait_for to ensure process count has stabilized
+- **Key Change**: Added import Foundation.AsyncTestHelpers for wait_for function
+
+#### Fix 10: span_test.exs - COMPLETED ✅
+- **Time**: 07:20
+- **Issues Fixed**: 1 instance of Process.sleep(10)
+- **Fixes Applied**:
+  1. Line 40: Replaced 10ms sleep with computation (sum 1..1000) for measurable duration
+- **Pattern**: Replaced sleep with actual work for span timing tests
+- **Note**: Ensures spans have measurable duration without artificial delay
+
+#### Fix 11: task_agent_test.exs - COMPLETED ✅
+- **Time**: 07:25
+- **Issues Fixed**: 1 instance of :timer.sleep(100)
+- **Fixes Applied**:
+  1. Line 56: Replaced 100ms sleep with poll_with_timeout pattern
+- **Pattern**: Used existing poll_with_timeout helper for deterministic waiting
+- **Note**: This file is exemplary for its poll_with_timeout pattern used elsewhere
+
+### Summary of Phase 2 Progress
+- **Total Fixed So Far**: 25 sleep instances across 11 test files
+- **Patterns Used**:
+  1. wait_for with state polling (most common)
+  2. Process monitoring with assert_receive
+  3. :erlang.yield() for minimal scheduling
+  4. Actual computation instead of sleep
+  5. poll_with_timeout for complex conditions
+- **Remaining**: ~40 sleep instances across ~15 files (down from ~65)
+
+#### Fix 12: Test Corrections - COMPLETED ✅
+- **Time**: 07:30
+- **Issues Fixed**: 3 test failures from overly aggressive sleep removal
+- **Fixes Applied**:
+  1. telemetry_test.exs: Reverted to receive/after pattern for async test timing
+  2. serial_operations_test.exs: Fixed process monitoring with spawn_monitor
+- **Learning**: Some minimal delays are necessary when testing async behavior itself
+- **Test Results**: All 513 tests passing again

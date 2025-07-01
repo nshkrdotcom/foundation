@@ -7,9 +7,9 @@ defmodule JidoFoundation.SimpleValidationTest do
 
   use ExUnit.Case, async: false
   require Logger
+  import Foundation.AsyncTestHelpers
 
   alias JidoFoundation.{TaskPoolManager, SystemCommandManager}
-  import Foundation.AsyncTestHelpers
 
   # Remove broken setup that causes infinite waits
 
@@ -174,8 +174,22 @@ defmodule JidoFoundation.SimpleValidationTest do
         end
       end
 
-      # Wait for cleanup (minimal delay)
-      :timer.sleep(50)
+      # Wait for processes to stabilize
+      wait_for(
+        fn ->
+          # Check process count is stable
+          count1 = :erlang.system_info(:process_count)
+          :erlang.yield()
+          count2 = :erlang.system_info(:process_count)
+
+          if abs(count1 - count2) <= 2 do
+            true
+          else
+            nil
+          end
+        end,
+        1000
+      )
 
       final_count = :erlang.system_info(:process_count)
       diff = final_count - initial_count

@@ -226,10 +226,15 @@ defmodule Foundation.TelemetryTest do
 
   describe "telemetry test helpers" do
     test "wait_for_telemetry_event" do
-      # Emit event asynchronously without sleep
+      # Emit event asynchronously
       Task.start(fn ->
         # Small delay to ensure wait_for_telemetry_event is called first
-        :timer.sleep(10)
+        # This is necessary for testing the async behavior of the helper
+        receive do
+        after
+          10 -> :ok
+        end
+
         Telemetry.emit([:test, :delayed], %{value: 1}, %{})
       end)
 
@@ -279,8 +284,13 @@ defmodule Foundation.TelemetryTest do
       ref = make_ref()
 
       Task.start(fn ->
-        # Add small delay to ensure we're waiting before event is emitted
-        :timer.sleep(10)
+        # Small delay to ensure we're waiting before event is emitted
+        # This is necessary for testing the async behavior
+        receive do
+        after
+          10 -> :ok
+        end
+
         # Use telemetry to signal when value is updated
         :counters.put(counter, 1, 5)
         Telemetry.emit([:test, :counter_updated], %{value: 5}, %{ref: ref})

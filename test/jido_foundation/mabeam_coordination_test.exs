@@ -3,6 +3,7 @@ defmodule JidoFoundation.MABEAMCoordinationTest do
   use Foundation.UnifiedTestFoundation, :registry
 
   alias JidoFoundation.Bridge
+  import Foundation.AsyncTestHelpers
 
   # Mock Jido Agent that can coordinate with MABEAM
   defmodule CoordinatingAgent do
@@ -211,9 +212,20 @@ defmodule JidoFoundation.MABEAMCoordinationTest do
       Bridge.coordinate_agents(sender_agent, receiver_agent, coordination_message)
 
       # Verify receiver got the coordination message
-      # Allow message processing
-      :timer.sleep(50)
-      messages = CoordinatingAgent.get_received_messages(receiver_agent)
+      # Wait for message to be received
+      messages =
+        wait_for(
+          fn ->
+            msgs = CoordinatingAgent.get_received_messages(receiver_agent)
+
+            if length(msgs) >= 1 do
+              msgs
+            else
+              nil
+            end
+          end,
+          1000
+        )
 
       assert length(messages) >= 1
       coordination_msg = Enum.find(messages, &(&1[:type] == :mabeam_coordination))
@@ -295,8 +307,24 @@ defmodule JidoFoundation.MABEAMCoordinationTest do
         Bridge.distribute_task(coordinator_agent, agent, task)
       end)
 
-      # Allow task processing
-      :timer.sleep(100)
+      # Wait for all tasks to be processed
+      wait_for(
+        fn ->
+          # Check if all worker agents have received their tasks
+          all_received =
+            Enum.all?(worker_agents, fn agent ->
+              messages = CoordinatingAgent.get_received_messages(agent)
+              Enum.any?(messages, &(&1[:task_id] != nil))
+            end)
+
+          if all_received do
+            true
+          else
+            nil
+          end
+        end,
+        2000
+      )
 
       # Verify each worker received and processed their task
       Enum.zip(worker_agents, tasks)
@@ -454,8 +482,20 @@ defmodule JidoFoundation.MABEAMCoordinationTest do
       # Manager delegates subtask to worker
       Bridge.delegate_task(manager_agent, worker_agent, hd(top_level_task.subtasks))
 
-      # Allow delegation processing
-      :timer.sleep(100)
+      # Wait for delegation to be processed
+      wait_for(
+        fn ->
+          # Check if worker has received the delegated task
+          worker_msgs = CoordinatingAgent.get_received_messages(worker_agent)
+
+          if Enum.any?(worker_msgs, &(&1[:task_id] != nil)) do
+            true
+          else
+            nil
+          end
+        end,
+        2000
+      )
 
       # Verify task delegation worked through the hierarchy
       _supervisor_messages = CoordinatingAgent.get_received_messages(supervisor_agent)

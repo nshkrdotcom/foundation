@@ -37,7 +37,8 @@ defmodule Foundation.Telemetry.SpanTest do
       # Execute span
       result =
         with_span :test_operation, %{user_id: 123} do
-          Process.sleep(10)
+          # Do some actual work to ensure measurable duration
+          _result = Enum.reduce(1..1000, 0, fn i, acc -> acc + i end)
           {:ok, "result"}
         end
 

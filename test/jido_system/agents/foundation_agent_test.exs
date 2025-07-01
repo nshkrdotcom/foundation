@@ -3,6 +3,7 @@ defmodule JidoSystem.Agents.FoundationAgentTest do
   use Foundation.UnifiedTestFoundation, :registry
 
   alias JidoSystem.Agents.FoundationAgent
+  import Foundation.AsyncTestHelpers
 
   defmodule TestAgent do
     use FoundationAgent,
@@ -200,8 +201,16 @@ defmodule JidoSystem.Agents.FoundationAgentTest do
       # Stop the agent
       GenServer.stop(pid)
 
-      # Give some time for cleanup (minimal delay)
-      :timer.sleep(5)
+      # Wait for deregistration to complete
+      wait_for(
+        fn ->
+          case Foundation.Registry.lookup(global_registry, pid) do
+            :error -> true
+            _ -> nil
+          end
+        end,
+        1000
+      )
 
       # Verify deregistration
       assert :error = Foundation.Registry.lookup(global_registry, pid)

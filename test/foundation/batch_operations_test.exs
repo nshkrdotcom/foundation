@@ -29,9 +29,10 @@ defmodule Foundation.BatchOperationsTest do
 
     test "handles batch with errors when on_error is :continue", %{registry: registry} do
       pid1 = spawn(fn -> :timer.sleep(:infinity) end)
-      dead_pid = spawn(fn -> :ok end)
-      # Ensure dead_pid is dead
-      :timer.sleep(10)
+      # Spawn and monitor a process that will die immediately
+      ref = Process.monitor(dead_pid = spawn(fn -> :ok end))
+      # Wait for process to die
+      assert_receive {:DOWN, ^ref, :process, ^dead_pid, :normal}, 1000
 
       on_exit(fn ->
         if Process.alive?(pid1), do: Process.exit(pid1, :kill)
@@ -52,8 +53,10 @@ defmodule Foundation.BatchOperationsTest do
     end
 
     test "stops on first error when on_error is :stop", %{registry: registry} do
-      dead_pid = spawn(fn -> :ok end)
-      :timer.sleep(10)
+      # Spawn and monitor a process that will die immediately
+      ref = Process.monitor(dead_pid = spawn(fn -> :ok end))
+      # Wait for process to die
+      assert_receive {:DOWN, ^ref, :process, ^dead_pid, :normal}, 1000
 
       pid2 = spawn(fn -> :timer.sleep(:infinity) end)
 

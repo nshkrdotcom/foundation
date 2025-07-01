@@ -449,8 +449,8 @@ defmodule JidoFoundation.ResourceLeakDetectionTest do
               :erlang.garbage_collect()
             end
 
-            # Minimal delay for task processing
-            :timer.sleep(5)
+            # Yield to allow other processes to run
+            :erlang.yield()
             {:cont, new_task_count}
           end
         end)
@@ -545,8 +545,8 @@ defmodule JidoFoundation.ResourceLeakDetectionTest do
         # Get stats which might use ETS internally
         TaskPoolManager.get_all_stats()
         SystemCommandManager.get_stats()
-        # Minimal delay for operation spacing
-        :timer.sleep(5)
+        # Yield to allow system operations to complete
+        :erlang.yield()
       end
 
       final_snapshot = ResourceMonitor.snapshot()

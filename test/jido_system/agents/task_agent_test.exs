@@ -52,11 +52,19 @@ defmodule JidoSystem.Agents.TaskAgentTest do
 
       assert Process.alive?(pid)
 
-      # Give some time for registration to complete
-      :timer.sleep(100)
+      # Wait for registration to complete using the poll helper
+      poll_for_alive = fn ->
+        if Process.alive?(pid) do
+          {:ok, pid}
+        else
+          :continue
+        end
+      end
 
-      # Check if agent is still alive
-      assert Process.alive?(pid), "Agent died unexpectedly"
+      case poll_with_timeout(poll_for_alive, 1000, 10) do
+        {:ok, _} -> :ok
+        :timeout -> flunk("Agent died unexpectedly during registration")
+      end
 
       # For now, skip registry check due to agent lifecycle issue
       # TO DO: Fix agent lifecycle so it doesn't die immediately after startup

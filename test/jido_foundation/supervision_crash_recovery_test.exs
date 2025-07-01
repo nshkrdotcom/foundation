@@ -300,8 +300,17 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
       task_pool_pid = Process.whereis(JidoFoundation.TaskPoolManager)
       Process.exit(task_pool_pid, :kill)
 
-      # Wait for restart (minimal delay for supervisor recovery)
-      :timer.sleep(50)
+      # Wait for restart using deterministic check
+      wait_for(
+        fn ->
+          case Process.whereis(JidoFoundation.TaskPoolManager) do
+            pid when pid != task_pool_pid and is_pid(pid) -> true
+            _ -> nil
+          end
+        end,
+        1000,
+        10
+      )
 
       # Verify other children are still alive (supervisor might restart too)
       current_supervisor =
@@ -414,12 +423,31 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
       for _i <- 1..5 do
         task_pool_pid = Process.whereis(JidoFoundation.TaskPoolManager)
         Process.exit(task_pool_pid, :kill)
-        # Minimal delay for restart cycle
-        :timer.sleep(20)
+        # Wait for process to actually die and restart
+        wait_for(
+          fn ->
+            case Process.whereis(JidoFoundation.TaskPoolManager) do
+              pid when pid != task_pool_pid and is_pid(pid) -> true
+              _ -> nil
+            end
+          end,
+          100,
+          5
+        )
       end
 
-      # Wait for final stabilization
-      :timer.sleep(100)
+      # Wait for all processes to stabilize
+      wait_for(
+        fn ->
+          # Check that TaskPoolManager is running and stable
+          case Process.whereis(JidoFoundation.TaskPoolManager) do
+            pid when is_pid(pid) -> true
+            _ -> nil
+          end
+        end,
+        500,
+        10
+      )
 
       final_count = :erlang.system_info(:process_count)
 
@@ -440,13 +468,32 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
 
           system_cmd_pid when is_pid(system_cmd_pid) ->
             Process.exit(system_cmd_pid, :kill)
-            # Minimal delay for restart
-            :timer.sleep(20)
+            # Wait for process to restart
+            wait_for(
+              fn ->
+                case Process.whereis(JidoFoundation.SystemCommandManager) do
+                  pid when pid != system_cmd_pid and is_pid(pid) -> true
+                  _ -> nil
+                end
+              end,
+              100,
+              5
+            )
         end
       end
 
-      # Wait for cleanup (minimal delay)
-      :timer.sleep(50)
+      # Wait for ETS cleanup to complete
+      wait_for(
+        fn ->
+          # Check that SystemCommandManager is stable
+          case Process.whereis(JidoFoundation.SystemCommandManager) do
+            pid when is_pid(pid) -> true
+            _ -> nil
+          end
+        end,
+        200,
+        10
+      )
 
       final_ets_count = :erlang.system_info(:ets_count)
 
