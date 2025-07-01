@@ -212,54 +212,63 @@ defmodule JidoFoundation.Examples do
     @type agent_pid :: pid()
     @type work_chunk :: [work_item()]
     
+    # Dialyzer has trouble seeing the success path due to nested case expressions
+    # The function does return {:ok, [term()]} when agents are found and supervisor is available
     @spec distribute_work([work_item()], capability()) :: 
       {:ok, [term()]} | 
       {:error, :no_agents_available | :task_supervisor_not_available}
     def distribute_work(work_items, capability_required) do
-      # Find all healthy agents with required capability
-      case JidoFoundation.Bridge.find_agents([
-             {[:capability], capability_required, :eq},
-             {[:health_status], :healthy, :eq}
-           ]) do
-        {:ok, []} ->
-          {:error, :no_agents_available}
-
-        {:ok, agents} ->
-          # Distribute work among agents
-          agent_pids = Enum.map(agents, fn {_key, pid, _metadata} -> pid end)
-
-          work_chunks = chunk_work(work_items, length(agent_pids))
-
-          # Assign work to each agent in parallel
-          # Check supervisor availability
-          case Process.whereis(Foundation.TaskSupervisor) do
-            nil ->
-              Logger.error("Foundation.TaskSupervisor not running. Ensure Foundation.Application is started.")
-              {:error, :task_supervisor_not_available}
-
-            supervisor when is_pid(supervisor) ->
-              # Create index-based processing to avoid tuple inference issues
-              indexed_chunks = Enum.with_index(work_chunks)
-              agent_array = List.to_tuple(agent_pids)
-              
-              results =
-                indexed_chunks
-                |> Task.Supervisor.async_stream_nolink(
-                  Foundation.TaskSupervisor,
-                  fn {chunk, index} ->
-                    agent_pid = elem(agent_array, index)
-                    GenServer.call(agent_pid, {:process_batch, chunk}, 10_000)
-                  end,
-                  max_concurrency: length(agent_pids)
-                )
-                |> Enum.map(fn
-                  {:ok, result} -> result
-                  {:exit, reason} -> {:error, reason}
-                end)
-
-              {:ok, results}
-          end
+      with {:ok, agents} when agents != [] <- find_healthy_agents(capability_required),
+           {:ok, supervisor} <- ensure_task_supervisor() do
+        distribute_to_agents(work_items, agents, supervisor)
+      else
+        {:ok, []} -> {:error, :no_agents_available}
+        {:error, :no_supervisor} -> {:error, :task_supervisor_not_available}
+        error -> error
       end
+    end
+    
+    defp find_healthy_agents(capability_required) do
+      JidoFoundation.Bridge.find_agents([
+        {[:capability], capability_required, :eq},
+        {[:health_status], :healthy, :eq}
+      ])
+    end
+    
+    defp ensure_task_supervisor do
+      case Process.whereis(Foundation.TaskSupervisor) do
+        nil ->
+          Logger.error("Foundation.TaskSupervisor not running. Ensure Foundation.Application is started.")
+          {:error, :no_supervisor}
+        supervisor when is_pid(supervisor) ->
+          {:ok, supervisor}
+      end
+    end
+    
+    defp distribute_to_agents(work_items, agents, _supervisor) do
+      agent_pids = Enum.map(agents, fn {_key, pid, _metadata} -> pid end)
+      work_chunks = chunk_work(work_items, length(agent_pids))
+      
+      # Create index-based processing to avoid tuple inference issues
+      indexed_chunks = Enum.with_index(work_chunks)
+      agent_array = List.to_tuple(agent_pids)
+      
+      results =
+        indexed_chunks
+        |> Task.Supervisor.async_stream_nolink(
+          Foundation.TaskSupervisor,
+          fn {chunk, index} ->
+            agent_pid = elem(agent_array, index)
+            GenServer.call(agent_pid, {:process_batch, chunk}, 10_000)
+          end,
+          max_concurrency: length(agent_pids)
+        )
+        |> Enum.map(fn
+          {:ok, result} -> result
+          {:exit, reason} -> {:error, reason}
+        end)
+
+      {:ok, results}
     end
 
     @spec chunk_work([work_item()], pos_integer()) :: [work_chunk()]
