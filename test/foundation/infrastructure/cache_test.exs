@@ -100,8 +100,8 @@ defmodule Foundation.Infrastructure.CacheTest do
   describe "error handling" do
     test "handles invalid keys gracefully" do
       assert Cache.get(nil, :default) == :default
-      assert {:error, :invalid_key} = Cache.put(nil, "value")
-      assert {:error, :invalid_key} = Cache.delete(nil)
+      assert {:error, {:invalid_field, :key, :cannot_be_nil}} = Cache.put(nil, "value")
+      assert {:error, {:invalid_field, :key, :cannot_be_nil}} = Cache.delete(nil)
     end
 
     test "handles large values" do

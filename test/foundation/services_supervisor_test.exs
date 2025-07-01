@@ -3,11 +3,30 @@ defmodule Foundation.Services.SupervisorTest do
 
   alias Foundation.Services.Supervisor, as: ServicesSupervisor
 
+  # Helper to create unique service options for test supervisors
+  defp create_test_service_opts(unique_name) do
+    [
+      retry_service: [name: :"#{unique_name}_retry_service"],
+      connection_manager: [name: :"#{unique_name}_connection_manager"],
+      rate_limiter: [name: :"#{unique_name}_rate_limiter"],
+      signal_bus: [name: :"#{unique_name}_signal_bus"],
+      dependency_manager: [
+        name: :"#{unique_name}_dependency_manager",
+        table_name: :"#{unique_name}_dependency_table"
+      ],
+      health_checker: [name: :"#{unique_name}_health_checker"]
+    ]
+  end
+
   describe "Foundation.Services.Supervisor" do
     test "starts with proper supervision strategy with unique name" do
       # Test that we can start the services supervisor with proper strategy
       unique_name = :"test_supervisor_#{System.unique_integer()}"
-      assert {:ok, pid} = ServicesSupervisor.start_link(name: unique_name)
+      service_opts = create_test_service_opts(unique_name)
+
+      assert {:ok, pid} =
+               ServicesSupervisor.start_link(name: unique_name, service_opts: service_opts)
+
       assert Process.alive?(pid)
 
       # Verify supervision strategy
@@ -24,7 +43,8 @@ defmodule Foundation.Services.SupervisorTest do
 
     test "properly supervises child services with unique name" do
       unique_name = :"test_supervisor_#{System.unique_integer()}"
-      {:ok, pid} = ServicesSupervisor.start_link(name: unique_name)
+      service_opts = create_test_service_opts(unique_name)
+      {:ok, pid} = ServicesSupervisor.start_link(name: unique_name, service_opts: service_opts)
 
       # Check that supervisor is properly configured
       children = Supervisor.which_children(pid)
@@ -39,7 +59,10 @@ defmodule Foundation.Services.SupervisorTest do
 
     test "restarts failed services according to restart strategy with unique name" do
       unique_name = :"test_supervisor_#{System.unique_integer()}"
-      {:ok, supervisor_pid} = ServicesSupervisor.start_link(name: unique_name)
+      service_opts = create_test_service_opts(unique_name)
+
+      {:ok, supervisor_pid} =
+        ServicesSupervisor.start_link(name: unique_name, service_opts: service_opts)
 
       # This test validates the supervision tree structure
       # Should have 4 child services (RetryService, ConnectionManager, RateLimiter, SignalBus)
@@ -52,7 +75,10 @@ defmodule Foundation.Services.SupervisorTest do
 
     test "graceful shutdown of all services with unique name" do
       unique_name = :"test_supervisor_#{System.unique_integer()}"
-      {:ok, supervisor_pid} = ServicesSupervisor.start_link(name: unique_name)
+      service_opts = create_test_service_opts(unique_name)
+
+      {:ok, supervisor_pid} =
+        ServicesSupervisor.start_link(name: unique_name, service_opts: service_opts)
 
       # Supervisor should shutdown gracefully
       assert :ok = Supervisor.stop(supervisor_pid)

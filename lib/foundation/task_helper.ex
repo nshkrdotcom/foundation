@@ -2,8 +2,30 @@ defmodule Foundation.TaskHelper do
   @moduledoc """
   Helper functions for spawning supervised tasks across Foundation.
 
-  Ensures all tasks are properly supervised, even in test environments.
-  No unsupervised processes are allowed to maintain OTP principles.
+  Ensures all tasks are properly supervised to maintain OTP principles.
+
+  ## Production Usage
+
+  In production, this module uses Foundation.TaskSupervisor which is
+  started by Foundation.Application.
+
+  ## Test Usage
+
+  In tests, you must ensure Foundation.TaskSupervisor is available by either:
+
+  1. Starting Foundation.Application in your test:
+     
+         setup do
+           {:ok, _} = Application.ensure_all_started(:foundation)
+           :ok
+         end
+         
+  2. Using test helpers to set up isolated supervision:
+
+         # In test/test_helper.exs or test setup
+         Foundation.TestSupervisorHelper.setup_test_task_supervisor()
+
+  Never spawn unsupervised processes.
   """
 
   require Logger
@@ -19,32 +41,24 @@ defmodule Foundation.TaskHelper do
       {:ok, pid} = Foundation.TaskHelper.spawn_supervised(fn ->
         IO.puts("Hello from supervised task")
       end)
+      
+  ## Error Handling
+
+  If Foundation.TaskSupervisor is not running (e.g., in isolated tests),
+  this function returns an error. Tests should set up proper supervision
+  using test helpers or start Foundation.Application.
   """
   def spawn_supervised(fun) when is_function(fun, 0) do
     case Process.whereis(Foundation.TaskSupervisor) do
       nil ->
-        # In test environment, use a global test supervisor
-        # First try to find or start the test supervisor
-        test_supervisor_name = Foundation.TestTaskSupervisor
+        # TaskSupervisor not running - this is an error condition
+        # Tests should properly set up supervision before using this function
+        Logger.error(
+          "Foundation.TaskSupervisor not running. " <>
+            "Ensure Foundation.Application is started or use test helpers."
+        )
 
-        case Process.whereis(test_supervisor_name) do
-          nil ->
-            # Start a test supervisor if not already running
-            case Task.Supervisor.start_link(name: test_supervisor_name) do
-              {:ok, _pid} ->
-                Task.Supervisor.start_child(test_supervisor_name, fun)
-
-              {:error, {:already_started, _pid}} ->
-                Task.Supervisor.start_child(test_supervisor_name, fun)
-
-              error ->
-                error
-            end
-
-          _pid ->
-            # Test supervisor already running
-            Task.Supervisor.start_child(test_supervisor_name, fun)
-        end
+        {:error, :task_supervisor_not_running}
 
       _pid ->
         # TaskSupervisor is running, use proper supervision

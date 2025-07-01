@@ -88,7 +88,8 @@ defmodule Foundation.Telemetry.OpenTelemetryBridge do
          spans: %{},
          service_name: Keyword.get(opts, :service_name, service_name()),
          resource_attributes: Keyword.get(opts, :resource_attributes, %{}),
-         max_context_age_ms: Keyword.get(opts, :max_context_age_ms, 300_000), # 5 minutes default
+         # 5 minutes default
+         max_context_age_ms: Keyword.get(opts, :max_context_age_ms, 300_000),
          cleanup_timer: cleanup_timer
        }}
     else
@@ -101,17 +102,17 @@ defmodule Foundation.Telemetry.OpenTelemetryBridge do
   def terminate(_reason, state) do
     :telemetry.detach("foundation-otel-spans")
     :telemetry.detach("foundation-otel-metrics")
-    
+
     # Cancel cleanup timer if it exists
     if is_map(state) and Map.has_key?(state, :cleanup_timer) and state.cleanup_timer do
       Process.cancel_timer(state.cleanup_timer)
     end
-    
+
     # Clean up ETS table if it exists
     if :ets.whereis(:foundation_otel_contexts) != :undefined do
       :ets.delete(:foundation_otel_contexts)
     end
-    
+
     :ok
   end
 
@@ -415,32 +416,33 @@ defmodule Foundation.Telemetry.OpenTelemetryBridge do
     # Clean up contexts older than max_context_age_ms
     now = System.monotonic_time(:millisecond)
     max_age = state.max_context_age_ms
-    
+
     # Find and delete stale contexts
-    stale_contexts = :ets.foldl(
-      fn {span_id, {_ctx, timestamp}}, acc ->
-        if now - timestamp > max_age do
-          [{span_id, timestamp} | acc]
-        else
-          acc
-        end
-      end,
-      [],
-      :foundation_otel_contexts
-    )
-    
+    stale_contexts =
+      :ets.foldl(
+        fn {span_id, {_ctx, timestamp}}, acc ->
+          if now - timestamp > max_age do
+            [{span_id, timestamp} | acc]
+          else
+            acc
+          end
+        end,
+        [],
+        :foundation_otel_contexts
+      )
+
     # Delete stale contexts
     Enum.each(stale_contexts, fn {span_id, _} ->
       :ets.delete(:foundation_otel_contexts, span_id)
     end)
-    
+
     if length(stale_contexts) > 0 do
       Logger.debug("Cleaned up #{length(stale_contexts)} stale OpenTelemetry contexts")
     end
-    
+
     # Schedule next cleanup
     new_timer = Process.send_after(self(), :cleanup_stale_contexts, 60_000)
-    
+
     {:noreply, %{state | cleanup_timer: new_timer}}
   end
 

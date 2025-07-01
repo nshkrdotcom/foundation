@@ -48,6 +48,7 @@ defmodule MABEAM.AgentRegistry do
   # All handle_call/3 clauses are grouped together below
 
   alias Foundation.ETSHelpers.MatchSpecCompiler
+  alias MABEAM.AgentRegistry.{Validator, IndexManager, QueryEngine}
 
   defstruct main_table: nil,
             capability_index: nil,
@@ -57,9 +58,7 @@ defmodule MABEAM.AgentRegistry do
             monitors: nil,
             registry_id: nil
 
-  # Required metadata fields for agents
-  @required_fields [:capability, :health_status, :node, :resources]
-  @valid_health_statuses [:healthy, :degraded, :unhealthy]
+  # Delegated to Validator module
 
   # --- OTP Lifecycle ---
 
@@ -82,28 +81,20 @@ defmodule MABEAM.AgentRegistry do
     # Use the registry ID for logging but not for dynamic atom creation
     registry_id = Keyword.get(opts, :id, :default)
 
-    # Create anonymous ETS tables tied to this process for safety
-    # No dynamic atom creation - tables are anonymous and garbage collected with process
-    table_opts = [:public, read_concurrency: true, write_concurrency: true]
+    # Create tables using IndexManager
+    tables = IndexManager.create_index_tables(registry_id)
 
-    state = %__MODULE__{
-      main_table: :ets.new(:agent_main, [:set | table_opts]),
-      capability_index: :ets.new(:agent_capability_idx, [:bag | table_opts]),
-      health_index: :ets.new(:agent_health_idx, [:bag | table_opts]),
-      node_index: :ets.new(:agent_node_idx, [:bag | table_opts]),
-      resource_index: :ets.new(:agent_resource_idx, [:ordered_set | table_opts]),
-      monitors: %{},
-      registry_id: registry_id
-    }
+    state =
+      struct!(
+        __MODULE__,
+        Map.merge(tables, %{
+          monitors: %{},
+          registry_id: registry_id
+        })
+      )
 
-    # Register tables with ResourceManager if available
-    if Process.whereis(Foundation.ResourceManager) do
-      Foundation.ResourceManager.monitor_table(state.main_table)
-      Foundation.ResourceManager.monitor_table(state.capability_index)
-      Foundation.ResourceManager.monitor_table(state.health_index)
-      Foundation.ResourceManager.monitor_table(state.node_index)
-      Foundation.ResourceManager.monitor_table(state.resource_index)
-    end
+    # Register tables with ResourceManager
+    IndexManager.register_tables_with_resource_manager(tables)
 
     Logger.info(
       "MABEAM.AgentRegistry (#{registry_id}) started with anonymous ETS tables (process-managed)"
@@ -152,7 +143,7 @@ defmodule MABEAM.AgentRegistry do
         # Atomic unregistration - all operations in single GenServer call
         # This provides atomicity through GenServer serialization
         :ets.delete(state.main_table, agent_id)
-        clear_agent_from_indexes(state, agent_id)
+        IndexManager.clear_agent_from_indexes(state, agent_id)
 
         # Clean up monitor
         new_monitors =
@@ -195,7 +186,7 @@ defmodule MABEAM.AgentRegistry do
   def handle_call({:update_metadata, agent_id, new_metadata}, _from, state) do
     start_time = System.monotonic_time()
 
-    with :ok <- validate_agent_metadata(new_metadata),
+    with :ok <- Validator.validate_agent_metadata(new_metadata),
          [{^agent_id, pid, old_metadata, _timestamp}] <- :ets.lookup(state.main_table, agent_id) do
       # Atomic metadata update - all operations in single GenServer call
       # This provides atomicity through GenServer serialization
@@ -204,8 +195,8 @@ defmodule MABEAM.AgentRegistry do
       :ets.insert(state.main_table, {agent_id, pid, new_metadata, :os.timestamp()})
 
       # Clear old indexes and rebuild atomically within same call
-      clear_agent_from_indexes(state, agent_id)
-      update_all_indexes(state, agent_id, new_metadata)
+      IndexManager.clear_agent_from_indexes(state, agent_id)
+      IndexManager.update_all_indexes(state, agent_id, new_metadata)
 
       Telemetry.emit(
         [:foundation, :mabeam, :registry, :update],
@@ -399,7 +390,10 @@ defmodule MABEAM.AgentRegistry do
       {:error, reason, rollback_data, _partial_state} ->
         # Transaction failed - GenServer state unchanged, but ETS changes persist!
         # Caller must use rollback_data to manually undo changes if needed.
-        Logger.warning("Transaction #{tx_id} failed: #{inspect(reason)}. ETS changes NOT rolled back.")
+        Logger.warning(
+          "Transaction #{tx_id} failed: #{inspect(reason)}. ETS changes NOT rolled back."
+        )
+
         {:reply, {:error, reason, rollback_data}, state}
     end
   end
@@ -444,7 +438,7 @@ defmodule MABEAM.AgentRegistry do
     # Atomic cleanup - all operations in single GenServer message handler
     # This provides atomicity through GenServer serialization
     :ets.delete(state.main_table, agent_id)
-    clear_agent_from_indexes(state, agent_id)
+    IndexManager.clear_agent_from_indexes(state, agent_id)
 
     # Remove from monitors
     new_monitors = Map.delete(state.monitors, monitor_ref)
@@ -538,9 +532,9 @@ defmodule MABEAM.AgentRegistry do
   end
 
   defp perform_registration(agent_id, pid, metadata, state) do
-    with :ok <- validate_agent_metadata(metadata),
-         :ok <- validate_process_alive(pid),
-         :ok <- validate_agent_not_exists(state.main_table, agent_id) do
+    with :ok <- Validator.validate_agent_metadata(metadata),
+         :ok <- Validator.validate_process_alive(pid),
+         :ok <- Validator.validate_agent_not_exists(state.main_table, agent_id) do
       atomic_register(agent_id, pid, metadata, state)
     else
       {:error, reason} ->
@@ -548,13 +542,7 @@ defmodule MABEAM.AgentRegistry do
     end
   end
 
-  defp validate_process_alive(pid) do
-    if Process.alive?(pid), do: :ok, else: {:error, :process_not_alive}
-  end
-
-  defp validate_agent_not_exists(table, agent_id) do
-    if :ets.member(table, agent_id), do: {:error, :already_exists}, else: :ok
-  end
+  # Validation functions moved to Validator module
 
   defp atomic_register(agent_id, pid, metadata, state) do
     monitor_ref = Process.monitor(pid)
@@ -573,7 +561,7 @@ defmodule MABEAM.AgentRegistry do
 
   defp complete_registration(agent_id, metadata, monitor_ref, state) do
     # Update all indexes atomically within same call
-    update_all_indexes(state, agent_id, metadata)
+    IndexManager.update_all_indexes(state, agent_id, metadata)
 
     # Track monitor reference
     new_monitors = Map.put(state.monitors, monitor_ref, agent_id)
@@ -649,170 +637,22 @@ defmodule MABEAM.AgentRegistry do
   end
 
   defp do_application_level_query(criteria, state, start_time \\ nil) do
-    query_start = start_time || System.monotonic_time()
-    all_agents = :ets.tab2list(state.main_table)
-
-    filtered =
-      Enum.filter(all_agents, fn {_id, _pid, metadata, _timestamp} ->
-        Enum.all?(criteria, fn criterion ->
-          matches_criterion?(metadata, criterion)
-        end)
-      end)
-
-    formatted_results =
-      Enum.map(filtered, fn {id, pid, metadata, _timestamp} ->
-        {id, pid, metadata}
-      end)
-
-    Telemetry.emit(
-      [:foundation, :mabeam, :registry, :query],
-      %{
-        duration: System.monotonic_time() - query_start,
-        result_count: length(formatted_results),
-        total_scanned: length(all_agents)
-      },
-      %{
-        registry_id: state.registry_id,
-        criteria_count: length(criteria),
-        query_type: :application_level
-      }
-    )
-
-    {:ok, formatted_results}
-  rescue
-    e in [ArgumentError, MatchError] ->
-      {:error, {:invalid_criteria, Exception.message(e)}}
+    QueryEngine.do_application_level_query(criteria, state, start_time)
   end
 
   defp batch_lookup_agents(agent_ids, state) do
-    results =
-      agent_ids
-      |> Enum.map(&:ets.lookup(state.main_table, &1))
-      |> List.flatten()
-      |> Enum.map(fn {id, pid, metadata, _timestamp} -> {id, pid, metadata} end)
-
-    {:ok, results}
+    QueryEngine.batch_lookup_agents(agent_ids, state)
   end
-
-  defp apply_filter(results, nil), do: results
 
   defp apply_filter(results, filter_fn) do
-    Enum.filter(results, fn {_id, _pid, metadata} -> filter_fn.(metadata) end)
+    QueryEngine.apply_filter(results, filter_fn)
   end
 
-  defp validate_agent_metadata(metadata) do
-    case find_missing_fields(metadata) do
-      [] ->
-        validate_health_status(metadata)
+  # Validation functions moved to Validator module
 
-      missing_fields ->
-        {:error, {:missing_required_fields, missing_fields}}
-    end
-  end
+  # Index management functions moved to IndexManager module
 
-  defp find_missing_fields(metadata) do
-    Enum.filter(@required_fields, fn field ->
-      not Map.has_key?(metadata, field)
-    end)
-  end
-
-  defp validate_health_status(metadata) do
-    health_status = Map.get(metadata, :health_status)
-
-    if health_status in @valid_health_statuses do
-      :ok
-    else
-      {:error, {:invalid_health_status, health_status, @valid_health_statuses}}
-    end
-  end
-
-  defp update_all_indexes(state, agent_id, metadata) do
-    # Capability index (handle both single capability and list)
-    capabilities = List.wrap(Map.get(metadata, :capability, []))
-
-    for capability <- capabilities do
-      :ets.insert(state.capability_index, {capability, agent_id})
-    end
-
-    # Health index
-    health_status = Map.get(metadata, :health_status, :unknown)
-    :ets.insert(state.health_index, {health_status, agent_id})
-
-    # Node index
-    node = Map.get(metadata, :node, node())
-    :ets.insert(state.node_index, {node, agent_id})
-
-    # Resource index (ordered by memory usage for efficient range queries)
-    resources = Map.get(metadata, :resources, %{})
-    memory_usage = Map.get(resources, :memory_usage, 0.0)
-    :ets.insert(state.resource_index, {{memory_usage, agent_id}, agent_id})
-  end
-
-  defp clear_agent_from_indexes(state, agent_id) do
-    # Use match_delete for efficient cleanup
-    :ets.match_delete(state.capability_index, {:_, agent_id})
-    :ets.match_delete(state.health_index, {:_, agent_id})
-    :ets.match_delete(state.node_index, {:_, agent_id})
-    :ets.match_delete(state.resource_index, {{:_, agent_id}, agent_id})
-  end
-
-  # --- Criteria Matching ---
-
-  defp matches_criterion?(metadata, {path, value, op}) do
-    actual_value = get_nested_value(metadata, path)
-    apply_operation(actual_value, value, op)
-  end
-
-  defp get_nested_value(metadata, [key]) do
-    Map.get(metadata, key)
-  end
-
-  defp get_nested_value(metadata, [key | rest]) do
-    case Map.get(metadata, key) do
-      nil -> nil
-      nested_map when is_map(nested_map) -> get_nested_value(nested_map, rest)
-      _ -> nil
-    end
-  end
-
-  defp apply_operation(actual, expected, :eq) do
-    # Special handling for capability lists
-    case {actual, expected} do
-      {actual_list, expected_atom} when is_list(actual_list) and is_atom(expected_atom) ->
-        expected_atom in actual_list
-
-      _ ->
-        actual == expected
-    end
-  end
-
-  defp apply_operation(actual, expected, :neq), do: actual != expected
-  defp apply_operation(actual, expected, :gt), do: actual > expected
-  defp apply_operation(actual, expected, :lt), do: actual < expected
-  defp apply_operation(actual, expected, :gte), do: actual >= expected
-  defp apply_operation(actual, expected, :lte), do: actual <= expected
-
-  defp apply_operation(actual, expected_list, :in) when is_list(expected_list) do
-    cond do
-      # If actual is a single value, check if it's in the expected list
-      is_atom(actual) -> actual in expected_list
-      # If actual is a list, check if any of its values are in the expected list
-      is_list(actual) -> Enum.any?(actual, fn val -> val in expected_list end)
-      # For other types, use standard membership check
-      true -> actual in expected_list
-    end
-  end
-
-  defp apply_operation(actual, expected_list, :not_in) when is_list(expected_list) do
-    cond do
-      # If actual is a single value, check if it's not in the expected list
-      is_atom(actual) -> actual not in expected_list
-      # If actual is a list, check that none of its values are in the expected list
-      is_list(actual) -> not Enum.any?(actual, fn val -> val in expected_list end)
-      # For other types, use standard not-in check
-      true -> actual not in expected_list
-    end
-  end
+  # Query matching functions moved to QueryEngine module
 
   # --- Atomic Transaction Helpers ---
 
@@ -872,7 +712,7 @@ defmodule MABEAM.AgentRegistry do
   end
 
   defp validate_and_register(agent_id, pid, metadata, state) do
-    with :ok <- validate_agent_metadata(metadata),
+    with :ok <- Validator.validate_agent_metadata(metadata),
          true <- Process.alive?(pid),
          false <- :ets.member(state.main_table, agent_id) do
       # Create all the updates
@@ -881,7 +721,7 @@ defmodule MABEAM.AgentRegistry do
 
       # Apply updates to ETS tables
       :ets.insert(state.main_table, entry)
-      update_all_indexes(state, agent_id, metadata)
+      IndexManager.update_all_indexes(state, agent_id, metadata)
 
       # Update state
       new_monitors = Map.put(state.monitors, monitor_ref, agent_id)
@@ -896,14 +736,14 @@ defmodule MABEAM.AgentRegistry do
   end
 
   defp lookup_and_update_metadata(agent_id, new_metadata, state) do
-    with :ok <- validate_agent_metadata(new_metadata),
+    with :ok <- Validator.validate_agent_metadata(new_metadata),
          [{^agent_id, pid, old_metadata, _timestamp}] <- :ets.lookup(state.main_table, agent_id) do
       # Update main table
       :ets.insert(state.main_table, {agent_id, pid, new_metadata, :os.timestamp()})
 
       # Update indexes
-      clear_agent_from_indexes(state, agent_id)
-      update_all_indexes(state, agent_id, new_metadata)
+      IndexManager.clear_agent_from_indexes(state, agent_id)
+      IndexManager.update_all_indexes(state, agent_id, new_metadata)
 
       {:ok, state, old_metadata}
     else
@@ -926,7 +766,7 @@ defmodule MABEAM.AgentRegistry do
 
         # Remove from all tables
         :ets.delete(state.main_table, agent_id)
-        clear_agent_from_indexes(state, agent_id)
+        IndexManager.clear_agent_from_indexes(state, agent_id)
 
         # Update state
         new_monitors =

@@ -54,6 +54,8 @@ defmodule Foundation.Services.ConnectionManager do
 
   use GenServer
   require Logger
+  require Foundation.ErrorHandling
+  alias Foundation.ErrorHandling
 
   @type pool_id :: atom() | String.t()
   @type scheme :: :http | :https
@@ -202,12 +204,13 @@ defmodule Foundation.Services.ConnectionManager do
           {:reply, {:ok, pool_id}, %{state | pools: new_pools}}
         rescue
           error ->
-            Logger.error("Failed to configure pool #{pool_id}: #{inspect(error)}")
-            {:reply, {:error, {:configuration_failed, error}}, state}
+            error_tuple = ErrorHandling.exception_to_error(error)
+            ErrorHandling.log_error("Failed to configure pool #{pool_id}", error_tuple)
+            {:reply, error_tuple, state}
         end
 
       {:error, reason} ->
-        {:reply, {:error, reason}, state}
+        {:reply, ErrorHandling.normalize_error({:error, reason}), state}
     end
   end
 
@@ -221,18 +224,19 @@ defmodule Foundation.Services.ConnectionManager do
         # Execute in a separate process to avoid blocking
         # We spawn a task that will send the result back
         parent = self()
+
         Task.Supervisor.start_child(Foundation.TaskSupervisor, fn ->
           start_time = System.monotonic_time(:millisecond)
           result = execute_http_request(state.finch_name, pool_config, request)
           duration = System.monotonic_time(:millisecond) - start_time
-          
+
           # Send the result back to update stats and reply
           send(parent, {:request_completed, from, pool_id, request, result, duration})
         end)
-        
+
         # Update active requests immediately
         updated_stats = Map.update!(state.stats, :active_requests, &(&1 + 1))
-        
+
         # Don't reply yet - will reply in handle_info
         {:noreply, %{state | stats: updated_stats}}
     end
@@ -278,13 +282,13 @@ defmodule Foundation.Services.ConnectionManager do
       state.stats
       |> Map.update!(:active_requests, &(&1 - 1))
       |> Map.update!(:total_requests, &(&1 + 1))
-    
+
     # Emit telemetry
     emit_request_telemetry(pool_id, request, result, duration)
-    
+
     # Reply to the waiting caller
     GenServer.reply(from, result)
-    
+
     {:noreply, %{state | stats: final_stats}}
   end
 
@@ -309,11 +313,11 @@ defmodule Foundation.Services.ConnectionManager do
         {:ok, validated}
 
       missing_field ->
-        {:error, {:missing_required_field, missing_field}}
+        ErrorHandling.missing_field_error(missing_field)
     end
   end
 
-  defp validate_pool_config(_), do: {:error, :invalid_config_format}
+  defp validate_pool_config(_), do: ErrorHandling.invalid_field_error(:config, :invalid_format)
 
   defp build_finch_pool_opts(pool_config) do
     %{
@@ -345,7 +349,7 @@ defmodule Foundation.Services.ConnectionManager do
     end
   rescue
     exception ->
-      {:error, {:request_failed, exception}}
+      ErrorHandling.exception_to_error(exception)
   end
 
   defp build_url(scheme, host, port, path) do
@@ -370,13 +374,11 @@ defmodule Foundation.Services.ConnectionManager do
   end
 
   defp emit_telemetry(event, metadata) do
-    Foundation.Telemetry.emit(
+    ErrorHandling.emit_telemetry_safe(
       [:foundation, :connection_manager, event],
       %{count: 1},
       metadata
     )
-  rescue
-    _ -> :ok
   end
 
   defp emit_request_telemetry(pool_id, request, result, duration) do
@@ -393,12 +395,10 @@ defmodule Foundation.Services.ConnectionManager do
       status: status
     }
 
-    Foundation.Telemetry.emit(
+    ErrorHandling.emit_telemetry_safe(
       [:foundation, :connection_manager, :request],
       %{duration: duration, count: 1},
       metadata
     )
-  rescue
-    _ -> :ok
   end
 end

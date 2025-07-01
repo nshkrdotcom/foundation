@@ -80,6 +80,7 @@ defmodule Foundation.Services.ConnectionManagerTest do
   end
 
   describe "ConnectionManager HTTP operations" do
+    @tag :external_service
     test "supports making HTTP requests with pool" do
       unique_name = :"test_connection_manager_#{System.unique_integer()}"
       {:ok, pid} = ConnectionManager.start_link(name: unique_name)

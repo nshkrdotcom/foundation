@@ -65,38 +65,20 @@ defmodule Foundation.Services.Supervisor do
   def init(opts) do
     Logger.debug("Initializing Foundation Services Supervisor")
 
-    # Check if this is a test supervisor with custom naming
-    is_test_supervisor =
-      Keyword.has_key?(opts, :name) &&
-        Keyword.get(opts, :name) != __MODULE__
+    # Extract service options if provided (for customization, not just tests)
+    service_opts = Keyword.get(opts, :service_opts, [])
 
     children =
-      if is_test_supervisor do
-        # For test supervisors, start services with unique names to avoid conflicts
-        supervisor_id = Keyword.get(opts, :name, __MODULE__)
-
-        [
-          # Core service: Retry service for resilient operations with unique name
-          {Foundation.Services.RetryService, [name: :"#{supervisor_id}_retry_service"]},
-          # Infrastructure service: HTTP connection manager with unique name
-          {Foundation.Services.ConnectionManager, [name: :"#{supervisor_id}_connection_manager"]},
-          # Infrastructure service: Rate limiter with unique name
-          {Foundation.Services.RateLimiter, [name: :"#{supervisor_id}_rate_limiter"]},
-          # Signal service: Jido Signal Bus for event routing
-          {Foundation.Services.SignalBus, [name: :"#{supervisor_id}_signal_bus"]}
-        ] ++ get_sia_children(true, supervisor_id)
-      else
-        [
-          # Core service: Retry service for resilient operations
-          {Foundation.Services.RetryService, []},
-          # Infrastructure service: HTTP connection manager
-          {Foundation.Services.ConnectionManager, []},
-          # Infrastructure service: Rate limiter
-          {Foundation.Services.RateLimiter, []},
-          # Signal service: Jido Signal Bus for event routing
-          {Foundation.Services.SignalBus, []}
-        ] ++ get_sia_children(false, nil)
-      end
+      [
+        # Core service: Retry service for resilient operations
+        {Foundation.Services.RetryService, service_opts[:retry_service] || []},
+        # Infrastructure service: HTTP connection manager
+        {Foundation.Services.ConnectionManager, service_opts[:connection_manager] || []},
+        # Infrastructure service: Rate limiter
+        {Foundation.Services.RateLimiter, service_opts[:rate_limiter] || []},
+        # Signal service: Jido Signal Bus for event routing
+        {Foundation.Services.SignalBus, service_opts[:signal_bus] || []}
+      ] ++ get_sia_children(service_opts)
 
     # Use one_for_one strategy - services can fail independently
     supervisor_opts = [
@@ -132,23 +114,14 @@ defmodule Foundation.Services.Supervisor do
   ## Private Functions
 
   # Gets SIA (Service Integration Architecture) children based on module availability.
-  # Gracefully handles cases where SIA modules may not be loaded in test environments.
-  defp get_sia_children(is_test_supervisor, supervisor_id) do
+  # Gracefully handles cases where SIA modules may not be loaded.
+  defp get_sia_children(service_opts) do
     sia_children = []
 
     # Add DependencyManager if available
     sia_children =
       if Code.ensure_loaded?(Foundation.ServiceIntegration.DependencyManager) do
-        opts =
-          if is_test_supervisor do
-            [
-              name: :"#{supervisor_id}_dependency_manager",
-              table_name: :"#{supervisor_id}_dependency_table"
-            ]
-          else
-            []
-          end
-
+        opts = service_opts[:dependency_manager] || []
         [{Foundation.ServiceIntegration.DependencyManager, opts} | sia_children]
       else
         Logger.debug("Foundation.ServiceIntegration.DependencyManager not available, skipping")
@@ -158,13 +131,7 @@ defmodule Foundation.Services.Supervisor do
     # Add HealthChecker if available
     sia_children =
       if Code.ensure_loaded?(Foundation.ServiceIntegration.HealthChecker) do
-        opts =
-          if is_test_supervisor do
-            [name: :"#{supervisor_id}_health_checker"]
-          else
-            []
-          end
-
+        opts = service_opts[:health_checker] || []
         [{Foundation.ServiceIntegration.HealthChecker, opts} | sia_children]
       else
         Logger.debug("Foundation.ServiceIntegration.HealthChecker not available, skipping")

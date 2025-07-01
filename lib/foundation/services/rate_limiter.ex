@@ -46,6 +46,8 @@ defmodule Foundation.Services.RateLimiter do
 
   use GenServer
   require Logger
+  require Foundation.ErrorHandling
+  alias Foundation.ErrorHandling
 
   @type limiter_id :: atom() | String.t()
   @type rate_limit_identifier :: String.t() | atom() | integer()
@@ -204,7 +206,7 @@ defmodule Foundation.Services.RateLimiter do
         {:reply, {:ok, limiter_id}, %{state | limiters: new_limiters, cleanup_timers: new_timers}}
 
       {:error, reason} ->
-        {:reply, {:error, reason}, state}
+        {:reply, ErrorHandling.normalize_error({:error, reason}), state}
     end
   end
 
@@ -388,11 +390,11 @@ defmodule Foundation.Services.RateLimiter do
         {:ok, validated}
 
       missing_field ->
-        {:error, {:missing_required_field, missing_field}}
+        ErrorHandling.missing_field_error(missing_field)
     end
   end
 
-  defp validate_limiter_config(_), do: {:error, :invalid_config_format}
+  defp validate_limiter_config(_), do: ErrorHandling.invalid_field_error(:config, :invalid_format)
 
   defp update_stats(stats, :allowed) do
     stats
@@ -430,11 +432,13 @@ defmodule Foundation.Services.RateLimiter do
       _ ->
         # Get the limiter config to know the window size
         limiter_config =
-          try do
+          Foundation.ErrorHandling.safe_call do
             GenServer.call(__MODULE__, {:get_limiter_config, limiter_id}, 100)
-          catch
+          end
+          |> case do
+            {:ok, config} -> config
             # Default 1 minute window
-            _, _ -> %{scale_ms: 60_000}
+            {:error, _} -> %{scale_ms: 60_000}
           end
 
         # Find and delete expired buckets
@@ -486,13 +490,11 @@ defmodule Foundation.Services.RateLimiter do
   end
 
   defp emit_telemetry(event, metadata) do
-    Foundation.Telemetry.emit(
+    ErrorHandling.emit_telemetry_safe(
       [:foundation, :rate_limiter, event],
       %{count: 1},
       metadata
     )
-  rescue
-    _ -> :ok
   end
 
   defp emit_rate_limit_telemetry(limiter_id, identifier, result, duration) do
@@ -502,13 +504,11 @@ defmodule Foundation.Services.RateLimiter do
       result: result
     }
 
-    Foundation.Telemetry.emit(
+    ErrorHandling.emit_telemetry_safe(
       [:foundation, :rate_limiter, :check],
       %{duration: duration, count: 1},
       metadata
     )
-  rescue
-    _ -> :ok
   end
 
   # Simple in-memory rate limiting implementation
@@ -597,7 +597,8 @@ defmodule Foundation.Services.RateLimiter do
     try do
       :ets.delete(:rate_limit_buckets)
     rescue
-      ArgumentError -> :ok  # Table doesn't exist or already deleted
+      # Table doesn't exist or already deleted
+      ArgumentError -> :ok
     end
 
     :ok

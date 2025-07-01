@@ -164,12 +164,12 @@ defmodule Foundation.Infrastructure.CacheTelemetryTest do
       {_event, _measurements, metadata, result} =
         assert_telemetry_event [:foundation, :cache, :error],
                                %{},
-                               %{error: :invalid_key, operation: :put} do
+                               %{error: {:invalid_field, :key, :cannot_be_nil}, operation: :put} do
           Cache.put(nil, "value", cache: cache)
         end
 
-      assert result == {:error, :invalid_key}
-      assert metadata.error == :invalid_key
+      assert result == {:error, {:invalid_field, :key, :cannot_be_nil}}
+      assert metadata.error == {:invalid_field, :key, :cannot_be_nil}
       assert metadata.operation == :put
     end
   end

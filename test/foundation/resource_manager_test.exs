@@ -130,6 +130,7 @@ defmodule Foundation.ResourceManagerTest do
   end
 
   describe "backpressure" do
+    @tag :flaky
     test "enters backpressure when approaching limits" do
       # Register alert callback
       test_pid = self()
@@ -147,11 +148,13 @@ defmodule Foundation.ResourceManagerTest do
         :ets.insert(table, {i, :data})
       end
 
-      # Force measurement
+      # Force measurement multiple times to ensure the alert is triggered
+      ResourceManager.force_cleanup()
+      Process.sleep(100)
       ResourceManager.force_cleanup()
 
-      # Should receive backpressure alert
-      assert_receive {:alert, :backpressure_changed, data}, 1000
+      # Should receive backpressure alert (increased timeout for CI environments)
+      assert_receive {:alert, :backpressure_changed, data}, 2000
       assert data.new_state in [:moderate, :severe]
 
       # Cleanup

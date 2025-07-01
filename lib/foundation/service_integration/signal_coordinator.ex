@@ -81,7 +81,8 @@ defmodule Foundation.ServiceIntegration.SignalCoordinator do
 
     # Create coordination mechanism for this specific signal
     coordination_ref = make_ref()
-    test_pid = self()
+    # The process waiting for signal completion
+    caller_pid = self()
     signal_id = Map.get(signal, :id, generate_signal_id())
 
     # Attach temporary telemetry handler for this specific signal
@@ -105,7 +106,7 @@ defmodule Foundation.ServiceIntegration.SignalCoordinator do
                 )
 
               send(
-                test_pid,
+                caller_pid,
                 {coordination_ref, :routing_complete,
                  %{
                    signal_id: signal_id,

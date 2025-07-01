@@ -9,6 +9,8 @@ defmodule Foundation.Infrastructure.Cache do
   use GenServer
   require Logger
   alias Foundation.Telemetry
+  require Foundation.ErrorHandling
+  alias Foundation.ErrorHandling
 
   @table_options [
     :set,
@@ -90,6 +92,7 @@ defmodule Foundation.Infrastructure.Cache do
     rescue
       ArgumentError ->
         emit_cache_event(:error, key, start_time, %{error: :cache_unavailable})
+        # Return default on cache unavailable
         default
     end
   end
@@ -116,14 +119,14 @@ defmodule Foundation.Infrastructure.Cache do
           emit_cache_event(:put, key, start_time, %{ttl: ttl})
           result
 
-        {:error, reason} = error ->
+        {:error, reason} ->
           emit_cache_event(:error, key, start_time, %{error: reason, operation: :put})
-          error
+          ErrorHandling.normalize_error({:error, reason})
       end
     rescue
-      _ ->
+      exception ->
         emit_cache_event(:error, key, start_time, %{error: :cache_unavailable, operation: :put})
-        {:error, :cache_unavailable}
+        ErrorHandling.exception_to_error(exception)
     end
   end
 
@@ -144,14 +147,14 @@ defmodule Foundation.Infrastructure.Cache do
           emit_cache_event(:delete, key, start_time, %{existed: existed})
           :ok
 
-        {:error, reason} = error ->
+        {:error, reason} ->
           emit_cache_event(:error, key, start_time, %{error: reason, operation: :delete})
-          error
+          ErrorHandling.normalize_error({:error, reason})
       end
     rescue
       ArgumentError ->
         emit_cache_event(:error, key, start_time, %{error: :cache_unavailable, operation: :delete})
-        {:error, :cache_unavailable}
+        ErrorHandling.service_unavailable_error(:cache)
     end
   end
 
@@ -180,13 +183,13 @@ defmodule Foundation.Infrastructure.Cache do
       :ok
     rescue
       ArgumentError ->
-        Telemetry.emit(
+        ErrorHandling.emit_telemetry_safe(
           [:foundation, :cache, :error],
           %{duration: System.monotonic_time() - start_time},
           %{cache: cache, error: :cache_unavailable, operation: :clear}
         )
 
-        {:error, :cache_unavailable}
+        ErrorHandling.service_unavailable_error(:cache)
     end
   end
 
@@ -206,7 +209,7 @@ defmodule Foundation.Infrastructure.Cache do
     end
 
     # Schedule periodic cleanup
-    cleanup_timer = 
+    cleanup_timer =
       if cleanup_interval != :infinity do
         schedule_cleanup(cleanup_interval)
       else
@@ -282,7 +285,8 @@ defmodule Foundation.Infrastructure.Cache do
     try do
       :ets.delete(state.table)
     rescue
-      ArgumentError -> :ok  # Table already deleted
+      # Table already deleted
+      ArgumentError -> :ok
     end
 
     :ok
@@ -303,7 +307,7 @@ defmodule Foundation.Infrastructure.Cache do
     String.to_atom("cache_#{:erlang.unique_integer([:positive])}")
   end
 
-  defp validate_key(nil), do: {:error, :invalid_key}
+  defp validate_key(nil), do: ErrorHandling.invalid_field_error(:key, :cannot_be_nil)
   defp validate_key(_key), do: :ok
 
   defp calculate_expiry(:infinity), do: :infinity
@@ -367,7 +371,7 @@ defmodule Foundation.Infrastructure.Cache do
   defp emit_cache_event(operation, key, start_time, metadata \\ %{}) do
     duration = System.monotonic_time() - start_time
 
-    Telemetry.emit(
+    ErrorHandling.emit_telemetry_safe(
       [:foundation, :cache, operation],
       %{duration: duration, timestamp: System.system_time()},
       Map.merge(metadata, %{key: key})
