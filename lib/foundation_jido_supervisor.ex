@@ -78,7 +78,7 @@ defmodule FoundationJidoSupervisor do
     # This prevents JidoSystem from trying to use Foundation services during shutdown
     # Use Application environment instead of Mix.env for runtime compatibility
     test_env? = Application.get_env(:foundation, :test_mode, false)
-    
+
     supervisor_flags = %{
       strategy: :rest_for_one,
       max_restarts: if(test_env?, do: 10, else: 3),

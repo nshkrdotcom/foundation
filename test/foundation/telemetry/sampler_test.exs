@@ -83,10 +83,13 @@ defmodule Foundation.Telemetry.SamplerTest do
       assert Enum.count(results, & &1) == 10
 
       # Wait for next window using Foundation.AsyncTestHelpers pattern
-      wait_for(fn ->
-        # Test if the rate limit window has reset by checking if sampling is allowed again
-        Sampler.should_sample?([:test, :rate_limited])
-      end, 2000)
+      wait_for(
+        fn ->
+          # Test if the rate limit window has reset by checking if sampling is allowed again
+          Sampler.should_sample?([:test, :rate_limited])
+        end,
+        2000
+      )
     end
   end
 
@@ -133,23 +136,28 @@ defmodule Foundation.Telemetry.SamplerTest do
 
       # Simulate high load deterministically - generate events rapidly without sleep
       # This creates a burst of events that should trigger adaptive rate adjustment
-      _sample_results = 
+      _sample_results =
         for _ <- 1..200 do
           Sampler.should_sample?([:test, :adaptive])
         end
 
       # Wait for the adjustment interval to process using deterministic pattern
-      wait_for(fn ->
-        stats = Sampler.get_stats()
-        case stats.event_stats[[:test, :adaptive]] do
-          %{sampling_rate_percent: rate} when is_number(rate) -> 
-            # Return the rate for verification
-            rate
-          _ -> 
-            # Not ready yet
-            nil
-        end
-      end, 2000)
+      wait_for(
+        fn ->
+          stats = Sampler.get_stats()
+
+          case stats.event_stats[[:test, :adaptive]] do
+            %{sampling_rate_percent: rate} when is_number(rate) ->
+              # Return the rate for verification
+              rate
+
+            _ ->
+              # Not ready yet
+              nil
+          end
+        end,
+        2000
+      )
 
       # Get final stats and verify adjustment happened
       stats = Sampler.get_stats()
@@ -160,7 +168,7 @@ defmodule Foundation.Telemetry.SamplerTest do
       assert is_number(event_stats.sampling_rate_percent)
       assert event_stats.sampling_rate_percent >= 0
       assert event_stats.sampling_rate_percent <= 100
-      
+
       # The key test: verify the sampling rate has been adjusted from the original 50%
       # (adaptive sampling should have changed it due to the burst of events)
       assert event_stats.sampling_rate_percent != 50.0

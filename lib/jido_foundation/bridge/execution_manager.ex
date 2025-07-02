@@ -172,8 +172,10 @@ defmodule JidoFoundation.Bridge.ExecutionManager do
           rescue
             # Fallback to direct Task.async_stream if TaskPoolManager not available
             e ->
-              Logger.warning("TaskPoolManager not available, falling back to Task.async_stream: #{inspect(e)}")
-              
+              Logger.warning(
+                "TaskPoolManager not available, falling back to Task.async_stream: #{inspect(e)}"
+              )
+
               results =
                 agent_pids
                 |> Task.async_stream(

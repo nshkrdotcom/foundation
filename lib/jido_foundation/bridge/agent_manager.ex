@@ -28,7 +28,7 @@ defmodule JidoFoundation.Bridge.AgentManager do
   def register(agent_pid, opts \\ []) when is_pid(agent_pid) do
     capabilities = Keyword.get(opts, :capabilities, [])
     metadata = build_agent_metadata(agent_pid, capabilities, opts)
-    registry = Keyword.get(opts, :registry)
+    registry = extract_registry(opts)
 
     # Use agent PID as the key for simplicity
     case Foundation.register(agent_pid, agent_pid, metadata, registry) do
@@ -36,10 +36,22 @@ defmodule JidoFoundation.Bridge.AgentManager do
         Logger.info("Registered Jido agent #{inspect(agent_pid)} with Foundation")
 
         unless Keyword.get(opts, :skip_monitoring, false) do
-          setup_monitoring(agent_pid, opts)
-        end
+          case setup_monitoring(agent_pid, opts) do
+            :ok ->
+              :ok
 
-        :ok
+            {:error, reason} = error ->
+              # Monitoring failed, unregister the agent to maintain consistency
+              Logger.warning(
+                "Monitoring setup failed for #{inspect(agent_pid)}: #{inspect(reason)}, unregistering agent"
+              )
+
+              Foundation.unregister(agent_pid, registry)
+              error
+          end
+        else
+          :ok
+        end
 
       {:error, reason} = error ->
         Logger.error("Failed to register Jido agent: #{inspect(reason)}")
@@ -51,7 +63,7 @@ defmodule JidoFoundation.Bridge.AgentManager do
   Unregisters a Jido agent from Foundation.
   """
   def unregister(agent_pid, opts \\ []) when is_pid(agent_pid) do
-    registry = Keyword.get(opts, :registry)
+    registry = extract_registry(opts)
     Foundation.unregister(agent_pid, registry)
   end
 
@@ -59,7 +71,7 @@ defmodule JidoFoundation.Bridge.AgentManager do
   Updates metadata for a registered Jido agent.
   """
   def update_metadata(agent_pid, updates, opts \\ []) when is_map(updates) do
-    registry = Keyword.get(opts, :registry)
+    registry = extract_registry(opts)
 
     case Foundation.lookup(agent_pid, registry) do
       {:ok, {^agent_pid, current_metadata}} ->
@@ -79,17 +91,18 @@ defmodule JidoFoundation.Bridge.AgentManager do
       {:ok, agents} = find_by_capability(:planning)
   """
   def find_by_capability(capability, opts \\ []) do
-    registry = Keyword.get(opts, :registry)
+    registry = extract_registry(opts)
 
-    case Foundation.find_by_attribute(:capability, capability, registry) do
-      {:ok, results} ->
-        # Filter for Jido agents only
-        jido_agents =
-          Enum.filter(results, fn {_key, _pid, metadata} ->
-            metadata[:framework] == :jido
+    # Get all Jido agents first, then filter by capability membership
+    case Foundation.query([{[:framework], :jido, :eq}], registry) do
+      {:ok, agents} ->
+        # Filter agents that have the capability in their capability list
+        matching_agents =
+          Enum.filter(agents, fn {_key, _pid, metadata} ->
+            capability in Map.get(metadata, :capability, [])
           end)
 
-        {:ok, jido_agents}
+        {:ok, matching_agents}
 
       error ->
         error
@@ -107,12 +120,33 @@ defmodule JidoFoundation.Bridge.AgentManager do
       ])
   """
   def find_agents(criteria, opts \\ []) do
-    registry = Keyword.get(opts, :registry)
+    registry = extract_registry(opts)
 
-    # Add Jido framework filter
-    jido_criteria = [{[:framework], :jido, :eq} | criteria]
+    # Check if we have capability criteria that need special handling
+    {capability_criteria, other_criteria} =
+      Enum.split_with(criteria, fn
+        {[:capability], _value, :eq} -> true
+        _ -> false
+      end)
 
-    Foundation.query(jido_criteria, registry)
+    # Start with Jido framework filter and other non-capability criteria
+    base_criteria = [{[:framework], :jido, :eq} | other_criteria]
+
+    case Foundation.query(base_criteria, registry) do
+      {:ok, agents} ->
+        # Apply capability filters manually for list membership
+        filtered_agents =
+          Enum.reduce(capability_criteria, agents, fn {[:capability], capability, :eq}, acc ->
+            Enum.filter(acc, fn {_key, _pid, metadata} ->
+              capability in Map.get(metadata, :capability, [])
+            end)
+          end)
+
+        {:ok, filtered_agents}
+
+      error ->
+        error
+    end
   end
 
   @doc """
@@ -152,7 +186,7 @@ defmodule JidoFoundation.Bridge.AgentManager do
       )
   """
   def find_coordinating_agents(criteria, opts \\ []) do
-    registry = Keyword.get(opts, :registry)
+    registry = extract_registry(opts)
     max_agents = Keyword.get(opts, :max_agents, 10)
     coordination_type = Keyword.get(opts, :coordination_type)
 
@@ -214,6 +248,15 @@ defmodule JidoFoundation.Bridge.AgentManager do
   end
 
   # Private functions
+
+  # Extract registry from either :registry or :supervision_tree option
+  defp extract_registry(opts) do
+    case {Keyword.get(opts, :registry), Keyword.get(opts, :supervision_tree)} do
+      {nil, %{registry: registry}} -> registry
+      {registry, _} -> registry
+      {nil, nil} -> nil
+    end
+  end
 
   defp build_agent_metadata(_agent_pid, capabilities, opts) do
     base_metadata = %{
