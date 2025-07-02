@@ -719,7 +719,7 @@ defmodule Foundation.OTPCleanupStressTest do
       
       try do
         # Create many agents with large state
-        large_agents = for i <- 1..1000 do
+        _large_agents = for i <- 1..1000 do
           task = Task.async(fn ->
             # Hold large amount of data
             _large_data = for _j <- 1..1000, do: :crypto.strong_rand_bytes(1000)

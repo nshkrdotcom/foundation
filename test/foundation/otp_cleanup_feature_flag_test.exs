@@ -531,7 +531,7 @@ defmodule Foundation.OTPCleanupFeatureFlagTest do
       Task.await(flag_changer, 30_000)
       
       # Stop operations
-      send(operation_pid, :stop)
+      Task.shutdown(operation_task, :brutal_kill)
       
       # System should still be functional
       Registry.register(nil, :post_concurrent_test, self())

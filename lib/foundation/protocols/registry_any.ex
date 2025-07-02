@@ -14,11 +14,31 @@ defimpl Foundation.Registry, for: Any do
   Registers a process using either process dictionary or ETS storage.
   """
   def register(_impl, key, pid, metadata \\ %{}) do
-    if FeatureFlags.enabled?(:use_ets_agent_registry) do
+    start_time = System.monotonic_time()
+    
+    result = if FeatureFlags.enabled?(:use_ets_agent_registry) do
       register_ets(key, pid, metadata)
     else
       register_legacy(key, pid, metadata)
     end
+    
+    # Emit telemetry event
+    end_time = System.monotonic_time()
+    duration = end_time - start_time
+    
+    :telemetry.execute(
+      [:foundation, :registry, :register],
+      %{duration: duration, count: 1},
+      %{
+        key: key,
+        pid: pid,
+        metadata: metadata,
+        implementation: if(FeatureFlags.enabled?(:use_ets_agent_registry), do: :ets, else: :legacy),
+        result: result
+      }
+    )
+    
+    result
   end
 
   # New ETS implementation

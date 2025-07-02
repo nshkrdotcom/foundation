@@ -48,7 +48,7 @@ defmodule Foundation.MixProject do
 
   def application do
     [
-      extra_applications: [:logger, :crypto, :fuse],
+      extra_applications: [:logger, :crypto, :fuse, :telemetry],
       mod: {Foundation.Application, []}
     ]
   end

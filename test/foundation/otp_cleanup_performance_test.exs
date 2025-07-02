@@ -534,8 +534,8 @@ defmodule Foundation.OTPCleanupPerformanceTest do
         
         # Force garbage collection between rounds
         :erlang.garbage_collect()
-        # Use deterministic waiting instead of sleep
-        wait_until(fn -> Process.alive?(agent_pid) end, 1000)
+        # Brief pause to allow cleanup
+        :timer.sleep(10)
       end
       
       final_memory = :erlang.memory(:total)

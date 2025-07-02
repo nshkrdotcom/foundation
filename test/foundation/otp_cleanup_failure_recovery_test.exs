@@ -33,7 +33,7 @@ defmodule Foundation.OTPCleanupFailureRecoveryTest do
       
       case Code.ensure_loaded?(Foundation.Protocols.RegistryETS) do
         {:module, _} ->
-          {:ok, registry_pid} = Foundation.Protocols.RegistryETS.start_link()
+          {:ok, _registry_pid} = Foundation.Protocols.RegistryETS.start_link()
           
           # Register some agents
           agents = for i <- 1..10 do

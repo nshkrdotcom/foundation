@@ -788,6 +788,7 @@ defmodule Foundation.OTPCleanupObservabilityTest do
             [:foundation, :error_context, _] ->
               # Context events should have workflow info
               # (if context was set when event occurred)
+              :ok
               
             [:foundation, :telemetry, :span, _] ->
               # Span events should have span info

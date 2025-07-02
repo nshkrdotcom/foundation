@@ -1,4 +1,7 @@
 # Configure Foundation for testing environment
+# Start required applications first
+{:ok, _} = Application.ensure_all_started(:telemetry)
+
 # Start MABEAM.AgentRegistry and set PID in config
 {:ok, registry_pid} = MABEAM.AgentRegistry.start_link(name: MABEAM.AgentRegistry, id: :test)
 Application.put_env(:foundation, :registry_impl, registry_pid)

@@ -387,6 +387,14 @@ defmodule Foundation.ErrorContext do
     }
   end
 
+  @spec enhance_error(Error.t(), map()) :: Error.t()
+  def enhance_error(%Error{} = error, context) when is_map(context) do
+    # Enhance existing error with simple map context
+    enhanced_context = Map.merge(error.context, context)
+
+    %{error | context: enhanced_context}
+  end
+
   @spec enhance_error({:error, Error.t()}, t()) :: {:error, Error.t()}
   def enhance_error({:error, %Error{} = error}, %__MODULE__{} = context) do
     {:error, enhance_error(error, context)}
