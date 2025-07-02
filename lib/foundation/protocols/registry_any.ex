@@ -68,11 +68,31 @@ defimpl Foundation.Registry, for: Any do
   Looks up a process by key using either process dictionary or ETS storage.
   """
   def lookup(_impl, key) do
-    if FeatureFlags.enabled?(:use_ets_agent_registry) do
+    start_time = :erlang.monotonic_time(:microsecond)
+    
+    result = if FeatureFlags.enabled?(:use_ets_agent_registry) do
       lookup_ets(key)
     else
       lookup_legacy(key)
     end
+    
+    # Emit telemetry event
+    end_time = :erlang.monotonic_time(:microsecond)
+    duration = end_time - start_time
+    
+    implementation_type = if FeatureFlags.enabled?(:use_ets_agent_registry), do: :ets, else: :legacy
+    status = case result do
+      {:ok, _} -> :success
+      :error -> :not_found
+    end
+    
+    :telemetry.execute(
+      [:foundation, :registry, :lookup],
+      %{duration: duration},
+      %{key: key, result: status, implementation: implementation_type}
+    )
+    
+    result
   end
 
   defp lookup_ets(key) do
