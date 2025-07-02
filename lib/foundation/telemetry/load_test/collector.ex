@@ -163,7 +163,7 @@ defmodule Foundation.Telemetry.LoadTest.Collector do
     # Detach telemetry handlers in a separate process to avoid blocking
     handlers = state.telemetry_handlers
 
-    spawn(fn ->
+    Task.start(fn ->
       Enum.each(handlers, fn handler ->
         try do
           :telemetry.detach(handler)
