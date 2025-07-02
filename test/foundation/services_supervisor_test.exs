@@ -19,7 +19,9 @@ defmodule Foundation.Services.SupervisorTest do
         name: :"#{unique_name}_dependency_manager",
         table_name: :"#{unique_name}_dependency_table"
       ],
-      health_checker: [name: :"#{unique_name}_health_checker"]
+      health_checker: [name: :"#{unique_name}_health_checker"],
+      # Don't include OTP cleanup services in tests (they're singletons)
+      include_otp_cleanup: false
     ]
   end
 
@@ -39,7 +41,7 @@ defmodule Foundation.Services.SupervisorTest do
       assert is_list(children)
 
       # Should have 5 services: MonitorManager, RetryService, ConnectionManager, RateLimiter, SignalBus
-      # 5 Foundation services + 2 SIA services
+      # 5 Foundation services + 2 SIA services = 7 total
       assert length(children) == 7
 
       # Clean up

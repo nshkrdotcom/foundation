@@ -2,16 +2,35 @@ defimpl Foundation.Registry, for: Any do
   @moduledoc """
   Fallback implementation for Foundation.Registry protocol.
 
-  This implementation uses the process dictionary for storage,
-  making it suitable for testing and simple use cases.
+  This implementation can use either process dictionary (legacy) or ETS (new)
+  based on feature flags for gradual migration.
   """
 
   require Logger
+  alias Foundation.FeatureFlags
+  alias Foundation.Protocols.RegistryETS
 
   @doc """
-  Registers a process using process dictionary storage.
+  Registers a process using either process dictionary or ETS storage.
   """
   def register(_impl, key, pid, metadata \\ %{}) do
+    if FeatureFlags.enabled?(:use_ets_agent_registry) do
+      register_ets(key, pid, metadata)
+    else
+      register_legacy(key, pid, metadata)
+    end
+  end
+
+  # New ETS implementation
+  defp register_ets(key, pid, metadata) do
+    case RegistryETS.register_agent(key, pid, metadata) do
+      :ok -> :ok
+      {:error, _} = error -> error
+    end
+  end
+
+  # Legacy process dictionary implementation
+  defp register_legacy(key, pid, metadata) do
     agents = Process.get(:registered_agents, %{})
 
     case Map.has_key?(agents, key) do
@@ -26,9 +45,24 @@ defimpl Foundation.Registry, for: Any do
   end
 
   @doc """
-  Looks up a process by key using process dictionary storage.
+  Looks up a process by key using either process dictionary or ETS storage.
   """
   def lookup(_impl, key) do
+    if FeatureFlags.enabled?(:use_ets_agent_registry) do
+      lookup_ets(key)
+    else
+      lookup_legacy(key)
+    end
+  end
+
+  defp lookup_ets(key) do
+    case RegistryETS.get_agent_with_metadata(key) do
+      {:ok, {pid, metadata}} -> {:ok, {pid, metadata}}
+      {:error, :not_found} -> :error
+    end
+  end
+
+  defp lookup_legacy(key) do
     agents = Process.get(:registered_agents, %{})
 
     case Map.get(agents, key) do
@@ -38,9 +72,34 @@ defimpl Foundation.Registry, for: Any do
   end
 
   @doc """
-  Finds processes by attribute using process dictionary storage.
+  Finds processes by attribute using either process dictionary or ETS storage.
   """
   def find_by_attribute(_impl, attribute, value) do
+    if FeatureFlags.enabled?(:use_ets_agent_registry) do
+      find_by_attribute_ets(attribute, value)
+    else
+      find_by_attribute_legacy(attribute, value)
+    end
+  end
+
+  defp find_by_attribute_ets(attribute, value) do
+    results =
+      RegistryETS.list_agents()
+      |> Enum.map(fn {key, pid} ->
+        case RegistryETS.get_agent_with_metadata(key) do
+          {:ok, {^pid, metadata}} -> {key, pid, metadata}
+          _ -> nil
+        end
+      end)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.filter(fn {_key, _pid, metadata} ->
+        Map.get(metadata, attribute) == value
+      end)
+
+    {:ok, results}
+  end
+
+  defp find_by_attribute_legacy(attribute, value) do
     agents = Process.get(:registered_agents, %{})
 
     results =
@@ -54,9 +113,37 @@ defimpl Foundation.Registry, for: Any do
   end
 
   @doc """
-  Performs a query using process dictionary storage.
+  Performs a query using either process dictionary or ETS storage.
   """
   def query(_impl, criteria) when is_list(criteria) do
+    if FeatureFlags.enabled?(:use_ets_agent_registry) do
+      query_ets(criteria)
+    else
+      query_legacy(criteria)
+    end
+  end
+
+  defp query_ets(criteria) do
+    results =
+      RegistryETS.list_agents()
+      |> Enum.map(fn {key, pid} ->
+        case RegistryETS.get_agent_with_metadata(key) do
+          {:ok, {^pid, metadata}} -> {key, pid, metadata}
+          _ -> nil
+        end
+      end)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.filter(fn {_key, _pid, metadata} ->
+        Enum.all?(criteria, fn {path, value, op} ->
+          actual_value = get_nested_value(metadata, path)
+          apply_operation(actual_value, value, op)
+        end)
+      end)
+
+    {:ok, results}
+  end
+
+  defp query_legacy(criteria) do
     agents = Process.get(:registered_agents, %{})
 
     results =
@@ -80,9 +167,29 @@ defimpl Foundation.Registry, for: Any do
   end
 
   @doc """
-  Lists all registered processes using process dictionary storage.
+  Lists all registered processes using either process dictionary or ETS storage.
   """
   def list_all(_impl, filter_fn \\ nil) do
+    if FeatureFlags.enabled?(:use_ets_agent_registry) do
+      list_all_ets(filter_fn)
+    else
+      list_all_legacy(filter_fn)
+    end
+  end
+
+  defp list_all_ets(filter_fn) do
+    RegistryETS.list_agents()
+    |> Enum.map(fn {key, pid} ->
+      case RegistryETS.get_agent_with_metadata(key) do
+        {:ok, {^pid, metadata}} -> {key, pid, metadata}
+        _ -> nil
+      end
+    end)
+    |> Enum.reject(&is_nil/1)
+    |> apply_filter(filter_fn)
+  end
+
+  defp list_all_legacy(filter_fn) do
     agents = Process.get(:registered_agents, %{})
 
     results =
@@ -94,9 +201,21 @@ defimpl Foundation.Registry, for: Any do
   end
 
   @doc """
-  Updates metadata for a process using process dictionary storage.
+  Updates metadata for a process using either process dictionary or ETS storage.
   """
   def update_metadata(_impl, key, new_metadata) do
+    if FeatureFlags.enabled?(:use_ets_agent_registry) do
+      update_metadata_ets(key, new_metadata)
+    else
+      update_metadata_legacy(key, new_metadata)
+    end
+  end
+
+  defp update_metadata_ets(key, new_metadata) do
+    RegistryETS.update_metadata(key, new_metadata)
+  end
+
+  defp update_metadata_legacy(key, new_metadata) do
     agents = Process.get(:registered_agents, %{})
 
     case Map.get(agents, key) do
@@ -111,9 +230,21 @@ defimpl Foundation.Registry, for: Any do
   end
 
   @doc """
-  Unregisters a process using process dictionary storage.
+  Unregisters a process using either process dictionary or ETS storage.
   """
   def unregister(_impl, key) do
+    if FeatureFlags.enabled?(:use_ets_agent_registry) do
+      unregister_ets(key)
+    else
+      unregister_legacy(key)
+    end
+  end
+
+  defp unregister_ets(key) do
+    RegistryETS.unregister_agent(key)
+  end
+
+  defp unregister_legacy(key) do
     agents = Process.get(:registered_agents, %{})
 
     case Map.has_key?(agents, key) do
@@ -128,9 +259,22 @@ defimpl Foundation.Registry, for: Any do
   end
 
   @doc """
-  Returns the count of registered processes using process dictionary storage.
+  Returns the count of registered processes using either process dictionary or ETS storage.
   """
   def count(_impl) do
+    if FeatureFlags.enabled?(:use_ets_agent_registry) do
+      count_ets()
+    else
+      count_legacy()
+    end
+  end
+
+  defp count_ets do
+    count = length(RegistryETS.list_agents())
+    {:ok, count}
+  end
+
+  defp count_legacy do
     agents = Process.get(:registered_agents, %{})
     {:ok, map_size(agents)}
   end
@@ -138,7 +282,27 @@ defimpl Foundation.Registry, for: Any do
   @doc """
   Selects entries using a basic filter (simplified match spec).
   """
-  def select(_impl, _match_spec) do
+  def select(_impl, match_spec) do
+    if FeatureFlags.enabled?(:use_ets_agent_registry) do
+      select_ets(match_spec)
+    else
+      select_legacy(match_spec)
+    end
+  end
+
+  defp select_ets(_match_spec) do
+    # For ETS implementation, return all entries (simplified)
+    RegistryETS.list_agents()
+    |> Enum.map(fn {key, pid} ->
+      case RegistryETS.get_agent_with_metadata(key) do
+        {:ok, {^pid, metadata}} -> {key, pid, metadata}
+        _ -> nil
+      end
+    end)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp select_legacy(_match_spec) do
     # For the Any implementation, we'll use a simplified approach
     # since ETS match specs are complex to implement generically
     agents = Process.get(:registered_agents, %{})

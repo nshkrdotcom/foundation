@@ -81,7 +81,7 @@ defmodule Foundation.Services.Supervisor do
         {Foundation.Services.RateLimiter, service_opts[:rate_limiter] || []},
         # Signal service: Jido Signal Bus for event routing
         {Foundation.Services.SignalBus, service_opts[:signal_bus] || []}
-      ] ++ get_sia_children(service_opts)
+      ] ++ get_otp_cleanup_children(service_opts) ++ get_sia_children(service_opts)
 
     # Use one_for_one strategy - services can fail independently
     supervisor_opts = [
@@ -115,6 +115,26 @@ defmodule Foundation.Services.Supervisor do
   end
 
   ## Private Functions
+
+  # Gets OTP cleanup children (singleton services)
+  # Only include if not in test mode or explicitly requested
+  defp get_otp_cleanup_children(service_opts) do
+    # Skip these in test mode unless explicitly included
+    if Keyword.get(
+         service_opts,
+         :include_otp_cleanup,
+         !Application.get_env(:foundation, :test_mode, false)
+       ) do
+      [
+        # Feature flags service for gradual rollout
+        {Foundation.FeatureFlags, service_opts[:feature_flags] || []},
+        # ETS-based agent registry (OTP cleanup phase)
+        {Foundation.Protocols.RegistryETS, service_opts[:registry_ets] || []}
+      ]
+    else
+      []
+    end
+  end
 
   # Gets SIA (Service Integration Architecture) children based on module availability.
   # Gracefully handles cases where SIA modules may not be loaded.
