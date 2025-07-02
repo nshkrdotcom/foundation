@@ -129,14 +129,14 @@ defmodule Foundation.ErrorContext do
   end
 
   @doc """
-  Execute a function in a new process with inherited error context.
-  Useful for spawning processes that should maintain context from parent.
+  Execute a function in a new task with inherited error context.
+  Uses Task.start/1 for proper OTP supervision compliance.
   """
-  @spec spawn_with_context((-> term())) :: pid()
+  @spec spawn_with_context((-> term())) :: {:ok, pid()} | {:error, term()}
   def spawn_with_context(fun) when is_function(fun, 0) do
     context = get_context()
 
-    spawn(fn ->
+    Task.start(fn ->
       if context do
         set_context(context)
       end
@@ -146,13 +146,14 @@ defmodule Foundation.ErrorContext do
   end
 
   @doc """
-  Execute a function in a new linked process with inherited error context.
+  Execute a function in a new supervised task with inherited error context.
+  Uses Task.start_link/1 for proper OTP supervision and linking.
   """
-  @spec spawn_link_with_context((-> term())) :: pid()
+  @spec spawn_link_with_context((-> term())) :: {:ok, pid()} | {:error, term()}
   def spawn_link_with_context(fun) when is_function(fun, 0) do
     context = get_context()
 
-    spawn_link(fn ->
+    Task.start_link(fn ->
       if context do
         set_context(context)
       end
