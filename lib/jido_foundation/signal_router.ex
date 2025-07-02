@@ -47,6 +47,7 @@ defmodule JidoFoundation.SignalRouter do
 
   use GenServer
   require Logger
+  alias Foundation.SupervisedSend
 
   defstruct [
     :subscriptions,
@@ -377,8 +378,17 @@ defmodule JidoFoundation.SignalRouter do
           # Check mailbox size for backpressure
           case check_backpressure(handler_pid, backpressure_config) do
             :ok ->
-              send(handler_pid, {:routed_signal, signal_type, measurements, metadata})
-              :ok
+              # Use supervised send for reliable signal delivery
+              case SupervisedSend.send_supervised(
+                handler_pid,
+                {:routed_signal, signal_type, measurements, metadata},
+                timeout: 1000,
+                on_error: :log,
+                metadata: %{signal_type: signal_type, handler: handler_pid}
+              ) do
+                :ok -> :ok
+                {:error, reason} -> {:drop, {:send_failed, reason}}
+              end
 
             {:drop, reason} ->
               Logger.warning(

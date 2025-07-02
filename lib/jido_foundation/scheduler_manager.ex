@@ -48,6 +48,7 @@ defmodule JidoFoundation.SchedulerManager do
 
   use GenServer
   require Logger
+  alias Foundation.SupervisedSend
 
   defstruct [
     # %{agent_pid => %{schedule_id => %{timer_ref, interval, message, last_run}}}
@@ -382,10 +383,33 @@ defmodule JidoFoundation.SchedulerManager do
         # Check if agent is still alive
         if Process.alive?(agent_pid) do
           try do
-            # Send the scheduled message to the agent
-            send(agent_pid, schedule_info.message)
+            # Send the scheduled message to the agent with supervision
+            result = SupervisedSend.send_supervised(
+              agent_pid,
+              schedule_info.message,
+              timeout: 10_000,
+              retries: schedule_info.retry_count || 1,
+              on_error: :log,
+              metadata: %{
+                schedule_id: schedule_id,
+                scheduled_at: DateTime.utc_now(),
+                message_type: schedule_info.message
+              }
+            )
+            
+            # Log errors if delivery failed
+            case result do
+              {:error, reason} ->
+                Logger.error("Scheduled message delivery failed",
+                  agent_pid: inspect(agent_pid),
+                  schedule_id: schedule_id,
+                  reason: reason
+                )
+              :ok ->
+                :ok
+            end
 
-            # Update last run timestamp
+            # Update last run timestamp regardless of success/failure
             updated_schedule_info = %{schedule_info | last_run: DateTime.utc_now()}
 
             # Schedule next execution

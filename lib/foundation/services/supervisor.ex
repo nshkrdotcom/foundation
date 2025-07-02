@@ -11,6 +11,7 @@ defmodule Foundation.Services.Supervisor do
   The services supervised by this module form the service layer:
   ```
   Foundation.Services.Supervisor
+  ├── Foundation.MonitorManager
   ├── Foundation.Services.RetryService
   ├── Foundation.Services.ConnectionManager
   ├── Foundation.Services.RateLimiter
@@ -70,6 +71,8 @@ defmodule Foundation.Services.Supervisor do
 
     children =
       [
+        # OTP Infrastructure: Monitor manager for leak prevention
+        {Foundation.MonitorManager, service_opts[:monitor_manager] || []},
         # Core service: Retry service for resilient operations
         {Foundation.Services.RetryService, service_opts[:retry_service] || []},
         # Infrastructure service: HTTP connection manager

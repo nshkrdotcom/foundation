@@ -107,12 +107,13 @@ defmodule Foundation.Services.SupervisorTest do
       # Test using the existing Foundation.Services.Supervisor
       services = ServicesSupervisor.which_services()
       assert is_list(services)
+      assert Foundation.MonitorManager in services
       assert Foundation.Services.RetryService in services
       assert Foundation.Services.ConnectionManager in services
       assert Foundation.Services.RateLimiter in services
       assert Foundation.Services.SignalBus in services
-      # 4 Foundation services + 2 SIA services
-      assert length(services) == 6
+      # 5 Foundation services (including MonitorManager) + 2 SIA services
+      assert length(services) == 7
     end
 
     test "validates service_running? checks service status" do

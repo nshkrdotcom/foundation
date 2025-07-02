@@ -42,6 +42,7 @@ defmodule JidoFoundation.CoordinationManager do
 
   use GenServer
   require Logger
+  alias Foundation.SupervisedSend
 
   defstruct [
     # %{pid() => %{monitor_ref: reference(), last_seen: DateTime.t()}}
@@ -425,12 +426,18 @@ defmodule JidoFoundation.CoordinationManager do
         catch
           :exit, {:timeout, _} ->
             Logger.debug(
-              "GenServer call timed out, falling back to send for #{inspect(receiver_pid)}"
+              "GenServer call timed out, falling back to supervised send for #{inspect(receiver_pid)}"
             )
 
-            # Fall back to regular send for compatibility
-            send(receiver_pid, message)
-            :ok
+            # Fall back to supervised send for reliability
+            SupervisedSend.send_supervised(
+              receiver_pid, 
+              message,
+              timeout: 5000,
+              retries: 1,
+              on_error: :log,
+              metadata: %{fallback_reason: :timeout}
+            )
 
           :exit, {:noproc, _} ->
             {:error, :receiver_not_found}
@@ -439,10 +446,16 @@ defmodule JidoFoundation.CoordinationManager do
             {:error, :receiver_terminated}
 
           :exit, reason ->
-            Logger.debug("GenServer call failed: #{inspect(reason)}, falling back to send")
-            # Fall back to regular send for agents that don't implement handle_call
-            send(receiver_pid, message)
-            :ok
+            Logger.debug("GenServer call failed: #{inspect(reason)}, falling back to supervised send")
+            # Fall back to supervised send for agents that don't implement handle_call
+            SupervisedSend.send_supervised(
+              receiver_pid, 
+              message,
+              timeout: 5000,
+              retries: 1,
+              on_error: :log,
+              metadata: %{fallback_reason: reason}
+            )
         end
 
       case result do

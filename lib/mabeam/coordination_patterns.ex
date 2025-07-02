@@ -23,7 +23,7 @@ defmodule MABEAM.CoordinationPatterns do
   """
 
   require Logger
-  alias Foundation.{Coordination, Registry}
+  alias Foundation.{Coordination, Registry, SupervisedSend}
 
   # Dialyzer annotations for intentional no-return functions
   @dialyzer {:no_return, execute_distributed: 2}
@@ -378,12 +378,37 @@ defmodule MABEAM.CoordinationPatterns do
         :members -> get_hierarchy_members(hierarchy_id)
       end
 
-    # Broadcast to selected agents
-    Enum.each(agents, fn {_id, pid, _meta} ->
-      send(pid, {:hierarchy_broadcast, hierarchy_id, message})
-    end)
-
-    :ok
+    # Broadcast to selected agents with delivery tracking
+    case SupervisedSend.broadcast_supervised(
+      agents,
+      {:hierarchy_broadcast, hierarchy_id, message},
+      strategy: :best_effort,
+      timeout: 2000,
+      metadata: %{hierarchy_id: hierarchy_id}
+    ) do
+      {:ok, results} ->
+        # Log any failures for monitoring
+        failed = Enum.filter(results, fn {_id, result, _} -> 
+          result != :ok 
+        end)
+        
+        if length(failed) > 0 do
+          Logger.warning("Hierarchy broadcast partial failure",
+            hierarchy_id: hierarchy_id,
+            failed_count: length(failed),
+            total_count: length(agents)
+          )
+        end
+        
+        :ok
+        
+      error ->
+        Logger.error("Hierarchy broadcast failed completely",
+          hierarchy_id: hierarchy_id,
+          error: error
+        )
+        error
+    end
   end
 
   # Private helper functions
@@ -615,9 +640,23 @@ defmodule MABEAM.CoordinationPatterns do
   end
 
   defp notify_agents(agents, result) do
-    Enum.each(agents, fn {_id, pid, _meta} ->
-      send(pid, {:consensus_result, result})
-    end)
+    # Use supervised broadcast for consensus results - all must receive
+    case SupervisedSend.broadcast_supervised(
+      agents,
+      {:consensus_result, result},
+      strategy: :all_or_nothing,  # All must receive consensus result
+      timeout: 5000
+    ) do
+      {:ok, _results} ->
+        :ok
+        
+      error ->
+        Logger.error("Failed to notify agents of consensus result",
+          result: result,
+          error: error
+        )
+        error
+    end
   end
 
   defp monitor_barrier(barrier_id, _expected_count, timeout) do

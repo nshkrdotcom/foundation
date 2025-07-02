@@ -105,6 +105,7 @@ defmodule JidoSystem.Agents.CoordinatorAgent do
     ]
 
   require Logger
+  alias Foundation.SupervisedSend
   alias JidoFoundation.Bridge
   alias JidoSystem.Actions.DistributeTask
 
@@ -381,10 +382,22 @@ defmodule JidoSystem.Agents.CoordinatorAgent do
         {:error, :workflow_not_found}
 
       workflow ->
-        # Cancel any running tasks
+        # Cancel any running tasks with supervised delivery
         Enum.each(workflow.assigned_agents, fn {agent_id, _} ->
           case Map.get(agent.state.agent_pool, agent_id) do
-            %{pid: pid} -> send(pid, {:cancel_task, execution_id})
+            %{pid: pid} -> 
+              SupervisedSend.send_supervised(
+                pid, 
+                {:cancel_task, execution_id},
+                timeout: 5000,
+                retries: 1,
+                on_error: :log,
+                metadata: %{
+                  agent_id: agent_id,
+                  execution_id: execution_id,
+                  action: :cancel_task
+                }
+              )
             _ -> :ok
           end
         end)
