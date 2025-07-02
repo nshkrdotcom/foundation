@@ -67,10 +67,17 @@ defmodule JidoFoundation.CoordinationManager do
 
   @doc """
   Starts the coordination manager GenServer.
+
+  ## Options
+
+  - `:name` - Process name (default: __MODULE__)
+  - `:registry` - Registry to register with for test isolation
   """
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) do
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+    name = Keyword.get(opts, :name, __MODULE__)
+    registry = Keyword.get(opts, :registry, nil)
+    GenServer.start_link(__MODULE__, {opts, registry}, name: name)
   end
 
   @doc """
@@ -172,9 +179,20 @@ defmodule JidoFoundation.CoordinationManager do
   # GenServer implementation
 
   @impl true
-  def init(_opts) do
+  def init({_opts, registry}) do
     # Set up process monitoring for itself
     Process.flag(:trap_exit, true)
+
+    # Register with test registry if provided
+    if registry do
+      case Registry.register(registry, {:service, __MODULE__}, %{test_instance: true}) do
+        {:ok, _} ->
+          Logger.debug("CoordinationManager registered with test registry #{inspect(registry)}")
+
+        {:error, reason} ->
+          Logger.warning("Failed to register with test registry: #{inspect(reason)}")
+      end
+    end
 
     state = %__MODULE__{
       monitored_processes: %{},
