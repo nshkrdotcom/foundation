@@ -151,7 +151,7 @@ jobs:
 
     # Step: Run Credo for code quality checks
     - name: Run Credo
-      run: mix credo --config-name with_tests
+      run: mix credo
 
     # Step: Check OTP compliance - ban dangerous patterns
     - name: Check OTP compliance
