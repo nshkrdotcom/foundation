@@ -533,6 +533,7 @@ defmodule Foundation.Services.RateLimiter do
         case :ets.insert_new(:rate_limit_buckets, {bucket_key, 1}) do
           true ->
             {:allow, 1}
+
           false ->
             # Race condition: another process created it, retry
             check_and_increment_rate_limit(limiter_key, limiter_config, current_time)
@@ -548,7 +549,7 @@ defmodule Foundation.Services.RateLimiter do
           try do
             # Atomic increment only if under limit
             new_count = :ets.update_counter(:rate_limit_buckets, bucket_key, {2, 1})
-            
+
             if new_count <= limiter_config.limit do
               {:allow, new_count}
             else

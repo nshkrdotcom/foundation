@@ -16,7 +16,12 @@ defmodule JidoFoundation.SimpleValidationTest do
 
   describe "Basic service availability" do
     test "All Foundation services are running and registered", %{supervision_tree: sup_tree} do
-      service_names = [:task_pool_manager, :system_command_manager, :coordination_manager, :scheduler_manager]
+      service_names = [
+        :task_pool_manager,
+        :system_command_manager,
+        :coordination_manager,
+        :scheduler_manager
+      ]
 
       for service_name <- service_names do
         {:ok, pid} = get_service(sup_tree, service_name)
@@ -36,20 +41,28 @@ defmodule JidoFoundation.SimpleValidationTest do
       assert is_map(stats)
 
       # Create a pool for testing in isolated environment
-      pool_result = ServiceDiscovery.call_service(sup_tree, TaskPoolManager, :create_pool, [:general, %{max_concurrency: 4, timeout: 5000}])
+      pool_result =
+        ServiceDiscovery.call_service(sup_tree, TaskPoolManager, :create_pool, [
+          :general,
+          %{max_concurrency: 4, timeout: 5000}
+        ])
+
       assert pool_result == :ok
 
       # Test pool stats
-      {:ok, pool_stats} = ServiceDiscovery.call_service(sup_tree, TaskPoolManager, :get_pool_stats, [:general])
+      {:ok, pool_stats} =
+        ServiceDiscovery.call_service(sup_tree, TaskPoolManager, :get_pool_stats, [:general])
+
       assert is_map(pool_stats)
 
       # Test simple batch operation with isolated service
-      {:ok, results} = ServiceDiscovery.call_service(sup_tree, TaskPoolManager, :execute_batch, [
-        :general,
-        [1, 2, 3],
-        fn x -> x * 2 end,
-        timeout: 5000
-      ])
+      {:ok, results} =
+        ServiceDiscovery.call_service(sup_tree, TaskPoolManager, :execute_batch, [
+          :general,
+          [1, 2, 3],
+          fn x -> x * 2 end,
+          timeout: 5000
+        ])
 
       # Results should be returned directly from test service
       assert length(results) == 3
@@ -76,7 +89,8 @@ defmodule JidoFoundation.SimpleValidationTest do
 
       # Test service availability - test service always returns :ok for get_load_average
       result = ServiceDiscovery.call_service(sup_tree, SystemCommandManager, :get_load_average)
-      assert result == :ok  # Test service returns :ok instead of actual load average
+      # Test service returns :ok instead of actual load average
+      assert result == :ok
     end
   end
 
@@ -99,8 +113,14 @@ defmodule JidoFoundation.SimpleValidationTest do
       assert is_map(stats)
 
       # Create and verify general pool availability in isolated environment
-      :ok = ServiceDiscovery.call_service(sup_tree, TaskPoolManager, :create_pool, [:general, %{max_concurrency: 4}])
-      {:ok, _general_stats} = ServiceDiscovery.call_service(sup_tree, TaskPoolManager, :get_pool_stats, [:general])
+      :ok =
+        ServiceDiscovery.call_service(sup_tree, TaskPoolManager, :create_pool, [
+          :general,
+          %{max_concurrency: 4}
+        ])
+
+      {:ok, _general_stats} =
+        ServiceDiscovery.call_service(sup_tree, TaskPoolManager, :get_pool_stats, [:general])
     end
 
     test "SystemCommandManager restarts after being killed", %{supervision_tree: sup_tree} do
@@ -111,7 +131,8 @@ defmodule JidoFoundation.SimpleValidationTest do
       Process.exit(initial_pid, :kill)
 
       # Wait for restart using isolated supervision helper
-      {:ok, new_pid} = wait_for_service_restart(sup_tree, :system_command_manager, initial_pid, 5000)
+      {:ok, new_pid} =
+        wait_for_service_restart(sup_tree, :system_command_manager, initial_pid, 5000)
 
       assert is_pid(new_pid)
       assert new_pid != initial_pid
@@ -132,16 +153,21 @@ defmodule JidoFoundation.SimpleValidationTest do
       initial_count = :erlang.system_info(:process_count)
 
       # Create pool for testing in isolated environment
-      :ok = ServiceDiscovery.call_service(sup_tree, TaskPoolManager, :create_pool, [:general, %{max_concurrency: 2}])
+      :ok =
+        ServiceDiscovery.call_service(sup_tree, TaskPoolManager, :create_pool, [
+          :general,
+          %{max_concurrency: 2}
+        ])
 
       # Do some work with isolated service calls
       for _i <- 1..5 do
-        {:ok, _results} = ServiceDiscovery.call_service(sup_tree, TaskPoolManager, :execute_batch, [
-          :general,
-          [1, 2],
-          fn x -> x end,
-          timeout: 1000
-        ])
+        {:ok, _results} =
+          ServiceDiscovery.call_service(sup_tree, TaskPoolManager, :execute_batch, [
+            :general,
+            [1, 2],
+            fn x -> x end,
+            timeout: 1000
+          ])
       end
 
       # Wait for processes to stabilize
@@ -180,17 +206,22 @@ defmodule JidoFoundation.SimpleValidationTest do
       start_time = System.monotonic_time(:millisecond)
 
       # Create pool for testing in isolated environment
-      :ok = ServiceDiscovery.call_service(sup_tree, TaskPoolManager, :create_pool, [:general, %{max_concurrency: 4}])
+      :ok =
+        ServiceDiscovery.call_service(sup_tree, TaskPoolManager, :create_pool, [
+          :general,
+          %{max_concurrency: 4}
+        ])
 
       # Reduced to be less aggressive, with isolated service calls
       results =
         for _i <- 1..5 do
-          {:ok, batch_results} = ServiceDiscovery.call_service(sup_tree, TaskPoolManager, :execute_batch, [
-            :general,
-            [1, 2, 3],
-            fn x -> x * 2 end,
-            timeout: 2000
-          ])
+          {:ok, batch_results} =
+            ServiceDiscovery.call_service(sup_tree, TaskPoolManager, :execute_batch, [
+              :general,
+              [1, 2, 3],
+              fn x -> x * 2 end,
+              timeout: 2000
+            ])
 
           {:ok, length(batch_results)}
         end
@@ -205,7 +236,9 @@ defmodule JidoFoundation.SimpleValidationTest do
           _ -> false
         end)
 
-      assert successful == 5, "All operations should succeed in isolated environment (#{successful}/5)"
+      assert successful == 5,
+             "All operations should succeed in isolated environment (#{successful}/5)"
+
       assert duration < 30_000, "Operations should complete in reasonable time (#{duration}ms)"
     end
   end

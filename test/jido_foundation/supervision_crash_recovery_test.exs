@@ -16,26 +16,6 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
 
   alias Foundation.IsolatedServiceDiscovery, as: ServiceDiscovery
 
-  # Setup helper to ensure services are running
-  defp ensure_service_running(service_name, timeout \\ 5000) do
-    case Process.whereis(service_name) do
-      pid when is_pid(pid) ->
-        pid
-
-      nil ->
-        # Wait for the service to restart
-        wait_for(
-          fn ->
-            case Process.whereis(service_name) do
-              pid when is_pid(pid) -> pid
-              nil -> nil
-            end
-          end,
-          timeout
-        )
-    end
-  end
-
   @moduletag :supervision_testing
   @moduletag timeout: 30_000
 
@@ -285,28 +265,21 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
   end
 
   # ============================================================================
-  # NON-MIGRATED TESTS - Still using global supervision (original implementation)
+  # ALL TESTS NOW MIGRATED TO ISOLATED SUPERVISION
   # ============================================================================
 
-  describe "JidoFoundation.CoordinationManager crash recovery" do
-    test "CoordinationManager restarts after crash and maintains functionality" do
-      initial_pid = ensure_service_running(JidoFoundation.CoordinationManager)
-      assert is_pid(initial_pid), "CoordinationManager should be running"
+  describe "JidoFoundation.CoordinationManager crash recovery - MIGRATED TO ISOLATED SUPERVISION" do
+    test "CoordinationManager restarts after crash and maintains functionality", %{
+      supervision_tree: sup_tree
+    } do
+      {:ok, initial_pid} = get_service(sup_tree, :coordination_manager)
+      assert is_pid(initial_pid), "CoordinationManager should be running in isolated supervision"
 
-      # Kill the process
+      # Kill the process in isolated environment
       Process.exit(initial_pid, :kill)
 
-      # Wait for supervisor to restart with new pid
-      new_pid =
-        wait_for(
-          fn ->
-            case Process.whereis(JidoFoundation.CoordinationManager) do
-              pid when pid != initial_pid and is_pid(pid) -> pid
-              _ -> nil
-            end
-          end,
-          5000
-        )
+      # Wait for supervisor to restart with new pid in isolated supervision
+      {:ok, new_pid} = wait_for_service_restart(sup_tree, :coordination_manager, initial_pid, 5000)
 
       # Verify restart
       assert is_pid(new_pid)
@@ -318,25 +291,18 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
     end
   end
 
-  describe "JidoFoundation.SchedulerManager crash recovery" do
-    test "SchedulerManager restarts after crash and maintains functionality" do
-      initial_pid = ensure_service_running(JidoFoundation.SchedulerManager)
-      assert is_pid(initial_pid), "SchedulerManager should be running"
+  describe "JidoFoundation.SchedulerManager crash recovery - MIGRATED TO ISOLATED SUPERVISION" do
+    test "SchedulerManager restarts after crash and maintains functionality", %{
+      supervision_tree: sup_tree
+    } do
+      {:ok, initial_pid} = get_service(sup_tree, :scheduler_manager)
+      assert is_pid(initial_pid), "SchedulerManager should be running in isolated supervision"
 
-      # Kill the process
+      # Kill the process in isolated environment
       Process.exit(initial_pid, :kill)
 
-      # Wait for supervisor to restart with new pid
-      new_pid =
-        wait_for(
-          fn ->
-            case Process.whereis(JidoFoundation.SchedulerManager) do
-              pid when pid != initial_pid and is_pid(pid) -> pid
-              _ -> nil
-            end
-          end,
-          5000
-        )
+      # Wait for supervisor to restart with new pid in isolated supervision
+      {:ok, new_pid} = wait_for_service_restart(sup_tree, :scheduler_manager, initial_pid, 5000)
 
       # Verify restart
       assert is_pid(new_pid)
@@ -465,34 +431,34 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
   end
 
   describe "Resource cleanup validation - MIGRATED TO ISOLATED SUPERVISION" do
-    test "No process leaks after service crashes and restarts", 
+    test "No process leaks after service crashes and restarts",
          %{supervision_tree: sup_tree} do
       initial_count = :erlang.system_info(:process_count)
-      
+
       # Test crash/restart in isolated environment
       {:ok, task_pid} = get_service(sup_tree, :task_pool_manager)
       ref = Process.monitor(task_pid)
       Process.exit(task_pid, :kill)
-      
+
       # Wait for restart in isolated supervision tree
       assert_receive {:DOWN, ^ref, :process, ^task_pid, :killed}, 1000
       {:ok, new_pid} = wait_for_service_restart(sup_tree, :task_pool_manager, task_pid)
-      
+
       # Verify no leaks in isolated environment
       assert is_pid(new_pid)
       assert new_pid != task_pid
-      
+
       # Allow stabilization
       Process.sleep(1000)
-      
+
       final_count = :erlang.system_info(:process_count)
-      
+
       # Verify no significant process leaks in isolated environment
       assert final_count - initial_count < 20,
              "Process count increased significantly: #{initial_count} -> #{final_count}"
     end
 
-    test "ETS tables are properly cleaned up after crashes", 
+    test "ETS tables are properly cleaned up after crashes",
          %{supervision_tree: sup_tree} do
       initial_ets_count = :erlang.system_info(:ets_count)
 
@@ -502,7 +468,8 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
           {:ok, system_cmd_pid} ->
             Process.exit(system_cmd_pid, :kill)
             # Wait for process to restart in isolated supervision tree
-            {:ok, _new_pid} = wait_for_service_restart(sup_tree, :system_command_manager, system_cmd_pid, 2000)
+            {:ok, _new_pid} =
+              wait_for_service_restart(sup_tree, :system_command_manager, system_cmd_pid, 2000)
 
           {:error, _} ->
             # Service not available, skip
@@ -522,7 +489,7 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
   end
 
   describe "Graceful shutdown testing - MIGRATED TO ISOLATED SUPERVISION" do
-    test "Services shut down gracefully when supervisor terminates", 
+    test "Services shut down gracefully when supervisor terminates",
          %{supervision_tree: sup_tree} do
       # Test graceful shutdown behavior in isolated supervision tree
       {:ok, scheduler_pid} = get_service(sup_tree, :scheduler_manager)
@@ -555,7 +522,8 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
       end
 
       # Wait for restart in isolated supervision tree
-      {:ok, new_scheduler_pid} = wait_for_service_restart(sup_tree, :scheduler_manager, scheduler_pid)
+      {:ok, new_scheduler_pid} =
+        wait_for_service_restart(sup_tree, :scheduler_manager, scheduler_pid)
 
       # Verify it restarted with new PID in isolated environment
       assert is_pid(new_scheduler_pid)
@@ -564,7 +532,7 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
   end
 
   describe "Configuration persistence after restart - MIGRATED TO ISOLATED SUPERVISION" do
-    test "Services maintain proper configuration after restarts", 
+    test "Services maintain proper configuration after restarts",
          %{supervision_tree: sup_tree} do
       # Get initial configuration using isolated service calls
       initial_stats = call_service(sup_tree, :system_command_manager, :get_stats)
@@ -619,10 +587,15 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
       end
     end
 
-    test "Service discovery works across restarts", 
+    test "Service discovery works across restarts",
          %{supervision_tree: sup_tree} do
       # Verify service discovery before restarts in isolated environment
-      service_names = [:task_pool_manager, :system_command_manager, :coordination_manager, :scheduler_manager]
+      service_names = [
+        :task_pool_manager,
+        :system_command_manager,
+        :coordination_manager,
+        :scheduler_manager
+      ]
 
       pids_before =
         for service_name <- service_names do
@@ -664,11 +637,12 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
              "SchedulerManager should not be affected by TaskPoolManager crash in isolated environment"
 
       # Wait for affected services to restart using isolated service discovery
-      {:ok, _new_task_pids} = wait_for_services_restart(sup_tree, %{
-        task_pool_manager: task_pid,
-        system_command_manager: sys_pid,
-        coordination_manager: coord_pid
-      })
+      {:ok, _new_task_pids} =
+        wait_for_services_restart(sup_tree, %{
+          task_pool_manager: task_pid,
+          system_command_manager: sys_pid,
+          coordination_manager: coord_pid
+        })
 
       # Verify service discovery still works for all services in isolated environment
       pids_after =
@@ -678,7 +652,8 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
         end
 
       for {service_name, pid} <- pids_after do
-        assert is_pid(pid), "#{service_name} should be re-registered after restart in isolated environment"
+        assert is_pid(pid),
+               "#{service_name} should be re-registered after restart in isolated environment"
       end
 
       # Verify restarted services have new PIDs, SchedulerManager keeps same PID

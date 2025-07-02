@@ -2,35 +2,39 @@ defmodule Foundation.RaceConditionTest do
   @moduledoc """
   Tests to verify race condition fixes in critical services.
   """
-  use ExUnit.Case, async: false  # CRITICAL: Disable async due to shared ETS table
-
+  # CRITICAL: Disable async due to shared ETS table
+  use ExUnit.Case, async: false
 
   setup do
     # Start isolated RateLimiter for each test to avoid shared state
     test_id = :erlang.unique_integer([:positive])
     rate_limiter_name = :"test_rate_limiter_#{test_id}"
-    
+
     # Start isolated rate limiter process
     {:ok, pid} = Foundation.Services.RateLimiter.start_link(name: rate_limiter_name)
-    
+
     # Ensure cleanup on test exit
     on_exit(fn ->
       if Process.alive?(pid) do
         GenServer.stop(pid, :normal, 1000)
       end
     end)
-    
+
     %{rate_limiter: rate_limiter_name}
   end
 
   describe "RateLimiter race condition fix" do
     test "rate limiter has no race conditions under concurrent load", %{rate_limiter: limiter} do
       # Configure isolated rate limiter
-      GenServer.call(limiter, {:configure_limiter, :test_limiter, %{
-        scale_ms: 1000,
-        limit: 100,
-        cleanup_interval: 60_000
-      }})
+      GenServer.call(
+        limiter,
+        {:configure_limiter, :test_limiter,
+         %{
+           scale_ms: 1000,
+           limit: 100,
+           cleanup_interval: 60_000
+         }}
+      )
 
       # Spawn 200 concurrent requests (2x the limit)
       parent = self()
@@ -57,12 +61,13 @@ defmodule Foundation.RaceConditionTest do
 
     test "rate limiter correctly handles rapid fire requests", %{rate_limiter: limiter} do
       # Configure isolated rate limiter
-      GenServer.call(limiter, {:configure_limiter, :rapid_test, %{
-        # 100ms window
-        scale_ms: 100,
-        limit: 10,
-        cleanup_interval: 60_000
-      }})
+      GenServer.call(limiter, {:configure_limiter, :rapid_test,
+       %{
+         # 100ms window
+         scale_ms: 100,
+         limit: 10,
+         cleanup_interval: 60_000
+       }})
 
       # Fire 20 requests as fast as possible
       results =
@@ -79,12 +84,13 @@ defmodule Foundation.RaceConditionTest do
 
     test "rate limiter correctly resets after window expires", %{rate_limiter: limiter} do
       # Configure isolated rate limiter
-      GenServer.call(limiter, {:configure_limiter, :window_test, %{
-        # 50ms window
-        scale_ms: 50,
-        limit: 5,
-        cleanup_interval: 60_000
-      }})
+      GenServer.call(limiter, {:configure_limiter, :window_test,
+       %{
+         # 50ms window
+         scale_ms: 50,
+         limit: 5,
+         cleanup_interval: 60_000
+       }})
 
       # Use proper OTP timing with receive to wait for window boundary
       current_time = System.monotonic_time(:millisecond)
@@ -93,7 +99,8 @@ defmodule Foundation.RaceConditionTest do
 
       # Wait using receive pattern for proper OTP timing
       receive do
-      after time_until_next_window + 5 -> :ok
+      after
+        time_until_next_window + 5 -> :ok
       end
 
       # First batch - should allow 5
@@ -107,7 +114,8 @@ defmodule Foundation.RaceConditionTest do
 
       # Wait for the current window to completely expire using receive
       receive do
-      after 60 -> :ok
+      after
+        60 -> :ok
       end
 
       # Second batch - should allow 5 more (in new window)
@@ -122,17 +130,23 @@ defmodule Foundation.RaceConditionTest do
 
     test "rate limiter handles concurrent different keys", %{rate_limiter: limiter} do
       # Configure isolated rate limiter
-      GenServer.call(limiter, {:configure_limiter, :multi_key_test, %{
-        scale_ms: 1000,
-        limit: 10,
-        cleanup_interval: 60_000
-      }})
+      GenServer.call(
+        limiter,
+        {:configure_limiter, :multi_key_test,
+         %{
+           scale_ms: 1000,
+           limit: 10,
+           cleanup_interval: 60_000
+         }}
+      )
 
       # Spawn concurrent requests for different users
       tasks =
         for user_id <- 1..5, _request <- 1..15 do
           Task.async(fn ->
-            result = GenServer.call(limiter, {:check_rate_limit, :multi_key_test, "user_#{user_id}"})
+            result =
+              GenServer.call(limiter, {:check_rate_limit, :multi_key_test, "user_#{user_id}"})
+
             {user_id, result}
           end)
         end
