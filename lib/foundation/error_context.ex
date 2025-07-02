@@ -7,9 +7,18 @@ defmodule Foundation.ErrorContext do
   - Operation tracking and correlation
   - Emergency context recovery
   - Enhanced error propagation patterns
+  
+  ## Implementation Notes
+  
+  This module supports two modes of operation:
+  1. Process dictionary (legacy mode) - Uses Process.put/get for backwards compatibility
+  2. Logger metadata (new mode) - Uses Logger.metadata for proper OTP patterns
+  
+  The mode is controlled by the `:use_logger_error_context` feature flag.
   """
 
   alias Foundation.Error
+  require Logger
 
   @type t :: %__MODULE__{
           operation_id: pos_integer(),
@@ -50,6 +59,108 @@ defmodule Foundation.ErrorContext do
     # Nested context support
     parent_context: nil
   ]
+
+  ## Context Storage Management
+
+  @doc """
+  Set error context in the current process.
+  Uses Logger metadata when feature flag is enabled, otherwise uses process dictionary.
+  """
+  @spec set_context(t() | map() | nil) :: :ok
+  def set_context(nil) do
+    clear_context()
+  end
+
+  def set_context(context) when is_map(context) do
+    if use_logger_metadata?() do
+      Logger.metadata(error_context: context)
+    else
+      Process.put(:error_context, context)
+    end
+    :ok
+  end
+
+  @doc """
+  Clear error context from the current process.
+  """
+  @spec clear_context() :: :ok
+  def clear_context do
+    if use_logger_metadata?() do
+      Logger.metadata(error_context: nil)
+    else
+      Process.delete(:error_context)
+    end
+    :ok
+  end
+
+  @doc """
+  Get current error context from the process.
+  Retrieves from Logger metadata when feature flag is enabled, otherwise from process dictionary.
+  """
+  @spec get_context() :: t() | map() | nil
+  def get_context do
+    if use_logger_metadata?() do
+      Logger.metadata()[:error_context]
+    else
+      Process.get(:error_context)
+    end
+  end
+
+  @doc """
+  Execute a function with temporary error context.
+  Ensures context is cleaned up after execution.
+  """
+  @spec with_temporary_context(t() | map(), (-> term())) :: term()
+  def with_temporary_context(context, fun) when is_map(context) and is_function(fun, 0) do
+    old_context = get_context()
+    
+    try do
+      set_context(context)
+      fun.()
+    after
+      if old_context do
+        set_context(old_context)
+      else
+        clear_context()
+      end
+    end
+  end
+
+  @doc """
+  Execute a function in a new process with inherited error context.
+  Useful for spawning processes that should maintain context from parent.
+  """
+  @spec spawn_with_context((-> term())) :: pid()
+  def spawn_with_context(fun) when is_function(fun, 0) do
+    context = get_context()
+    
+    spawn(fn ->
+      if context do
+        set_context(context)
+      end
+      fun.()
+    end)
+  end
+
+  @doc """
+  Execute a function in a new linked process with inherited error context.
+  """
+  @spec spawn_link_with_context((-> term())) :: pid()
+  def spawn_link_with_context(fun) when is_function(fun, 0) do
+    context = get_context()
+    
+    spawn_link(fn ->
+      if context do
+        set_context(context)
+      end
+      fun.()
+    end)
+  end
+
+  # Private helper to check if we should use Logger metadata
+  defp use_logger_metadata? do
+    Foundation.FeatureFlags.enabled?(:use_logger_error_context)
+  end
 
   ## Context Creation and Management
 
@@ -173,14 +284,14 @@ defmodule Foundation.ErrorContext do
   """
   @spec with_context(t(), (-> term())) :: term() | {:error, Error.t()}
   def with_context(%__MODULE__{} = context, fun) when is_function(fun, 0) do
-    # Store context in process dictionary for emergency access
-    Process.put(:error_context, context)
+    # Store context using the appropriate storage mechanism
+    set_context(context)
 
     try do
       result = fun.()
 
       # Clean up and enhance successful results with context
-      Process.delete(:error_context)
+      clear_context()
       enhance_result_with_context(result, context)
     rescue
       exception ->
@@ -188,7 +299,7 @@ defmodule Foundation.ErrorContext do
         enhanced_error = create_exception_error(exception, context, __STACKTRACE__)
 
         # Clean up
-        Process.delete(:error_context)
+        clear_context()
 
         # Emit error telemetry
         Error.collect_error_metrics(enhanced_error)
@@ -196,6 +307,36 @@ defmodule Foundation.ErrorContext do
         {:error, enhanced_error}
     end
   end
+
+  @doc """
+  Enrich an error with the current context from Logger metadata or process dictionary.
+  This is useful for automatically adding context to errors without explicit context passing.
+  """
+  @spec enrich_error(Error.t() | {:error, Error.t()} | {:error, term()}) :: Error.t() | {:error, Error.t()}
+  def enrich_error(%Error{} = error) do
+    case get_context() do
+      nil -> error
+      context -> enhance_error(error, context)
+    end
+  end
+
+  def enrich_error({:error, %Error{} = error}) do
+    {:error, enrich_error(error)}
+  end
+
+  def enrich_error({:error, reason}) do
+    case get_context() do
+      nil -> 
+        {:error, Error.new(:external_error, "External operation failed", context: %{original_reason: reason})}
+      context when is_struct(context, __MODULE__) ->
+        enhance_error({:error, reason}, context)
+      context when is_map(context) ->
+        {:error, Error.new(:external_error, "External operation failed", 
+          context: Map.merge(context, %{original_reason: reason}))}
+    end
+  end
+
+  def enrich_error(other), do: other
 
   @doc """
   Enhance an Error struct with additional context information.
@@ -256,14 +397,14 @@ defmodule Foundation.ErrorContext do
   ## Context Recovery and Debugging
 
   @doc """
-  Get the current error context from the process dictionary.
+  Get the current error context from the process.
 
   This is an emergency recovery mechanism for debugging.
+  Uses Logger metadata when feature flag is enabled, otherwise uses process dictionary.
   """
   @spec get_current_context() :: t() | nil
   def get_current_context do
-    # Emergency context retrieval from process dictionary
-    Process.get(:error_context)
+    get_context()
   end
 
   @doc """
