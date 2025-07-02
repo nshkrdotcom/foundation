@@ -23,13 +23,25 @@ defmodule Foundation.OTPCleanupPerformanceTest do
   
   describe "Registry Performance Tests" do
     setup do
+      # Ensure FeatureFlags service is started
+      case Process.whereis(Foundation.FeatureFlags) do
+        nil ->
+          {:ok, _} = Foundation.FeatureFlags.start_link()
+        _pid ->
+          :ok
+      end
+      
       if Process.whereis(Foundation.FeatureFlags) do
         FeatureFlags.reset_all()
       end
       
       on_exit(fn ->
         if Process.whereis(Foundation.FeatureFlags) do
-          FeatureFlags.reset_all()
+          try do
+            FeatureFlags.reset_all()
+          catch
+            :exit, _ -> :ok
+          end
         end
       end)
       

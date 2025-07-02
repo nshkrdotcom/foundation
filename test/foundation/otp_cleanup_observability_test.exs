@@ -8,6 +8,7 @@ defmodule Foundation.OTPCleanupObservabilityTest do
   
   use ExUnit.Case, async: false
   
+  require Logger
   import Foundation.AsyncTestHelpers
   alias Foundation.{FeatureFlags, ErrorContext, Registry}
   alias Foundation.Telemetry.{Span, SampledEvents}
@@ -16,8 +17,28 @@ defmodule Foundation.OTPCleanupObservabilityTest do
   @moduletag :telemetry
   @moduletag timeout: 120_000
   
+  setup_all do
+    # Ensure FeatureFlags service is started for all tests
+    case Process.whereis(Foundation.FeatureFlags) do
+      nil ->
+        {:ok, _} = Foundation.FeatureFlags.start_link()
+      _pid ->
+        :ok
+    end
+    
+    :ok
+  end
+  
   describe "Telemetry Event Continuity" do
     setup do
+      # Ensure FeatureFlags service is started
+      case Process.whereis(Foundation.FeatureFlags) do
+        nil ->
+          {:ok, _} = Foundation.FeatureFlags.start_link()
+        _pid ->
+          :ok
+      end
+      
       FeatureFlags.reset_all()
       
       # Set up telemetry collection
@@ -188,7 +209,7 @@ defmodule Foundation.OTPCleanupObservabilityTest do
         
         # Error should include original message
         assert enriched_error.message == "Stage #{stage} test error"
-        assert enriched_error.type == :test_error
+        assert enriched_error.error_type == :test_error
         
         # Context should be properly merged
         original_context = error.context || %{}
@@ -292,7 +313,7 @@ defmodule Foundation.OTPCleanupObservabilityTest do
       Span.end_span(span_id)
       
       # Nested operations
-      Span.with_span("nested_telemetry_test", %{nested: true}, fn ->
+      Span.with_span_fun("nested_telemetry_test", %{nested: true}, fn ->
         ErrorContext.set_context(%{nested_context: true})
         Registry.register(nil, :"nested_test_#{:erlang.unique_integer()}", self())
       end)
@@ -301,26 +322,26 @@ defmodule Foundation.OTPCleanupObservabilityTest do
     defp start_services_for_stage(stage) do
       case stage do
         stage when stage >= 1 ->
-          case Code.ensure_loaded?(Foundation.Protocols.RegistryETS) do
-            {:module, _} ->
-              case Process.whereis(Foundation.Protocols.RegistryETS) do
-                nil -> Foundation.Protocols.RegistryETS.start_link()
-                _ -> :ok
-              end
-            {:error, :nofile} -> :ok
+          if Code.ensure_loaded?(Foundation.Protocols.RegistryETS) do
+            case Process.whereis(Foundation.Protocols.RegistryETS) do
+              nil -> Foundation.Protocols.RegistryETS.start_link()
+              _ -> :ok
+            end
+          else
+            :ok
           end
         _ -> :ok
       end
       
       case stage do
         stage when stage >= 3 ->
-          case Code.ensure_loaded?(Foundation.Telemetry.SampledEvents) do
-            {:module, _} ->
-              case Process.whereis(Foundation.Telemetry.SampledEvents) do
-                nil -> Foundation.Telemetry.SampledEvents.start_link()
-                _ -> :ok
-              end
-            {:error, :nofile} -> :ok
+          if Code.ensure_loaded?(Foundation.Telemetry.SampledEvents) do
+            case Process.whereis(Foundation.Telemetry.SampledEvents) do
+              nil -> Foundation.Telemetry.SampledEvents.start_link()
+              _ -> :ok
+            end
+          else
+            :ok
           end
         _ -> :ok
       end
@@ -630,8 +651,8 @@ defmodule Foundation.OTPCleanupObservabilityTest do
         end
         
         # Nested spans
-        Span.with_span("memory_test_#{i}", large_context, fn ->
-          Span.with_span("nested_#{i}", %{nested: true}, fn ->
+        Span.with_span_fun("memory_test_#{i}", large_context, fn ->
+          Span.with_span_fun("nested_#{i}", %{nested: true}, fn ->
             ErrorContext.get_context()
           end)
         end)

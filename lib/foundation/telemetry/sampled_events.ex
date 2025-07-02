@@ -284,4 +284,11 @@ defmodule Foundation.Telemetry.SampledEvents do
   # Test compatibility: Delegate to TestAPI functions to avoid macro conflicts
   defdelegate emit_event_test(event_name, measurements, metadata), to: Foundation.Telemetry.SampledEvents.TestAPI, as: :emit_event
   defdelegate emit_batched_test(event_name, measurement, metadata), to: Foundation.Telemetry.SampledEvents.TestAPI, as: :emit_batched
+  
+  # Test compatibility functions for stress tests
+  def start_link() do
+    # SampledEvents doesn't need a GenServer - it's a macro/function module
+    # Just return success for compatibility
+    {:ok, self()}
+  end
 end

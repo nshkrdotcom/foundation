@@ -18,10 +18,24 @@ defmodule Foundation.OTPCleanupStressTest do
   
   describe "Concurrent Registry Access" do
     setup do
+      # Ensure FeatureFlags service is started
+      case Process.whereis(Foundation.FeatureFlags) do
+        nil ->
+          {:ok, _} = Foundation.FeatureFlags.start_link()
+        _pid ->
+          :ok
+      end
+      
       FeatureFlags.reset_all()
       
       on_exit(fn ->
-        FeatureFlags.reset_all()
+        if Process.whereis(Foundation.FeatureFlags) do
+          try do
+            FeatureFlags.reset_all()
+          catch
+            :exit, _ -> :ok
+          end
+        end
         # Cleanup any remaining registrations
         cleanup_test_registrations()
       end)
@@ -169,7 +183,7 @@ defmodule Foundation.OTPCleanupStressTest do
             agent_pids = Enum.map(agent_tasks, & &1.pid)
             
             # Register all agents concurrently
-            registration_tasks = for {i, pid} <- Enum.with_index(agent_pids) do
+            registration_tasks = for {pid, i} <- Enum.with_index(agent_pids) do
               Task.async(fn ->
                 agent_id = :"race_test_#{round}_#{i}"
                 Foundation.Registry.register(nil, agent_id, pid)
@@ -538,14 +552,14 @@ defmodule Foundation.OTPCleanupStressTest do
             Task.async(fn ->
               for j <- 1..events_per_emitter do
                 # Regular events
-                SampledEvents.emit_event(
+                Foundation.Telemetry.SampledEvents.TestAPI.emit_event(
                   [:stress, :test, :regular],
                   %{count: 1, value: j},
                   %{emitter: i, event: j, dedup_key: "key_#{rem(j, 100)}"}
                 )
                 
                 # Batched events
-                SampledEvents.emit_batched(
+                Foundation.Telemetry.SampledEvents.TestAPI.emit_batched(
                   [:stress, :test, :batched],
                   j,
                   %{batch_key: "batch_#{rem(i, 5)}"}
@@ -644,7 +658,7 @@ defmodule Foundation.OTPCleanupStressTest do
                   
                 4 ->
                   # Sampled events
-                  SampledEvents.emit_event(
+                  Foundation.Telemetry.SampledEvents.TestAPI.emit_event(
                     [:extreme, :test],
                     %{count: 1},
                     %{worker: worker_id, dedup_key: "key_#{rem(op, 50)}"}
@@ -663,7 +677,7 @@ defmodule Foundation.OTPCleanupStressTest do
                       Foundation.Registry.lookup(nil, agent_id)
                     end)
                     
-                    SampledEvents.emit_event(
+                    Foundation.Telemetry.SampledEvents.TestAPI.emit_event(
                       [:workflow, :step],
                       %{step: 1},
                       %{worker: worker_id}
