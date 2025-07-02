@@ -8,7 +8,6 @@ defmodule Foundation.OTPCleanupPerformanceTest do
   
   use Foundation.UnifiedTestFoundation, :registry
   
-  import Foundation.AsyncTestHelpers
   alias Foundation.{FeatureFlags, ErrorContext, Registry}
   alias Foundation.Telemetry.{Span, SampledEvents}
   
@@ -43,112 +42,115 @@ defmodule Foundation.OTPCleanupPerformanceTest do
       FeatureFlags.enable(:use_ets_agent_registry)
       
       # Start ETS registry if available
-      case Code.ensure_loaded?(Foundation.Protocols.RegistryETS) do
-        {:module, _} ->
-          {:ok, _} = Foundation.Protocols.RegistryETS.start_link()
-          
-          ets_time = benchmark_registry_operations(1000, "ets")
-          
-          # New implementation should not be more than 2x slower
-          slowdown_ratio = ets_time / legacy_time
-          
-          assert slowdown_ratio < 2.0,
-                 """
-                 ETS registry significantly slower than legacy:
-                 Legacy: #{legacy_time}μs
-                 ETS: #{ets_time}μs
-                 Slowdown: #{Float.round(slowdown_ratio, 2)}x
-                 """
-          
-          # Absolute performance check
-          operations_per_second = 1_000_000 / (ets_time / 1000)
-          assert operations_per_second > 10_000,
-                 "ETS registry too slow: #{Float.round(operations_per_second)} ops/sec"
-          
-        {:error, :nofile} ->
-          # ETS implementation not available, skip comparison
-          :ok
+      if Code.ensure_loaded?(Foundation.Protocols.RegistryETS) do
+        case Foundation.Protocols.RegistryETS.start_link() do
+          {:ok, _} -> :ok
+          {:error, {:already_started, _}} -> :ok
+        end
+        
+        ets_time = benchmark_registry_operations(1000, "ets")
+        
+        # New implementation should not be more than 2x slower
+        slowdown_ratio = ets_time / legacy_time
+        
+        assert slowdown_ratio < 2.0,
+               """
+               ETS registry significantly slower than legacy:
+               Legacy: #{legacy_time}μs
+               ETS: #{ets_time}μs  
+               Slowdown: #{Float.round(slowdown_ratio, 2)}x
+               """
+        
+        # Absolute performance check
+        operations_per_second = 1_000_000 / (ets_time / 1000)
+        assert operations_per_second > 10_000,
+               "ETS registry too slow: #{Float.round(operations_per_second)} ops/sec"
+      else
+        # ETS implementation not available, skip comparison
+        :ok
       end
     end
     
     test "registry operation scaling" do
       FeatureFlags.enable(:use_ets_agent_registry)
       
-      case Code.ensure_loaded?(Foundation.Protocols.RegistryETS) do
-        {:module, _} ->
-          {:ok, _} = Foundation.Protocols.RegistryETS.start_link()
-          
-          # Test different load levels
-          load_levels = [100, 500, 1000, 2000]
-          
-          times = for load <- load_levels do
-            time = benchmark_registry_operations(load, "scaling_#{load}")
-            {load, time}
-          end
-          
-          # Check that time scales roughly linearly (not exponentially)
-          [{small_load, small_time}, {_, _}, {_, _}, {large_load, large_time}] = times
-          
-          scaling_ratio = (large_time / small_time) / (large_load / small_load)
-          
-          # Should scale roughly linearly (within 3x factor)
-          assert scaling_ratio < 3.0,
-                 """
-                 Registry scaling poorly:
-                 #{small_load} ops: #{small_time}μs
-                 #{large_load} ops: #{large_time}μs
-                 Scaling ratio: #{Float.round(scaling_ratio, 2)}
-                 """
-          
-        {:error, :nofile} ->
-          :ok
+      if Code.ensure_loaded?(Foundation.Protocols.RegistryETS) do
+        case Foundation.Protocols.RegistryETS.start_link() do
+          {:ok, _} -> :ok
+          {:error, {:already_started, _}} -> :ok
+        end
+        
+        # Test different load levels
+        load_levels = [100, 500, 1000, 2000]
+        
+        times = for load <- load_levels do
+          time = benchmark_registry_operations(load, "scaling_#{load}")
+          {load, time}
+        end
+        
+        # Check that time scales roughly linearly (not exponentially)
+        [{small_load, small_time}, {_, _}, {_, _}, {large_load, large_time}] = times
+        
+        scaling_ratio = (large_time / small_time) / (large_load / small_load)
+        
+        # Should scale roughly linearly (within 3x factor)
+        assert scaling_ratio < 3.0,
+               """
+               Registry scaling poorly:
+               #{small_load} ops: #{small_time}μs
+               #{large_load} ops: #{large_time}μs
+               Scaling ratio: #{Float.round(scaling_ratio, 2)}
+               """
+      else
+        :ok
       end
     end
     
     test "concurrent registry access performance" do
       FeatureFlags.enable(:use_ets_agent_registry)
       
-      case Code.ensure_loaded?(Foundation.Protocols.RegistryETS) do
-        {:module, _} ->
-          {:ok, _} = Foundation.Protocols.RegistryETS.start_link()
+      if Code.ensure_loaded?(Foundation.Protocols.RegistryETS) do
+        case Foundation.Protocols.RegistryETS.start_link() do
+          {:ok, _} -> :ok
+          {:error, {:already_started, _}} -> :ok
+        end
+        
+        # Test concurrent access
+        num_processes = 10
+        operations_per_process = 100
+        
+        {total_time, _} = :timer.tc(fn ->
+          tasks = for i <- 1..num_processes do
+            Task.async(fn ->
+              for j <- 1..operations_per_process do
+                agent_id = :"concurrent_#{i}_#{j}"
+                
+                # Register
+                Registry.register(nil, agent_id, self())
+                
+                # Lookup
+                Registry.lookup(nil, agent_id)
+                
+                # Small delay to avoid overwhelming
+                if rem(j, 10) == 0, do: :timer.sleep(1)
+              end
+            end)
+          end
           
-          # Test concurrent access
-          num_processes = 10
-          operations_per_process = 100
-          
-          {total_time, _} = :timer.tc(fn ->
-            tasks = for i <- 1..num_processes do
-              Task.async(fn ->
-                for j <- 1..operations_per_process do
-                  agent_id = :"concurrent_#{i}_#{j}"
-                  
-                  # Register
-                  Registry.register(nil, agent_id, self())
-                  
-                  # Lookup
-                  Registry.lookup(nil, agent_id)
-                  
-                  # Small delay to avoid overwhelming
-                  if rem(j, 10) == 0, do: :timer.sleep(1)
-                end
-              end)
-            end
-            
-            Task.await_many(tasks, 60_000)
-          end)
-          
-          total_operations = num_processes * operations_per_process * 2  # register + lookup
-          avg_time_per_op = total_time / total_operations
-          
-          assert avg_time_per_op < @registry_operation_threshold,
-                 """
-                 Concurrent registry operations too slow:
-                 Average time per operation: #{Float.round(avg_time_per_op, 2)}μs
-                 Threshold: #{@registry_operation_threshold}μs
-                 """
-          
-        {:error, :nofile} ->
-          :ok
+          Task.await_many(tasks, 60_000)
+        end)
+        
+        total_operations = num_processes * operations_per_process * 2  # register + lookup
+        avg_time_per_op = total_time / total_operations
+        
+        assert avg_time_per_op < @registry_operation_threshold,
+               """
+               Concurrent registry operations too slow:
+               Average time per operation: #{Float.round(avg_time_per_op, 2)}μs
+               Threshold: #{@registry_operation_threshold}μs
+               """
+      else
+        :ok
       end
     end
     
@@ -354,7 +356,7 @@ defmodule Foundation.OTPCleanupPerformanceTest do
       
       {with_span_time, _} = :timer.tc(fn ->
         for i <- 1..num_operations do
-          Span.with_span("performance_operation_#{i}", %{iteration: i}, fn ->
+          Span.with_span_fun("performance_operation_#{i}", %{iteration: i}, fn ->
             # Simulate small amount of work
             :erlang.phash2(i)
           end)
@@ -375,52 +377,51 @@ defmodule Foundation.OTPCleanupPerformanceTest do
       FeatureFlags.enable(:use_ets_sampled_events)
       
       # Start sampled events service if available
-      case Code.ensure_loaded?(Foundation.Telemetry.SampledEvents) do
-        {:module, _} ->
-          {:ok, _} = Foundation.Telemetry.SampledEvents.start_link()
-          
-          # Test regular event emission
-          {emit_time, _} = :timer.tc(fn ->
-            for i <- 1..1000 do
-              SampledEvents.emit_event(
-                [:performance, :test],
-                %{count: 1},
-                %{iteration: i, dedup_key: "key_#{rem(i, 100)}"}
-              )
-            end
-          end)
-          
-          avg_emit_time = emit_time / 1000
-          
-          assert avg_emit_time < @batch_operation_threshold,
-                 """
-                 Sampled event emission too slow:
-                 Average time: #{Float.round(avg_emit_time, 2)}μs
-                 Threshold: #{@batch_operation_threshold}μs
-                 """
-          
-          # Test batched events
-          {batch_time, _} = :timer.tc(fn ->
-            for i <- 1..1000 do
-              SampledEvents.emit_batched(
-                [:performance, :batch],
-                i,
-                %{batch_key: "batch_#{rem(i, 10)}"}
-              )
-            end
-          end)
-          
-          avg_batch_time = batch_time / 1000
-          
-          assert avg_batch_time < @batch_operation_threshold,
-                 """
-                 Batched event emission too slow:
-                 Average time: #{Float.round(avg_batch_time, 2)}μs
-                 Threshold: #{@batch_operation_threshold}μs
-                 """
-          
-        {:error, :nofile} ->
-          :ok
+      if Code.ensure_loaded?(Foundation.Telemetry.SampledEvents) do
+        # Ensure service is started
+        :ok = SampledEvents.ensure_server_started()
+        
+        # Test regular event emission
+        {emit_time, _} = :timer.tc(fn ->
+          for i <- 1..1000 do
+            SampledEvents.emit_event_test(
+              [:performance, :test],
+              %{count: 1},
+              %{iteration: i, dedup_key: "key_#{rem(i, 100)}"}
+            )
+          end
+        end)
+        
+        avg_emit_time = emit_time / 1000
+        
+        assert avg_emit_time < @batch_operation_threshold,
+               """
+               Sampled event emission too slow:
+               Average time: #{Float.round(avg_emit_time, 2)}μs
+               Threshold: #{@batch_operation_threshold}μs
+               """
+        
+        # Test batched events
+        {batch_time, _} = :timer.tc(fn ->
+          for i <- 1..1000 do
+            SampledEvents.emit_batched_test(
+              [:performance, :batch],
+              i,
+              %{batch_key: "batch_#{rem(i, 10)}"}
+            )
+          end
+        end)
+        
+        avg_batch_time = batch_time / 1000
+        
+        assert avg_batch_time < @batch_operation_threshold,
+               """
+               Batched event emission too slow:
+               Average time: #{Float.round(avg_batch_time, 2)}μs
+               Threshold: #{@batch_operation_threshold}μs
+               """
+      else
+        :ok
       end
     end
   end
@@ -446,14 +447,14 @@ defmodule Foundation.OTPCleanupPerformanceTest do
             })
             
             # Start request span
-            Span.with_span("handle_request", %{request_id: request_id}, fn ->
+            Span.with_span_fun("handle_request", %{request_id: request_id}, fn ->
               # Register agent for request
               agent_id = :"request_agent_#{i}"
               Registry.register(nil, agent_id, self())
               
               # Perform some operations
               for j <- 1..5 do
-                Span.with_span("operation_#{j}", %{step: j}, fn ->
+                Span.with_span_fun("operation_#{j}", %{step: j}, fn ->
                   # Lookup agent
                   {:ok, {_pid, _}} = Registry.lookup(nil, agent_id)
                   
