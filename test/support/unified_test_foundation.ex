@@ -147,12 +147,14 @@ defmodule Foundation.UnifiedTestFoundation do
       alias Foundation.TestIsolation
 
       # Import supervision test helpers for supervision testing mode
-      unquote(if mode == :supervision_testing do
-        quote do
-          import Foundation.AsyncTestHelpers
-          import Foundation.SupervisionTestHelpers
+      unquote(
+        if mode == :supervision_testing do
+          quote do
+            import Foundation.AsyncTestHelpers
+            import Foundation.SupervisionTestHelpers
+          end
         end
-      end)
+      )
 
       setup do
         unquote(setup_for_mode(mode))

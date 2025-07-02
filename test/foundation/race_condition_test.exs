@@ -82,7 +82,7 @@ defmodule Foundation.RaceConditionTest do
       current_time = System.monotonic_time(:millisecond)
       window_start = current_time - rem(current_time, 50)
       time_until_next_window = 50 - (current_time - window_start)
-      
+
       # Sleep until we're in a fresh window
       Process.sleep(time_until_next_window + 5)
 
