@@ -7,13 +7,13 @@ defmodule Foundation.ErrorContext do
   - Operation tracking and correlation
   - Emergency context recovery
   - Enhanced error propagation patterns
-  
+
   ## Implementation Notes
-  
+
   This module supports two modes of operation:
   1. Process dictionary (legacy mode) - Uses Process.put/get for backwards compatibility
   2. Logger metadata (new mode) - Uses Logger.metadata for proper OTP patterns
-  
+
   The mode is controlled by the `:use_logger_error_context` feature flag.
   """
 
@@ -77,6 +77,7 @@ defmodule Foundation.ErrorContext do
     else
       Process.put(:error_context, context)
     end
+
     :ok
   end
 
@@ -90,6 +91,7 @@ defmodule Foundation.ErrorContext do
     else
       Process.delete(:error_context)
     end
+
     :ok
   end
 
@@ -113,7 +115,7 @@ defmodule Foundation.ErrorContext do
   @spec with_temporary_context(t() | map(), (-> term())) :: term()
   def with_temporary_context(context, fun) when is_map(context) and is_function(fun, 0) do
     old_context = get_context()
-    
+
     try do
       set_context(context)
       fun.()
@@ -133,11 +135,12 @@ defmodule Foundation.ErrorContext do
   @spec spawn_with_context((-> term())) :: pid()
   def spawn_with_context(fun) when is_function(fun, 0) do
     context = get_context()
-    
+
     spawn(fn ->
       if context do
         set_context(context)
       end
+
       fun.()
     end)
   end
@@ -148,11 +151,12 @@ defmodule Foundation.ErrorContext do
   @spec spawn_link_with_context((-> term())) :: pid()
   def spawn_link_with_context(fun) when is_function(fun, 0) do
     context = get_context()
-    
+
     spawn_link(fn ->
       if context do
         set_context(context)
       end
+
       fun.()
     end)
   end
@@ -312,7 +316,8 @@ defmodule Foundation.ErrorContext do
   Enrich an error with the current context from Logger metadata or process dictionary.
   This is useful for automatically adding context to errors without explicit context passing.
   """
-  @spec enrich_error(Error.t() | {:error, Error.t()} | {:error, term()}) :: Error.t() | {:error, Error.t()}
+  @spec enrich_error(Error.t() | {:error, Error.t()} | {:error, term()}) ::
+          Error.t() | {:error, Error.t()}
   def enrich_error(%Error{} = error) do
     case get_context() do
       nil -> error
@@ -326,13 +331,20 @@ defmodule Foundation.ErrorContext do
 
   def enrich_error({:error, reason}) do
     case get_context() do
-      nil -> 
-        {:error, Error.new(:external_error, "External operation failed", context: %{original_reason: reason})}
+      nil ->
+        {:error,
+         Error.new(:external_error, "External operation failed",
+           context: %{original_reason: reason}
+         )}
+
       context when is_struct(context, __MODULE__) ->
         enhance_error({:error, reason}, context)
+
       context when is_map(context) ->
-        {:error, Error.new(:external_error, "External operation failed", 
-          context: Map.merge(context, %{original_reason: reason}))}
+        {:error,
+         Error.new(:external_error, "External operation failed",
+           context: Map.merge(context, %{original_reason: reason})
+         )}
     end
   end
 
