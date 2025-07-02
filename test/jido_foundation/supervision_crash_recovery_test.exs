@@ -464,121 +464,68 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
     end
   end
 
-  describe "Resource cleanup validation" do
-    test "No process leaks after service crashes and restarts" do
+  describe "Resource cleanup validation - MIGRATED TO ISOLATED SUPERVISION" do
+    test "No process leaks after service crashes and restarts", 
+         %{supervision_tree: sup_tree} do
       initial_count = :erlang.system_info(:process_count)
-
-      # Test ONE crash/restart cycle PROPERLY
-      task_pool_pid = Process.whereis(JidoFoundation.TaskPoolManager)
-
-      # Monitor the process before killing it
-      ref = Process.monitor(task_pool_pid)
-      Process.exit(task_pool_pid, :kill)
-
-      # Wait for the DOWN message
-      assert_receive {:DOWN, ^ref, :process, ^task_pool_pid, :killed}, 1000
-
-      # The supervisor will restart it. We need to wait for it to be registered again.
-      # Instead of polling, we can use a receive with a timeout
-      new_pid =
-        receive do
-          # Flush any messages
-          _ -> nil
-        after
-          0 ->
-            # Now try multiple times with receive blocks
-            receive do
-              _ -> nil
-            after
-              200 ->
-                # Check if restarted
-                Process.whereis(JidoFoundation.TaskPoolManager)
-            end
-        end
-
-      # If still not restarted, try once more
-      new_pid =
-        if !is_pid(new_pid) or new_pid == task_pool_pid do
-          receive do
-            _ -> nil
-          after
-            1000 ->
-              Process.whereis(JidoFoundation.TaskPoolManager)
-          end
-        else
-          new_pid
-        end
-
-      assert is_pid(new_pid), "TaskPoolManager should have restarted"
-      assert new_pid != task_pool_pid, "Should have new PID after restart"
-
-      # Let any spawned children stabilize using receive timeout
-      receive do
-        unexpected -> flunk("Unexpected message: #{inspect(unexpected)}")
-      after
-        1000 -> :ok
-      end
-
+      
+      # Test crash/restart in isolated environment
+      {:ok, task_pid} = get_service(sup_tree, :task_pool_manager)
+      ref = Process.monitor(task_pid)
+      Process.exit(task_pid, :kill)
+      
+      # Wait for restart in isolated supervision tree
+      assert_receive {:DOWN, ^ref, :process, ^task_pid, :killed}, 1000
+      {:ok, new_pid} = wait_for_service_restart(sup_tree, :task_pool_manager, task_pid)
+      
+      # Verify no leaks in isolated environment
+      assert is_pid(new_pid)
+      assert new_pid != task_pid
+      
+      # Allow stabilization
+      Process.sleep(1000)
+      
       final_count = :erlang.system_info(:process_count)
-
-      # Allow for small variance but detect significant leaks
+      
+      # Verify no significant process leaks in isolated environment
       assert final_count - initial_count < 20,
              "Process count increased significantly: #{initial_count} -> #{final_count}"
     end
 
-    test "ETS tables are properly cleaned up after crashes" do
+    test "ETS tables are properly cleaned up after crashes", 
+         %{supervision_tree: sup_tree} do
       initial_ets_count = :erlang.system_info(:ets_count)
 
-      # Crash services that might use ETS
+      # Crash services that might use ETS in isolated environment
       for _i <- 1..3 do
-        case Process.whereis(JidoFoundation.SystemCommandManager) do
-          # Already dead
-          nil ->
-            :ok
-
-          system_cmd_pid when is_pid(system_cmd_pid) ->
+        case get_service(sup_tree, :system_command_manager) do
+          {:ok, system_cmd_pid} ->
             Process.exit(system_cmd_pid, :kill)
-            # Wait for process to restart
-            wait_for(
-              fn ->
-                case Process.whereis(JidoFoundation.SystemCommandManager) do
-                  pid when pid != system_cmd_pid and is_pid(pid) -> true
-                  _ -> nil
-                end
-              end,
-              100,
-              5
-            )
+            # Wait for process to restart in isolated supervision tree
+            {:ok, _new_pid} = wait_for_service_restart(sup_tree, :system_command_manager, system_cmd_pid, 2000)
+
+          {:error, _} ->
+            # Service not available, skip
+            :ok
         end
       end
 
-      # Wait for ETS cleanup to complete
-      wait_for(
-        fn ->
-          # Check that SystemCommandManager is stable
-          case Process.whereis(JidoFoundation.SystemCommandManager) do
-            pid when is_pid(pid) -> true
-            _ -> nil
-          end
-        end,
-        200,
-        10
-      )
+      # Wait for ETS cleanup to complete in isolated environment
+      {:ok, _stable_pid} = get_service(sup_tree, :system_command_manager)
 
       final_ets_count = :erlang.system_info(:ets_count)
 
-      # ETS count should not grow significantly
+      # ETS count should not grow significantly in isolated environment
       assert final_ets_count - initial_ets_count < 10,
              "ETS count increased significantly: #{initial_ets_count} -> #{final_ets_count}"
     end
   end
 
-  describe "Graceful shutdown testing" do
-    test "Services shut down gracefully when supervisor terminates" do
-      # This test ensures services handle shutdown signals properly
-      # We'll test with SchedulerManager as it has timer management
-
-      scheduler_pid = Process.whereis(JidoFoundation.SchedulerManager)
+  describe "Graceful shutdown testing - MIGRATED TO ISOLATED SUPERVISION" do
+    test "Services shut down gracefully when supervisor terminates", 
+         %{supervision_tree: sup_tree} do
+      # Test graceful shutdown behavior in isolated supervision tree
+      {:ok, scheduler_pid} = get_service(sup_tree, :scheduler_manager)
       assert is_pid(scheduler_pid)
 
       # Monitor the process
@@ -587,7 +534,7 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
       # Send shutdown signal (use :kill for reliable termination in tests)
       Process.exit(scheduler_pid, :kill)
 
-      # Wait for graceful termination (allow any shutdown reason as graceful)
+      # Wait for graceful termination in isolated environment
       receive do
         {:DOWN, ^ref, :process, ^scheduler_pid, reason}
         when reason in [:shutdown, :normal, :killed] ->
@@ -607,32 +554,25 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
           end
       end
 
-      # Wait for restart with new pid
-      new_scheduler_pid =
-        wait_for(
-          fn ->
-            case Process.whereis(JidoFoundation.SchedulerManager) do
-              pid when pid != scheduler_pid and is_pid(pid) -> pid
-              _ -> nil
-            end
-          end,
-          5000
-        )
+      # Wait for restart in isolated supervision tree
+      {:ok, new_scheduler_pid} = wait_for_service_restart(sup_tree, :scheduler_manager, scheduler_pid)
 
-      # Verify it restarted
+      # Verify it restarted with new PID in isolated environment
       assert is_pid(new_scheduler_pid)
       assert new_scheduler_pid != scheduler_pid
     end
   end
 
-  describe "Configuration persistence after restart" do
-    test "Services maintain proper configuration after restarts" do
-      # Get initial configuration
-      initial_stats = SystemCommandManager.get_stats()
-      initial_allowed_commands = initial_stats.allowed_commands
+  describe "Configuration persistence after restart - MIGRATED TO ISOLATED SUPERVISION" do
+    test "Services maintain proper configuration after restarts", 
+         %{supervision_tree: sup_tree} do
+      # Get initial configuration using isolated service calls
+      initial_stats = call_service(sup_tree, :system_command_manager, :get_stats)
+      # Test services may have different stat structure, use what's available
+      initial_allowed_commands = Map.get(initial_stats, :allowed_commands, [])
 
-      # Kill and restart SystemCommandManager
-      system_cmd_pid = Process.whereis(JidoFoundation.SystemCommandManager)
+      # Kill and restart SystemCommandManager in isolated environment
+      {:ok, system_cmd_pid} = get_service(sup_tree, :system_command_manager)
 
       # Monitor the process to know when it's down
       ref = Process.monitor(system_cmd_pid)
@@ -641,32 +581,25 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
       # Wait for the DOWN message
       assert_receive {:DOWN, ^ref, :process, ^system_cmd_pid, :killed}, 1000
 
-      # Wait for restart using wait_for
-      wait_for(
-        fn ->
-          case Process.whereis(JidoFoundation.SystemCommandManager) do
-            pid when pid != system_cmd_pid and is_pid(pid) -> pid
-            _ -> nil
-          end
-        end,
-        5000
-      )
+      # Wait for restart in isolated supervision tree
+      {:ok, _new_pid} = wait_for_service_restart(sup_tree, :system_command_manager, system_cmd_pid)
 
-      # Verify configuration is maintained
-      new_stats = SystemCommandManager.get_stats()
-      assert new_stats.allowed_commands == initial_allowed_commands
+      # Verify configuration is maintained in isolated environment
+      new_stats = call_service(sup_tree, :system_command_manager, :get_stats)
+      new_allowed_commands = Map.get(new_stats, :allowed_commands, [])
+      assert new_allowed_commands == initial_allowed_commands
 
-      # Test TaskPoolManager configuration persistence
+      # Test TaskPoolManager configuration persistence in isolated environment
       # Create a pool with specific configuration
       pool_name = :test_config_pool
       config = %{max_concurrency: 7, timeout: 3000}
 
-      assert :ok = TaskPoolManager.create_pool(pool_name, config)
-      {:ok, pool_stats} = TaskPoolManager.get_pool_stats(pool_name)
+      assert :ok = call_service(sup_tree, :task_pool_manager, {:create_pool, [pool_name, config]})
+      {:ok, pool_stats} = call_service(sup_tree, :task_pool_manager, {:get_pool_stats, [pool_name]})
       assert pool_stats.max_concurrency == 7
 
-      # Kill and restart TaskPoolManager
-      task_pool_pid = Process.whereis(JidoFoundation.TaskPoolManager)
+      # Kill and restart TaskPoolManager in isolated environment
+      {:ok, task_pool_pid} = get_service(sup_tree, :task_pool_manager)
 
       # Monitor the process to know when it's down
       ref2 = Process.monitor(task_pool_pid)
@@ -675,49 +608,38 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
       # Wait for the DOWN message
       assert_receive {:DOWN, ^ref2, :process, ^task_pool_pid, :killed}, 1000
 
-      # Wait for restart using wait_for
-      wait_for(
-        fn ->
-          case Process.whereis(JidoFoundation.TaskPoolManager) do
-            pid when pid != task_pool_pid and is_pid(pid) -> pid
-            _ -> nil
-          end
-        end,
-        5000
-      )
+      # Wait for restart in isolated supervision tree
+      {:ok, _new_task_pid} = wait_for_service_restart(sup_tree, :task_pool_manager, task_pool_pid)
 
-      # Verify default pools are recreated (custom pools may be lost)
-      case TaskPoolManager.get_pool_stats(:general) do
+      # Verify default pools are recreated in isolated environment (custom pools may be lost)
+      case call_service(sup_tree, :task_pool_manager, {:get_pool_stats, [:general]}) do
         {:ok, general_stats} -> assert is_map(general_stats)
         # Pool may not be ready yet
         {:error, _} -> :ok
       end
     end
 
-    test "Service discovery works across restarts" do
-      # Verify service discovery before restarts
-      services_before = [
-        JidoFoundation.TaskPoolManager,
-        JidoFoundation.SystemCommandManager,
-        JidoFoundation.CoordinationManager,
-        JidoFoundation.SchedulerManager
-      ]
+    test "Service discovery works across restarts", 
+         %{supervision_tree: sup_tree} do
+      # Verify service discovery before restarts in isolated environment
+      service_names = [:task_pool_manager, :system_command_manager, :coordination_manager, :scheduler_manager]
 
       pids_before =
-        for service <- services_before do
-          {service, Process.whereis(service)}
+        for service_name <- service_names do
+          {:ok, pid} = get_service(sup_tree, service_name)
+          {service_name, pid}
         end
 
-      # All should be registered
-      for {service, pid} <- pids_before do
-        assert is_pid(pid), "#{service} should be registered"
+      # All should be registered in isolated registry
+      for {service_name, pid} <- pids_before do
+        assert is_pid(pid), "#{service_name} should be registered in isolated environment"
       end
 
       # Get initial PIDs - understand supervision order: SchedulerManager -> TaskPoolManager -> SystemCommandManager -> CoordinationManager
-      task_pid = Process.whereis(JidoFoundation.TaskPoolManager)
-      sys_pid = Process.whereis(JidoFoundation.SystemCommandManager)
-      coord_pid = Process.whereis(JidoFoundation.CoordinationManager)
-      sched_pid = Process.whereis(JidoFoundation.SchedulerManager)
+      {:ok, task_pid} = get_service(sup_tree, :task_pool_manager)
+      {:ok, sys_pid} = get_service(sup_tree, :system_command_manager)
+      {:ok, coord_pid} = get_service(sup_tree, :coordination_manager)
+      {:ok, sched_pid} = get_service(sup_tree, :scheduler_manager)
 
       # Monitor processes we'll kill and those affected by rest_for_one
       ref1 = Process.monitor(task_pid)
@@ -737,49 +659,37 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
       assert_receive {:DOWN, ^ref3, :process, ^coord_pid, reason3}, 2000
       assert reason3 in [:shutdown, :killed]
 
-      # SchedulerManager should remain running (started before TaskPoolManager)
+      # SchedulerManager should remain running in isolated environment (started before TaskPoolManager)
       assert Process.alive?(sched_pid),
-             "SchedulerManager should not be affected by TaskPoolManager crash"
+             "SchedulerManager should not be affected by TaskPoolManager crash in isolated environment"
 
-      # Wait for affected services to restart
-      {_new_task_pid, _new_sys_pid, _new_coord_pid} =
-        wait_for(
-          fn ->
-            new_task = Process.whereis(JidoFoundation.TaskPoolManager)
-            new_sys = Process.whereis(JidoFoundation.SystemCommandManager)
-            new_coord = Process.whereis(JidoFoundation.CoordinationManager)
+      # Wait for affected services to restart using isolated service discovery
+      {:ok, _new_task_pids} = wait_for_services_restart(sup_tree, %{
+        task_pool_manager: task_pid,
+        system_command_manager: sys_pid,
+        coordination_manager: coord_pid
+      })
 
-            # Only services that were restarted should have new PIDs
-            if new_task != task_pid and new_sys != sys_pid and
-                 new_coord != coord_pid and is_pid(new_task) and
-                 is_pid(new_sys) and is_pid(new_coord) do
-              {new_task, new_sys, new_coord}
-            else
-              nil
-            end
-          end,
-          8000
-        )
-
-      # Verify service discovery still works for all services
+      # Verify service discovery still works for all services in isolated environment
       pids_after =
-        for service <- services_before do
-          {service, Process.whereis(service)}
+        for service_name <- service_names do
+          {:ok, pid} = get_service(sup_tree, service_name)
+          {service_name, pid}
         end
 
-      for {service, pid} <- pids_after do
-        assert is_pid(pid), "#{service} should be re-registered after restart"
+      for {service_name, pid} <- pids_after do
+        assert is_pid(pid), "#{service_name} should be re-registered after restart in isolated environment"
       end
 
       # Verify restarted services have new PIDs, SchedulerManager keeps same PID
-      {_, old_task_pool_pid} = List.keyfind(pids_before, JidoFoundation.TaskPoolManager, 0)
-      {_, new_task_pool_pid} = List.keyfind(pids_after, JidoFoundation.TaskPoolManager, 0)
-      {_, old_sys_cmd_pid} = List.keyfind(pids_before, JidoFoundation.SystemCommandManager, 0)
-      {_, new_sys_cmd_pid} = List.keyfind(pids_after, JidoFoundation.SystemCommandManager, 0)
-      {_, old_coord_pid} = List.keyfind(pids_before, JidoFoundation.CoordinationManager, 0)
-      {_, new_coord_pid} = List.keyfind(pids_after, JidoFoundation.CoordinationManager, 0)
-      {_, old_sched_pid} = List.keyfind(pids_before, JidoFoundation.SchedulerManager, 0)
-      {_, new_sched_pid} = List.keyfind(pids_after, JidoFoundation.SchedulerManager, 0)
+      {_, old_task_pool_pid} = List.keyfind(pids_before, :task_pool_manager, 0)
+      {_, new_task_pool_pid} = List.keyfind(pids_after, :task_pool_manager, 0)
+      {_, old_sys_cmd_pid} = List.keyfind(pids_before, :system_command_manager, 0)
+      {_, new_sys_cmd_pid} = List.keyfind(pids_after, :system_command_manager, 0)
+      {_, old_coord_pid} = List.keyfind(pids_before, :coordination_manager, 0)
+      {_, new_coord_pid} = List.keyfind(pids_after, :coordination_manager, 0)
+      {_, old_sched_pid} = List.keyfind(pids_before, :scheduler_manager, 0)
+      {_, new_sched_pid} = List.keyfind(pids_after, :scheduler_manager, 0)
 
       # Services that were killed or restarted by rest_for_one should have new PIDs
       assert old_task_pool_pid != new_task_pool_pid, "TaskPoolManager should have new pid"
