@@ -448,8 +448,19 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
       assert is_pid(new_pid)
       assert new_pid != task_pid
 
-      # Allow stabilization
-      Process.sleep(1000)
+      # Wait for process count to stabilize using proper wait_for pattern
+      wait_for(
+        fn ->
+          current_count = :erlang.system_info(:process_count)
+          # Allow some fluctuation but wait for stability
+          if current_count <= initial_count + 15 do
+            current_count
+          else
+            nil
+          end
+        end,
+        3000
+      )
 
       final_count = :erlang.system_info(:process_count)
 
