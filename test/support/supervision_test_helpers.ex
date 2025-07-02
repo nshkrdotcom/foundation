@@ -1,18 +1,18 @@
 defmodule Foundation.SupervisionTestHelpers do
   @moduledoc """
   Helper functions for testing supervision crash recovery with isolated supervision trees.
-  
+
   Provides utilities for:
   - Creating isolated JidoFoundation supervision trees
   - Accessing services within test supervision context
   - Monitoring process lifecycle in test environment
   - Verifying supervision behavior without global contamination
-  
+
   ## Usage with UnifiedTestFoundation
-  
+
   This module is designed to work with `Foundation.UnifiedTestFoundation` in 
   `:supervision_testing` mode:
-  
+
       defmodule MySupervisionTest do
         use Foundation.UnifiedTestFoundation, :supervision_testing
         
@@ -24,32 +24,33 @@ defmodule Foundation.SupervisionTestHelpers do
           assert new_pid != task_pid
         end
       end
-  
+
   ## Service Access
-  
+
   Services are accessed through isolated registries using service names:
   - `:task_pool_manager` - JidoFoundation.TaskPoolManager
   - `:system_command_manager` - JidoFoundation.SystemCommandManager
   - `:coordination_manager` - JidoFoundation.CoordinationManager
   - `:scheduler_manager` - JidoFoundation.SchedulerManager
-  
+
   ## Supervision Order
-  
+
   The helpers understand the supervision order from JidoSystem.Application:
   1. SchedulerManager (starts first)
   2. TaskPoolManager
   3. SystemCommandManager
   4. CoordinationManager (starts last)
-  
+
   With `:rest_for_one` strategy, killing TaskPoolManager will restart
   SystemCommandManager and CoordinationManager, but not SchedulerManager.
   """
-  
+
   import Foundation.AsyncTestHelpers
   import ExUnit.Assertions
   require Logger
 
   # Service name to module mappings for isolated testing
+  # These map to the original JidoFoundation modules for registry lookup
   @service_modules %{
     task_pool_manager: JidoFoundation.TaskPoolManager,
     system_command_manager: JidoFoundation.SystemCommandManager,
@@ -58,24 +59,29 @@ defmodule Foundation.SupervisionTestHelpers do
   }
 
   # Supervision order from JidoSystem.Application (critical for rest_for_one testing)
-  @supervision_order [:scheduler_manager, :task_pool_manager, :system_command_manager, :coordination_manager]
+  @supervision_order [
+    :scheduler_manager,
+    :task_pool_manager,
+    :system_command_manager,
+    :coordination_manager
+  ]
 
   @doc """
   Get a service PID from the test supervision tree.
-  
+
   ## Parameters
-  
+
   - `supervision_context` - The supervision context from test setup
   - `service_name` - Atom representing the service (e.g., `:task_pool_manager`)
-  
+
   ## Returns
-  
+
   - `{:ok, pid}` - If service is found and running
   - `{:error, :service_not_found}` - If service is not registered
   - `{:error, :service_not_alive}` - If service is registered but not alive
-  
+
   ## Examples
-  
+
       test "service access", %{supervision_tree: sup_tree} do
         {:ok, task_pid} = get_service(sup_tree, :task_pool_manager)
         assert is_pid(task_pid)
@@ -84,17 +90,18 @@ defmodule Foundation.SupervisionTestHelpers do
   """
   def get_service(supervision_context, service_name) do
     service_module = Map.get(@service_modules, service_name)
-    
+
     if service_module do
       case supervision_context.registry
            |> Registry.lookup({:service, service_module}) do
-        [{pid, _}] when is_pid(pid) -> 
+        [{pid, _}] when is_pid(pid) ->
           if Process.alive?(pid) do
             {:ok, pid}
           else
             {:error, :service_not_alive}
           end
-        [] -> 
+
+        [] ->
           {:error, :service_not_found}
       end
     else
@@ -104,24 +111,24 @@ defmodule Foundation.SupervisionTestHelpers do
 
   @doc """
   Wait for a service to restart after crash in isolated supervision tree.
-  
+
   This function polls the registry until the service is available with a 
   different PID than the original, indicating a successful restart.
-  
+
   ## Parameters
-  
+
   - `supervision_context` - The supervision context from test setup
   - `service_name` - Atom representing the service
   - `old_pid` - The PID of the crashed service
   - `timeout` - Maximum time to wait in milliseconds (default: 5000)
-  
+
   ## Returns
-  
+
   - `{:ok, new_pid}` - Service restarted with new PID
   - Raises ExUnit.AssertionError on timeout
-  
+
   ## Examples
-  
+
       test "restart behavior", %{supervision_tree: sup_tree} do
         {:ok, old_pid} = get_service(sup_tree, :task_pool_manager)
         Process.exit(old_pid, :kill)
@@ -135,9 +142,10 @@ defmodule Foundation.SupervisionTestHelpers do
     wait_for(
       fn ->
         case get_service(supervision_context, service_name) do
-          {:ok, new_pid} when new_pid != old_pid and is_pid(new_pid) -> 
+          {:ok, new_pid} when new_pid != old_pid and is_pid(new_pid) ->
             {:ok, new_pid}
-          _ -> 
+
+          _ ->
             nil
         end
       end,
@@ -147,21 +155,21 @@ defmodule Foundation.SupervisionTestHelpers do
 
   @doc """
   Monitor all processes in supervision tree for proper shutdown cascade testing.
-  
+
   Returns a map of service_name => {pid, monitor_ref} for easy assertion.
   This is useful for testing `:rest_for_one` supervision behavior where
   killing one service should cause specific other services to restart.
-  
+
   ## Parameters
-  
+
   - `supervision_context` - The supervision context from test setup
-  
+
   ## Returns
-  
+
   - Map of `%{service_name => {pid, monitor_ref}}`
-  
+
   ## Examples
-  
+
       test "monitor all services", %{supervision_tree: sup_tree} do
         monitors = monitor_all_services(sup_tree)
         
@@ -175,12 +183,13 @@ defmodule Foundation.SupervisionTestHelpers do
   """
   def monitor_all_services(supervision_context) do
     services = Map.keys(@service_modules)
-    
+
     for service <- services, into: %{} do
       case get_service(supervision_context, service) do
         {:ok, pid} ->
           ref = Process.monitor(pid)
           {service, {pid, ref}}
+
         {:error, _reason} ->
           Logger.warning("Service #{service} not available for monitoring")
           {service, {nil, nil}}
@@ -192,25 +201,25 @@ defmodule Foundation.SupervisionTestHelpers do
 
   @doc """
   Verify rest_for_one supervision behavior in isolated environment.
-  
+
   This function understands the supervision order from JidoSystem.Application
   and verifies that when a service crashes, only services that start after it
   in the supervision tree are restarted (rest_for_one behavior).
-  
+
   ## Supervision Order
-  
+
   1. SchedulerManager
   2. TaskPoolManager  
   3. SystemCommandManager
   4. CoordinationManager
-  
+
   ## Parameters
-  
+
   - `monitors` - Map from `monitor_all_services/1`
   - `crashed_service` - The service that was intentionally crashed
-  
+
   ## Examples
-  
+
       test "rest_for_one cascade", %{supervision_tree: sup_tree} do
         monitors = monitor_all_services(sup_tree)
         
@@ -225,16 +234,17 @@ defmodule Foundation.SupervisionTestHelpers do
   """
   def verify_rest_for_one_cascade(monitors, crashed_service) do
     crashed_index = Enum.find_index(@supervision_order, &(&1 == crashed_service))
-    
+
     if crashed_index == nil do
-      raise ArgumentError, "Unknown service: #{crashed_service}. Expected one of: #{inspect(Map.keys(@service_modules))}"
+      raise ArgumentError,
+            "Unknown service: #{crashed_service}. Expected one of: #{inspect(Map.keys(@service_modules))}"
     end
-    
+
     # Services started before crashed service should remain alive
     services_before = Enum.take(@supervision_order, crashed_index)
     # Services started after crashed service should restart
     services_after = Enum.drop(@supervision_order, crashed_index + 1)
-    
+
     # Wait for crashed service DOWN message
     case Map.get(monitors, crashed_service) do
       {crashed_pid, crashed_ref} when is_pid(crashed_pid) ->
@@ -243,66 +253,69 @@ defmodule Foundation.SupervisionTestHelpers do
             :ok
         after
           2000 ->
-            raise ExUnit.AssertionError, 
-              "Expected #{crashed_service} to be killed within 2000ms"
+            raise ExUnit.AssertionError,
+                  "Expected #{crashed_service} to be killed within 2000ms"
         end
+
       _ ->
         raise ArgumentError, "Service #{crashed_service} was not being monitored"
     end
-    
+
     # Wait for dependent services DOWN messages (supervisor shutdown)
     for service <- services_after do
       case Map.get(monitors, service) do
         {service_pid, service_ref} when is_pid(service_pid) ->
           receive do
             {:DOWN, ^service_ref, :process, ^service_pid, down_reason} ->
-              assert down_reason in [:shutdown, :killed], 
-                "Expected #{service} to be shut down by supervisor, got: #{down_reason}"
+              assert down_reason in [:shutdown, :killed],
+                     "Expected #{service} to be shut down by supervisor, got: #{down_reason}"
           after
             2000 ->
-              raise ExUnit.AssertionError, 
-                "Expected #{service} to shut down within 2000ms"
+              raise ExUnit.AssertionError,
+                    "Expected #{service} to shut down within 2000ms"
           end
+
         _ ->
           # Service wasn't running, that's ok
           :ok
       end
     end
-    
+
     # Verify services before crashed service remain alive
     for service <- services_before do
       case Map.get(monitors, service) do
         {service_pid, _service_ref} when is_pid(service_pid) ->
-          assert Process.alive?(service_pid), 
-            "#{service} should remain alive (started before crashed service #{crashed_service})"
+          assert Process.alive?(service_pid),
+                 "#{service} should remain alive (started before crashed service #{crashed_service})"
+
         _ ->
           # Service wasn't running to begin with
           :ok
       end
     end
-    
+
     :ok
   end
 
   @doc """
   Wait for all services in a supervision tree to be restarted after a cascade.
-  
+
   This is useful after calling `verify_rest_for_one_cascade/2` to wait for
   the supervisor to restart the affected services with new PIDs.
-  
+
   ## Parameters
-  
+
   - `supervision_context` - The supervision context from test setup
   - `old_pids` - Map of service_name => old_pid before restart
   - `timeout` - Maximum time to wait (default: 8000ms)
-  
+
   ## Returns
-  
+
   - `{:ok, new_pids}` - Map of service_name => new_pid after restart
   - Raises ExUnit.AssertionError on timeout
-  
+
   ## Examples
-  
+
       test "wait for restart", %{supervision_tree: sup_tree} do
         # Get initial PIDs
         {:ok, task_pid} = get_service(sup_tree, :task_pool_manager)
@@ -320,16 +333,17 @@ defmodule Foundation.SupervisionTestHelpers do
   def wait_for_services_restart(supervision_context, old_pids, timeout \\ 8000) do
     wait_for(
       fn ->
-        new_pids = 
+        new_pids =
           for {service, old_pid} <- old_pids, into: %{} do
             case get_service(supervision_context, service) do
               {:ok, new_pid} when new_pid != old_pid ->
                 {service, new_pid}
+
               _ ->
                 {service, nil}
             end
           end
-        
+
         # Check if all services have new PIDs
         if Enum.all?(new_pids, fn {_service, pid} -> pid != nil end) do
           {:ok, new_pids}
@@ -343,20 +357,20 @@ defmodule Foundation.SupervisionTestHelpers do
 
   @doc """
   Call a service function in isolated supervision tree.
-  
+
   This is a convenience function for making GenServer calls to services
   in the isolated supervision context. It automatically looks up the
   service PID and makes the call.
-  
+
   ## Parameters
-  
+
   - `supervision_context` - The supervision context from test setup
   - `service_name` - Atom representing the service
   - `call_or_function` - GenServer call term or function atom
   - `timeout` - Call timeout (default: 5000ms)
-  
+
   ## Examples
-  
+
       test "service calls", %{supervision_tree: sup_tree} do
         # Call with function atom
         stats = call_service(sup_tree, :task_pool_manager, :get_all_stats)
@@ -374,12 +388,14 @@ defmodule Foundation.SupervisionTestHelpers do
         case call_or_function do
           atom when is_atom(atom) ->
             GenServer.call(pid, atom, timeout)
+
           {function, args} when is_atom(function) and is_list(args) ->
             GenServer.call(pid, {function, args}, timeout)
+
           _ ->
             GenServer.call(pid, call_or_function, timeout)
         end
-      
+
       {:error, reason} ->
         {:error, {:service_not_available, service_name, reason}}
     end
@@ -387,11 +403,11 @@ defmodule Foundation.SupervisionTestHelpers do
 
   @doc """
   Cast a message to a service in isolated supervision tree.
-  
+
   Similar to `call_service/4` but for GenServer casts.
-  
+
   ## Examples
-  
+
       test "service casts", %{supervision_tree: sup_tree} do
         :ok = cast_service(sup_tree, :task_pool_manager, {:update_config, %{timeout: 10000}})
       end
@@ -401,7 +417,7 @@ defmodule Foundation.SupervisionTestHelpers do
       {:ok, pid} ->
         GenServer.cast(pid, message)
         :ok
-      
+
       {:error, reason} ->
         {:error, {:service_not_available, service_name, reason}}
     end
@@ -409,12 +425,12 @@ defmodule Foundation.SupervisionTestHelpers do
 
   @doc """
   Get the supervision order for services.
-  
+
   Returns the order in which services are started in the supervision tree.
   This is useful for understanding `:rest_for_one` behavior.
-  
+
   ## Examples
-  
+
       iex> Foundation.SupervisionTestHelpers.get_supervision_order()
       [:scheduler_manager, :task_pool_manager, :system_command_manager, :coordination_manager]
   """
@@ -422,9 +438,9 @@ defmodule Foundation.SupervisionTestHelpers do
 
   @doc """
   Get all supported service names.
-  
+
   ## Examples
-  
+
       iex> Foundation.SupervisionTestHelpers.get_supported_services()
       [:task_pool_manager, :system_command_manager, :coordination_manager, :scheduler_manager]
   """
@@ -432,9 +448,9 @@ defmodule Foundation.SupervisionTestHelpers do
 
   @doc """
   Convert service name to module.
-  
+
   ## Examples
-  
+
       iex> Foundation.SupervisionTestHelpers.service_name_to_module(:task_pool_manager)
       JidoFoundation.TaskPoolManager
   """
@@ -442,18 +458,18 @@ defmodule Foundation.SupervisionTestHelpers do
 
   @doc """
   Wait for a specific number of services to be available in the supervision context.
-  
+
   This is useful during test setup to ensure all required services are ready
   before starting the actual test.
-  
+
   ## Parameters
-  
+
   - `supervision_context` - The supervision context from test setup
   - `service_names` - List of service names to wait for (default: all services)
   - `timeout` - Maximum time to wait (default: 10000ms)
-  
+
   ## Examples
-  
+
       setup do
         context = create_isolated_supervision()
         wait_for_services_ready(context, [:task_pool_manager, :system_command_manager])
@@ -462,10 +478,10 @@ defmodule Foundation.SupervisionTestHelpers do
   """
   def wait_for_services_ready(supervision_context, service_names \\ nil, timeout \\ 10000) do
     services_to_check = service_names || Map.keys(@service_modules)
-    
+
     wait_for(
       fn ->
-        ready_services = 
+        ready_services =
           for service <- services_to_check do
             case get_service(supervision_context, service) do
               {:ok, _pid} -> service
@@ -473,7 +489,7 @@ defmodule Foundation.SupervisionTestHelpers do
             end
           end
           |> Enum.filter(& &1)
-        
+
         if length(ready_services) == length(services_to_check) do
           ready_services
         else
@@ -486,20 +502,20 @@ defmodule Foundation.SupervisionTestHelpers do
 
   @doc """
   Validate that the supervision context has the required structure.
-  
+
   This is a helper for test setup validation to ensure the supervision
   context has all required fields.
-  
+
   ## Examples
-  
+
       test "context validation", %{supervision_tree: sup_tree} do
         assert validate_supervision_context(sup_tree) == :ok
       end
   """
   def validate_supervision_context(supervision_context) do
     required_fields = [:test_id, :registry, :registry_pid, :supervisor, :supervisor_pid]
-    
-    missing_fields = 
+
+    missing_fields =
       for field <- required_fields do
         if Map.has_key?(supervision_context, field) do
           nil
@@ -508,7 +524,7 @@ defmodule Foundation.SupervisionTestHelpers do
         end
       end
       |> Enum.filter(& &1)
-    
+
     if missing_fields == [] do
       :ok
     else

@@ -380,12 +380,12 @@ defmodule JidoFoundation.SignalRouter do
             :ok ->
               # Use supervised send for reliable signal delivery
               case SupervisedSend.send_supervised(
-                handler_pid,
-                {:routed_signal, signal_type, measurements, metadata},
-                timeout: 1000,
-                on_error: :log,
-                metadata: %{signal_type: signal_type, handler: handler_pid}
-              ) do
+                     handler_pid,
+                     {:routed_signal, signal_type, measurements, metadata},
+                     timeout: 1000,
+                     on_error: :log,
+                     metadata: %{signal_type: signal_type, handler: handler_pid}
+                   ) do
                 :ok -> :ok
                 {:error, reason} -> {:drop, {:send_failed, reason}}
               end

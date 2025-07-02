@@ -380,18 +380,19 @@ defmodule MABEAM.CoordinationPatterns do
 
     # Broadcast to selected agents with delivery tracking
     case SupervisedSend.broadcast_supervised(
-      agents,
-      {:hierarchy_broadcast, hierarchy_id, message},
-      strategy: :best_effort,
-      timeout: 2000,
-      metadata: %{hierarchy_id: hierarchy_id}
-    ) do
+           agents,
+           {:hierarchy_broadcast, hierarchy_id, message},
+           strategy: :best_effort,
+           timeout: 2000,
+           metadata: %{hierarchy_id: hierarchy_id}
+         ) do
       {:ok, results} ->
         # Log any failures for monitoring
-        failed = Enum.filter(results, fn {_id, result, _} -> 
-          result != :ok 
-        end)
-        
+        failed =
+          Enum.filter(results, fn {_id, result, _} ->
+            result != :ok
+          end)
+
         if length(failed) > 0 do
           Logger.warning("Hierarchy broadcast partial failure",
             hierarchy_id: hierarchy_id,
@@ -399,14 +400,15 @@ defmodule MABEAM.CoordinationPatterns do
             total_count: length(agents)
           )
         end
-        
+
         :ok
-        
+
       error ->
         Logger.error("Hierarchy broadcast failed completely",
           hierarchy_id: hierarchy_id,
           error: error
         )
+
         error
     end
   end
@@ -642,19 +644,21 @@ defmodule MABEAM.CoordinationPatterns do
   defp notify_agents(agents, result) do
     # Use supervised broadcast for consensus results - all must receive
     case SupervisedSend.broadcast_supervised(
-      agents,
-      {:consensus_result, result},
-      strategy: :all_or_nothing,  # All must receive consensus result
-      timeout: 5000
-    ) do
+           agents,
+           {:consensus_result, result},
+           # All must receive consensus result
+           strategy: :all_or_nothing,
+           timeout: 5000
+         ) do
       {:ok, _results} ->
         :ok
-        
+
       error ->
         Logger.error("Failed to notify agents of consensus result",
           result: result,
           error: error
         )
+
         error
     end
   end

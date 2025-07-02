@@ -385,9 +385,9 @@ defmodule JidoSystem.Agents.CoordinatorAgent do
         # Cancel any running tasks with supervised delivery
         Enum.each(workflow.assigned_agents, fn {agent_id, _} ->
           case Map.get(agent.state.agent_pool, agent_id) do
-            %{pid: pid} -> 
+            %{pid: pid} ->
               SupervisedSend.send_supervised(
-                pid, 
+                pid,
                 {:cancel_task, execution_id},
                 timeout: 5000,
                 retries: 1,
@@ -398,7 +398,9 @@ defmodule JidoSystem.Agents.CoordinatorAgent do
                   action: :cancel_task
                 }
               )
-            _ -> :ok
+
+            _ ->
+              :ok
           end
         end)
 

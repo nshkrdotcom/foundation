@@ -61,9 +61,11 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
       wait_for(
         fn ->
           case Process.whereis(service) do
-            pid when is_pid(pid) -> 
+            pid when is_pid(pid) ->
               if Process.alive?(pid), do: pid, else: nil
-            _ -> nil
+
+            _ ->
+              nil
           end
         end,
         5000
@@ -77,9 +79,11 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
         wait_for(
           fn ->
             case Process.whereis(service) do
-              pid when is_pid(pid) -> 
+              pid when is_pid(pid) ->
                 if Process.alive?(pid), do: pid, else: nil
-              _ -> nil
+
+              _ ->
+                nil
             end
           end,
           10_000
@@ -722,13 +726,14 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
       # Wait for killed processes to go down
       assert_receive {:DOWN, ^ref1, :process, ^task_pid, :killed}, 1000
       assert_receive {:DOWN, ^ref2, :process, ^sys_pid, :killed}, 1000
-      
+
       # CoordinationManager should be restarted by supervisor (rest_for_one behavior)
       assert_receive {:DOWN, ^ref3, :process, ^coord_pid, reason3}, 2000
       assert reason3 in [:shutdown, :killed]
 
       # SchedulerManager should remain running (started before TaskPoolManager)
-      assert Process.alive?(sched_pid), "SchedulerManager should not be affected by TaskPoolManager crash"
+      assert Process.alive?(sched_pid),
+             "SchedulerManager should not be affected by TaskPoolManager crash"
 
       # Wait for affected services to restart
       {_new_task_pid, _new_sys_pid, _new_coord_pid} =
@@ -739,9 +744,9 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
             new_coord = Process.whereis(JidoFoundation.CoordinationManager)
 
             # Only services that were restarted should have new PIDs
-            if new_task != task_pid and new_sys != sys_pid and 
-               new_coord != coord_pid and is_pid(new_task) and 
-               is_pid(new_sys) and is_pid(new_coord) do
+            if new_task != task_pid and new_sys != sys_pid and
+                 new_coord != coord_pid and is_pid(new_task) and
+                 is_pid(new_sys) and is_pid(new_coord) do
               {new_task, new_sys, new_coord}
             else
               nil
@@ -774,9 +779,10 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
       assert old_task_pool_pid != new_task_pool_pid, "TaskPoolManager should have new pid"
       assert old_sys_cmd_pid != new_sys_cmd_pid, "SystemCommandManager should have new pid"
       assert old_coord_pid != new_coord_pid, "CoordinationManager should have new pid"
-      
+
       # SchedulerManager should keep the same PID (not affected by TaskPoolManager crash)
-      assert old_sched_pid == new_sched_pid, "SchedulerManager should keep same pid (not affected by rest_for_one)"
+      assert old_sched_pid == new_sched_pid,
+             "SchedulerManager should keep same pid (not affected by rest_for_one)"
     end
   end
 

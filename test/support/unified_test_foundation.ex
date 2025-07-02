@@ -13,6 +13,7 @@ defmodule Foundation.UnifiedTestFoundation do
   - `:full_isolation` - Complete service isolation
   - `:contamination_detection` - Full isolation + contamination monitoring
   - `:service_integration` - Service Integration Architecture testing with SIA components
+  - `:supervision_testing` - Isolated supervision trees for crash recovery testing
 
   ## Usage Examples
 
@@ -49,6 +50,15 @@ defmodule Foundation.UnifiedTestFoundation do
 
         test "service integration", %{sia_context: ctx} do
           # SIA components available for testing
+        end
+      end
+
+      # Supervision crash recovery testing
+      defmodule SupervisionTest do
+        use Foundation.UnifiedTestFoundation, :supervision_testing
+
+        test "crash recovery", %{supervision_tree: sup_tree} do
+          # Isolated supervision tree for crash testing
         end
       end
   """
@@ -289,6 +299,19 @@ defmodule Foundation.UnifiedTestFoundation do
   end
 
   @doc """
+  Supervision testing setup with isolated supervision trees.
+
+  Creates isolated JidoFoundation supervision trees for crash recovery testing.
+  Each test gets its own complete supervision tree with isolated services.
+  """
+  def supervision_testing_setup(_context) do
+    ensure_foundation_services()
+
+    # Create isolated supervision tree using the dedicated setup module
+    Foundation.SupervisionTestSetup.create_isolated_supervision()
+  end
+
+  @doc """
   Service Integration Architecture setup for testing SIA components.
   """
   def service_integration_setup(context) do
@@ -464,6 +487,8 @@ defmodule Foundation.UnifiedTestFoundation do
   defp can_run_async?(:contamination_detection), do: false
   # SIA needs careful coordination
   defp can_run_async?(:service_integration), do: false
+  # Supervision testing needs serial execution for process monitoring
+  defp can_run_async?(:supervision_testing), do: false
 
   defp setup_for_mode(:basic) do
     quote do
@@ -501,6 +526,12 @@ defmodule Foundation.UnifiedTestFoundation do
     end
   end
 
+  defp setup_for_mode(:supervision_testing) do
+    quote do
+      Foundation.UnifiedTestFoundation.supervision_testing_setup(%{})
+    end
+  end
+
   defp module_config_for_mode(:contamination_detection) do
     quote do
       @moduletag :contamination_detection
@@ -519,6 +550,14 @@ defmodule Foundation.UnifiedTestFoundation do
     quote do
       @moduletag :service_integration
       @moduletag :serial
+    end
+  end
+
+  defp module_config_for_mode(:supervision_testing) do
+    quote do
+      @moduletag :supervision_testing
+      @moduletag :serial
+      @moduletag timeout: 30_000
     end
   end
 

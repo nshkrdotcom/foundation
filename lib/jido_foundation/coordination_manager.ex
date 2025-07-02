@@ -431,7 +431,7 @@ defmodule JidoFoundation.CoordinationManager do
 
             # Fall back to supervised send for reliability
             SupervisedSend.send_supervised(
-              receiver_pid, 
+              receiver_pid,
               message,
               timeout: 5000,
               retries: 1,
@@ -446,10 +446,13 @@ defmodule JidoFoundation.CoordinationManager do
             {:error, :receiver_terminated}
 
           :exit, reason ->
-            Logger.debug("GenServer call failed: #{inspect(reason)}, falling back to supervised send")
+            Logger.debug(
+              "GenServer call failed: #{inspect(reason)}, falling back to supervised send"
+            )
+
             # Fall back to supervised send for agents that don't implement handle_call
             SupervisedSend.send_supervised(
-              receiver_pid, 
+              receiver_pid,
               message,
               timeout: 5000,
               retries: 1,

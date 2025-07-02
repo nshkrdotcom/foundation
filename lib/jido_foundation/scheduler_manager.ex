@@ -384,19 +384,20 @@ defmodule JidoFoundation.SchedulerManager do
         if Process.alive?(agent_pid) do
           try do
             # Send the scheduled message to the agent with supervision
-            result = SupervisedSend.send_supervised(
-              agent_pid,
-              schedule_info.message,
-              timeout: 10_000,
-              retries: Map.get(schedule_info, :retry_count, 1),
-              on_error: :log,
-              metadata: %{
-                schedule_id: schedule_id,
-                scheduled_at: DateTime.utc_now(),
-                message_type: schedule_info.message
-              }
-            )
-            
+            result =
+              SupervisedSend.send_supervised(
+                agent_pid,
+                schedule_info.message,
+                timeout: 10_000,
+                retries: Map.get(schedule_info, :retry_count, 1),
+                on_error: :log,
+                metadata: %{
+                  schedule_id: schedule_id,
+                  scheduled_at: DateTime.utc_now(),
+                  message_type: schedule_info.message
+                }
+              )
+
             # Log errors if delivery failed
             case result do
               {:error, reason} ->
@@ -405,6 +406,7 @@ defmodule JidoFoundation.SchedulerManager do
                   schedule_id: schedule_id,
                   reason: reason
                 )
+
               :ok ->
                 :ok
             end
