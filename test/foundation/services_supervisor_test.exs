@@ -6,6 +6,7 @@ defmodule Foundation.Services.SupervisorTest do
   # Helper to create unique service options for test supervisors
   defp create_test_service_opts(unique_name) do
     [
+      monitor_manager: [name: :"#{unique_name}_monitor_manager"],
       retry_service: [name: :"#{unique_name}_retry_service"],
       connection_manager: [name: :"#{unique_name}_connection_manager"],
       rate_limiter: [name: :"#{unique_name}_rate_limiter"],
@@ -33,9 +34,9 @@ defmodule Foundation.Services.SupervisorTest do
       children = Supervisor.which_children(pid)
       assert is_list(children)
 
-      # Should have 4 services: RetryService, ConnectionManager, RateLimiter, SignalBus
-      # 4 Foundation services + 2 SIA services
-      assert length(children) == 6
+      # Should have 5 services: MonitorManager, RetryService, ConnectionManager, RateLimiter, SignalBus
+      # 5 Foundation services + 2 SIA services
+      assert length(children) == 7
 
       # Clean up
       Supervisor.stop(pid)
@@ -49,7 +50,7 @@ defmodule Foundation.Services.SupervisorTest do
       # Check that supervisor is properly configured
       children = Supervisor.which_children(pid)
       # 4 Foundation services + 2 SIA services
-      assert length(children) == 6
+      assert length(children) == 7
 
       # The supervisor should be ready to accept child specifications
       assert Process.alive?(pid)
@@ -68,7 +69,7 @@ defmodule Foundation.Services.SupervisorTest do
       # Should have 4 child services (RetryService, ConnectionManager, RateLimiter, SignalBus)
       children = Supervisor.which_children(supervisor_pid)
       # 4 Foundation services + 2 SIA services
-      assert length(children) == 6
+      assert length(children) == 7
 
       Supervisor.stop(supervisor_pid)
     end

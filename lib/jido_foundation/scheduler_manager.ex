@@ -388,7 +388,7 @@ defmodule JidoFoundation.SchedulerManager do
               agent_pid,
               schedule_info.message,
               timeout: 10_000,
-              retries: schedule_info.retry_count || 1,
+              retries: Map.get(schedule_info, :retry_count, 1),
               on_error: :log,
               metadata: %{
                 schedule_id: schedule_id,
