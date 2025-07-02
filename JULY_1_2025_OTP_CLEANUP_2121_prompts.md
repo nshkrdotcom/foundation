@@ -308,6 +308,8 @@ Uses Process dictionary for:
 **Expected Output**: GenServer and ETS-based telemetry sampled events system with proper OTP patterns.
 
 ---
+5 complete
+---
 
 ## PROMPT 6: Replace Telemetry Process Dictionary Usage - Part 2 (Span Management)
 
@@ -316,8 +318,9 @@ Uses Process dictionary for:
 **Required Reading**:
 1. Read `JULY_1_2025_OTP_CLEANUP_2121.md` - Section 4.2 on Span fix
 2. Read `lib/foundation/telemetry/span.ex` to understand current span stack implementation
-3. Read about distributed tracing patterns and span context management
-4. Review any existing span usage throughout the codebase
+3. read `JULY_1_2025_OTP_CLEANUP_2121_prompts_guide6.md`
+4. Read about distributed tracing patterns and span context management
+5. Review any existing span usage throughout the codebase
 
 **Files to Examine**:
 - `lib/foundation/telemetry/span.ex` - Current implementation
@@ -383,6 +386,8 @@ Process.put(@span_stack_key, [span | stack])
 - All existing span tests pass
 
 **Expected Output**: ETS-based span context management system with proper process monitoring and cleanup.
+
+---
 
 ---
 

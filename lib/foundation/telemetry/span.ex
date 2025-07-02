@@ -25,13 +25,11 @@ defmodule Foundation.Telemetry.Span do
   """
 
   require Logger
+  alias Foundation.Telemetry.SpanManager
 
   @type span_name :: atom() | String.t()
   @type span_metadata :: map()
   @type span_ref :: reference()
-
-  # Span context stored in process dictionary
-  @span_stack_key :foundation_telemetry_span_stack
 
   @doc """
   Executes a function within a traced span.
@@ -102,9 +100,8 @@ defmodule Foundation.Telemetry.Span do
       trace_id: parent_span[:trace_id] || generate_trace_id()
     }
 
-    # Push onto span stack
-    stack = Process.get(@span_stack_key, [])
-    Process.put(@span_stack_key, [span | stack])
+    # Push onto span stack using SpanManager
+    SpanManager.push_span(span)
 
     # Emit span started event
     :telemetry.execute(
@@ -126,14 +123,12 @@ defmodule Foundation.Telemetry.Span do
   """
   @spec end_span(atom(), map()) :: :ok
   def end_span(status \\ :ok, additional_metadata \\ %{}) do
-    case Process.get(@span_stack_key, []) do
-      [] ->
+    case SpanManager.pop_span() do
+      nil ->
         Logger.warning("No active span to end")
         :ok
 
-      [span | rest] ->
-        Process.put(@span_stack_key, rest)
-
+      span ->
         duration = System.monotonic_time() - span.start_time
 
         # Emit span end event
@@ -164,26 +159,32 @@ defmodule Foundation.Telemetry.Span do
   """
   @spec add_attributes(map()) :: :ok
   def add_attributes(attributes) do
-    case Process.get(@span_stack_key, []) do
-      [] ->
+    case SpanManager.update_top_span(fn span ->
+           %{span | metadata: Map.merge(span.metadata, attributes)}
+         end) do
+      :error ->
         Logger.warning("No active span to add attributes to")
         :ok
 
-      [span | rest] ->
-        updated_span = %{span | metadata: Map.merge(span.metadata, attributes)}
-        Process.put(@span_stack_key, [updated_span | rest])
+      :ok ->
+        # Get current span to emit event with proper metadata
+        case current_span() do
+          nil ->
+            :ok
 
-        # Emit attribute event
-        :telemetry.execute(
-          [:foundation, :span, :attributes],
-          %{timestamp: System.system_time()},
-          Map.merge(attributes, %{
-            span_id: span.id,
-            span_name: span.name
-          })
-        )
+          span ->
+            # Emit attribute event
+            :telemetry.execute(
+              [:foundation, :span, :attributes],
+              %{timestamp: System.system_time()},
+              Map.merge(attributes, %{
+                span_id: span.id,
+                span_name: span.name
+              })
+            )
 
-        :ok
+            :ok
+        end
     end
   end
 
@@ -217,7 +218,7 @@ defmodule Foundation.Telemetry.Span do
   """
   @spec current_span() :: map() | nil
   def current_span do
-    case Process.get(@span_stack_key, []) do
+    case SpanManager.get_stack() do
       [] -> nil
       [span | _] -> span
     end
@@ -257,7 +258,7 @@ defmodule Foundation.Telemetry.Span do
         %{
           trace_id: span.trace_id,
           parent_id: span.id,
-          span_stack: Process.get(@span_stack_key, [])
+          span_stack: SpanManager.get_stack()
         }
     end
   end
@@ -269,7 +270,7 @@ defmodule Foundation.Telemetry.Span do
   def with_propagated_context(context, fun) do
     case context do
       %{span_stack: stack} ->
-        Process.put(@span_stack_key, stack)
+        SpanManager.set_stack(stack)
         fun.()
 
       _ ->

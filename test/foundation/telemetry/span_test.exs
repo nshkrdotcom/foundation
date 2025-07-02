@@ -5,8 +5,17 @@ defmodule Foundation.Telemetry.SpanTest do
   import Foundation.Telemetry.Span
 
   setup do
+    # Ensure SpanManager is started
+    case Process.whereis(Foundation.Telemetry.SpanManager) do
+      nil ->
+        {:ok, _pid} = Foundation.Telemetry.SpanManager.start_link()
+
+      _pid ->
+        :ok
+    end
+
     # Clean up any existing span stack
-    Process.delete(:foundation_telemetry_span_stack)
+    Foundation.Telemetry.SpanManager.clear_stack()
     :ok
   end
 

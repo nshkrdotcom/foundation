@@ -147,6 +147,15 @@ defmodule Foundation.Services.Supervisor do
        ) do
       telemetry_children = []
 
+      # Add SpanManager for span context management
+      telemetry_children =
+        if Code.ensure_loaded?(Foundation.Telemetry.SpanManager) do
+          opts = service_opts[:span_manager] || []
+          [{Foundation.Telemetry.SpanManager, opts} | telemetry_children]
+        else
+          telemetry_children
+        end
+
       # Add SampledEvents server if module is available
       telemetry_children =
         if Code.ensure_loaded?(Foundation.Telemetry.SampledEvents.Server) do
