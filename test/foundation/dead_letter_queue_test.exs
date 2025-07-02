@@ -211,7 +211,7 @@ defmodule Foundation.DeadLetterQueueTest do
 
       # Should eventually succeed and remove from queue
       messages = DeadLetterQueue.list_messages()
-      assert length(messages) == 0
+      assert Enum.empty?(messages)
 
       # Should receive the message
       assert_receive {:auto_retry_test, "data"}, 1000

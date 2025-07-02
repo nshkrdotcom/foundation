@@ -32,7 +32,7 @@ defmodule Foundation.ResourceManagerTest do
     test "enforces resource limits" do
       # SKIP: This test requires specific resource limits that can't be 
       # easily set on a supervised ResourceManager instance.
-      # TODO: Refactor ResourceManager to support runtime config updates
+      # TO DO: Refactor ResourceManager to support runtime config updates
       # or use a test-specific instance with custom supervision
     end
 

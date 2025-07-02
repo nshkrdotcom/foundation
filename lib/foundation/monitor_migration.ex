@@ -509,7 +509,7 @@ defmodule Foundation.MonitorMigration do
   end
 
   defp format_files_with_issues(issues_by_file) do
-    if length(issues_by_file) == 0 do
+    if Enum.empty?(issues_by_file) do
       "  (No files with monitor issues found)"
     else
       issues_by_file

@@ -516,7 +516,7 @@ defmodule MABEAM.AgentRegistryTest do
       # Verify process doesn't accumulate monitors
       {:dictionary, dict} = Process.info(registry, :dictionary)
       monitors = Keyword.get(dict, :"$monitors", [])
-      assert length(monitors) == 0
+      assert Enum.empty?(monitors)
 
       # Clean up
       GenServer.stop(registry)
