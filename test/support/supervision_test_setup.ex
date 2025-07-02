@@ -60,7 +60,7 @@ defmodule Foundation.SupervisionTestSetup do
 
   @typedoc """
   Supervision context structure returned by create_isolated_supervision/0.
-  
+
   Contains all information needed to interact with an isolated supervision tree:
   - test_id: Unique identifier for the test instance
   - registry: Test-specific registry name for service discovery
@@ -80,7 +80,7 @@ defmodule Foundation.SupervisionTestSetup do
 
   @typedoc """
   Setup context returned by supervision setup functions.
-  
+
   Contains the supervision_tree key expected by tests using
   Foundation.UnifiedTestFoundation in :supervision_testing mode.
   """
@@ -88,7 +88,7 @@ defmodule Foundation.SupervisionTestSetup do
 
   @typedoc """
   Statistics about an isolated supervision tree.
-  
+
   Provides debugging and monitoring information about the current
   state of a test supervision tree.
   """
@@ -445,7 +445,7 @@ defmodule Foundation.SupervisionTestSetup do
   """
   def get_core_services, do: @core_services
 
-  @spec validate_supervision_context(supervision_context()) :: 
+  @spec validate_supervision_context(supervision_context()) ::
           :ok | {:error, :registry_not_alive | :supervisor_not_alive | {:missing_fields, [atom()]}}
   @doc """
   Validate that a supervision context has the required structure.
