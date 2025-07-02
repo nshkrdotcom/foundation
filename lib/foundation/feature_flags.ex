@@ -16,7 +16,10 @@ defmodule Foundation.FeatureFlags do
     use_ets_agent_registry: false,
     use_logger_error_context: false,
     use_genserver_telemetry: false,
-    enforce_no_process_dict: false
+    use_genserver_span_management: false,
+    use_ets_sampled_events: false,
+    enforce_no_process_dict: false,
+    enable_migration_monitoring: false
   }
 
   # All available feature flags
@@ -81,6 +84,31 @@ defmodule Foundation.FeatureFlags do
   end
 
   @doc """
+  Sets a feature flag to a percentage rollout (0-100).
+  """
+  def set_percentage(flag_name, percentage) 
+      when is_atom(flag_name) and is_integer(percentage) and percentage >= 0 and percentage <= 100 do
+    GenServer.call(__MODULE__, {:set_flag, flag_name, percentage})
+  end
+
+  @doc """
+  Checks if a feature flag is enabled for a specific ID (for gradual rollout).
+  """
+  def enabled_for_id?(flag_name, id) when is_atom(flag_name) do
+    ensure_table_exists()
+
+    case :ets.lookup(@table_name, flag_name) do
+      [{^flag_name, true}] -> true
+      [{^flag_name, false}] -> false
+      [{^flag_name, percentage}] when is_integer(percentage) ->
+        # Consistent hashing for gradual rollout
+        hash = :erlang.phash2({flag_name, id}, 100)
+        hash < percentage
+      [] -> Map.get(@default_flags, flag_name, false)
+    end
+  end
+
+  @doc """
   Lists all feature flags and their current values.
   """
   def list_all do
@@ -107,6 +135,36 @@ defmodule Foundation.FeatureFlags do
     GenServer.call(__MODULE__, :load_from_config)
   end
 
+  # Migration Control Functions
+
+  @doc """
+  Enables OTP cleanup flags in stages for safe migration.
+  """
+  def enable_otp_cleanup_stage(stage) when stage in 1..4 do
+    GenServer.call(__MODULE__, {:enable_migration_stage, stage})
+  end
+
+  @doc """
+  Rolls back to a previous migration stage.
+  """
+  def rollback_migration_stage(stage) when stage in 1..4 do
+    GenServer.call(__MODULE__, {:rollback_migration_stage, stage})
+  end
+
+  @doc """
+  Gets the current migration status.
+  """
+  def migration_status do
+    GenServer.call(__MODULE__, :migration_status)
+  end
+
+  @doc """
+  Emergency rollback - disables all OTP cleanup flags.
+  """
+  def emergency_rollback(reason \\ "Emergency rollback") do
+    GenServer.call(__MODULE__, {:emergency_rollback, reason})
+  end
+
   # GenServer callbacks
 
   @impl true
@@ -128,8 +186,19 @@ defmodule Foundation.FeatureFlags do
   @impl true
   def handle_call({:set_flag, flag_name, value}, _from, state) do
     if Map.has_key?(@default_flags, flag_name) do
+      # Ensure table exists before inserting
+      ensure_table_exists_in_server()
+      
       :ets.insert(@table_name, {flag_name, value})
       Logger.info("Feature flag #{flag_name} set to #{value}")
+      
+      # Emit telemetry for monitoring
+      :telemetry.execute(
+        [:foundation, :feature_flag, :changed],
+        %{count: 1},
+        %{flag: flag_name, value: value, timestamp: System.monotonic_time()}
+      )
+      
       {:reply, :ok, state}
     else
       {:reply, {:error, :unknown_flag}, state}
@@ -146,6 +215,157 @@ defmodule Foundation.FeatureFlags do
   @impl true
   def handle_call(:load_from_config, _from, state) do
     load_initial_flags()
+    {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_call({:enable_migration_stage, stage}, _from, state) do
+    Logger.info("Enabling OTP cleanup migration stage #{stage}")
+    
+    case stage do
+      1 ->
+        # Stage 1: Registry migration
+        :ets.insert(@table_name, {:use_ets_agent_registry, true})
+        :ets.insert(@table_name, {:enable_migration_monitoring, true})
+        
+      2 ->
+        # Stage 2: Error context migration
+        :ets.insert(@table_name, {:use_logger_error_context, true})
+        
+      3 ->
+        # Stage 3: Telemetry migration
+        :ets.insert(@table_name, {:use_genserver_telemetry, true})
+        :ets.insert(@table_name, {:use_genserver_span_management, true})
+        :ets.insert(@table_name, {:use_ets_sampled_events, true})
+        
+      4 ->
+        # Stage 4: Enforcement
+        :ets.insert(@table_name, {:enforce_no_process_dict, true})
+    end
+    
+    # Store migration status
+    :ets.insert(@table_name, {:migration_stage, stage})
+    :ets.insert(@table_name, {:migration_timestamp, System.monotonic_time()})
+    
+    :telemetry.execute(
+      [:foundation, :migration, :stage_enabled],
+      %{stage: stage},
+      %{timestamp: System.monotonic_time()}
+    )
+    
+    {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_call({:rollback_migration_stage, target_stage}, _from, state) do
+    current_stage = case :ets.lookup(@table_name, :migration_stage) do
+      [{:migration_stage, stage}] -> stage
+      [] -> 0
+    end
+    
+    if target_stage < current_stage do
+      Logger.warning("Rolling back migration from stage #{current_stage} to #{target_stage}")
+      
+      # Disable flags based on target stage
+      case target_stage do
+        0 ->
+          # Rollback everything
+          Enum.each(Map.keys(@otp_cleanup_flags), fn flag ->
+            :ets.insert(@table_name, {flag, false})
+          end)
+          
+        1 ->
+          # Keep only registry changes - ensure stage 1 flags are enabled
+          :ets.insert(@table_name, {:use_ets_agent_registry, true})
+          :ets.insert(@table_name, {:enable_migration_monitoring, true})
+          :ets.insert(@table_name, {:use_logger_error_context, false})
+          :ets.insert(@table_name, {:use_genserver_telemetry, false})
+          :ets.insert(@table_name, {:use_genserver_span_management, false})
+          :ets.insert(@table_name, {:use_ets_sampled_events, false})
+          :ets.insert(@table_name, {:enforce_no_process_dict, false})
+          
+        2 ->
+          # Keep registry and error context - ensure stage 1&2 flags are enabled
+          :ets.insert(@table_name, {:use_ets_agent_registry, true})
+          :ets.insert(@table_name, {:enable_migration_monitoring, true})
+          :ets.insert(@table_name, {:use_logger_error_context, true})
+          :ets.insert(@table_name, {:use_genserver_telemetry, false})
+          :ets.insert(@table_name, {:use_genserver_span_management, false})
+          :ets.insert(@table_name, {:use_ets_sampled_events, false})
+          :ets.insert(@table_name, {:enforce_no_process_dict, false})
+          
+        3 ->
+          # Keep everything except enforcement - ensure stage 1,2,3 flags are enabled
+          :ets.insert(@table_name, {:use_ets_agent_registry, true})
+          :ets.insert(@table_name, {:enable_migration_monitoring, true})
+          :ets.insert(@table_name, {:use_logger_error_context, true})
+          :ets.insert(@table_name, {:use_genserver_telemetry, true})
+          :ets.insert(@table_name, {:use_genserver_span_management, true})
+          :ets.insert(@table_name, {:use_ets_sampled_events, true})
+          :ets.insert(@table_name, {:enforce_no_process_dict, false})
+      end
+      
+      :ets.insert(@table_name, {:migration_stage, target_stage})
+      
+      :telemetry.execute(
+        [:foundation, :migration, :rollback],
+        %{from_stage: current_stage, to_stage: target_stage},
+        %{timestamp: System.monotonic_time()}
+      )
+      
+      {:reply, :ok, state}
+    else
+      {:reply, {:error, :invalid_rollback}, state}
+    end
+  end
+
+  @impl true
+  def handle_call(:migration_status, _from, state) do
+    stage = case :ets.lookup(@table_name, :migration_stage) do
+      [{:migration_stage, s}] -> s
+      [] -> 0
+    end
+    
+    timestamp = case :ets.lookup(@table_name, :migration_timestamp) do
+      [{:migration_timestamp, ts}] -> ts
+      [] -> nil
+    end
+    
+    flags = Enum.reduce(Map.keys(@otp_cleanup_flags), %{}, fn flag, acc ->
+      value = case :ets.lookup(@table_name, flag) do
+        [{^flag, v}] -> v
+        [] -> Map.get(@default_flags, flag, false)
+      end
+      Map.put(acc, flag, value)
+    end)
+    
+    status = %{
+      stage: stage,
+      timestamp: timestamp,
+      flags: flags,
+      system_time: System.monotonic_time()
+    }
+    
+    {:reply, status, state}
+  end
+
+  @impl true
+  def handle_call({:emergency_rollback, reason}, _from, state) do
+    Logger.error("EMERGENCY ROLLBACK: #{reason}")
+    
+    # Disable all OTP cleanup flags immediately
+    Enum.each(Map.keys(@otp_cleanup_flags), fn flag ->
+      :ets.insert(@table_name, {flag, false})
+    end)
+    
+    :ets.insert(@table_name, {:migration_stage, 0})
+    
+    :telemetry.execute(
+      [:foundation, :migration, :emergency_rollback],
+      %{count: 1},
+      %{reason: reason, timestamp: System.monotonic_time()}
+    )
+    
     {:reply, :ok, state}
   end
 
@@ -166,6 +386,21 @@ defmodule Foundation.FeatureFlags do
 
       _ ->
         :ok
+    end
+  end
+
+  # Ensure table exists from within GenServer process
+  defp ensure_table_exists_in_server do
+    case :ets.whereis(@table_name) do
+      :undefined ->
+        :ets.new(@table_name, [
+          :set,
+          :public,
+          :named_table,
+          {:read_concurrency, true}
+        ])
+      _ ->
+        @table_name
     end
   end
 

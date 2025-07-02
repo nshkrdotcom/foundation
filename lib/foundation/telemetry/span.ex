@@ -26,6 +26,7 @@ defmodule Foundation.Telemetry.Span do
 
   require Logger
   alias Foundation.Telemetry.SpanManager
+  alias Foundation.FeatureFlags
 
   @type span_name :: atom() | String.t()
   @type span_metadata :: map()
@@ -100,8 +101,12 @@ defmodule Foundation.Telemetry.Span do
       trace_id: parent_span[:trace_id] || generate_trace_id()
     }
 
-    # Push onto span stack using SpanManager
-    SpanManager.push_span(span)
+    # Push onto span stack using either SpanManager or Process dictionary
+    if FeatureFlags.enabled?(:use_genserver_span_management) do
+      SpanManager.push_span(span)
+    else
+      push_span_legacy(span)
+    end
 
     # Emit span started event
     :telemetry.execute(
@@ -123,7 +128,13 @@ defmodule Foundation.Telemetry.Span do
   """
   @spec end_span(atom(), map()) :: :ok
   def end_span(status \\ :ok, additional_metadata \\ %{}) do
-    case SpanManager.pop_span() do
+    span = if FeatureFlags.enabled?(:use_genserver_span_management) do
+      SpanManager.pop_span()
+    else
+      pop_span_legacy()
+    end
+
+    case span do
       nil ->
         Logger.warning("No active span to end")
         :ok
@@ -218,7 +229,13 @@ defmodule Foundation.Telemetry.Span do
   """
   @spec current_span() :: map() | nil
   def current_span do
-    case SpanManager.get_stack() do
+    stack = if FeatureFlags.enabled?(:use_genserver_span_management) do
+      SpanManager.get_stack()
+    else
+      get_stack_legacy()
+    end
+
+    case stack do
       [] -> nil
       [span | _] -> span
     end
@@ -255,10 +272,16 @@ defmodule Foundation.Telemetry.Span do
         %{}
 
       span ->
+        stack = if FeatureFlags.enabled?(:use_genserver_span_management) do
+          SpanManager.get_stack()
+        else
+          get_stack_legacy()
+        end
+
         %{
           trace_id: span.trace_id,
           parent_id: span.id,
-          span_stack: SpanManager.get_stack()
+          span_stack: stack
         }
     end
   end
@@ -308,5 +331,31 @@ defmodule Foundation.Telemetry.Span do
   defp generate_trace_id do
     :crypto.strong_rand_bytes(16)
     |> Base.encode16(case: :lower)
+  end
+
+  # Legacy process dictionary implementations (for feature flag fallback)
+  
+  @span_stack_key {__MODULE__, :span_stack}
+
+  defp get_stack_legacy do
+    Process.get(@span_stack_key, [])
+  end
+
+  defp set_stack_legacy(stack) do
+    Process.put(@span_stack_key, stack)
+  end
+
+  defp push_span_legacy(span) do
+    stack = get_stack_legacy()
+    set_stack_legacy([span | stack])
+  end
+
+  defp pop_span_legacy do
+    case get_stack_legacy() do
+      [] -> nil
+      [span | rest] ->
+        set_stack_legacy(rest)
+        span
+    end
   end
 end
