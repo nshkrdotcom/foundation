@@ -17,6 +17,19 @@ defmodule Foundation.OTPCleanupFailureRecoveryTest do
   # 3 minutes for failure recovery tests
   @moduletag timeout: 180_000
 
+  setup_all do
+    # Ensure FeatureFlags service is started for all tests
+    case Process.whereis(Foundation.FeatureFlags) do
+      nil ->
+        {:ok, _} = Foundation.FeatureFlags.start_link()
+
+      _pid ->
+        :ok
+    end
+
+    :ok
+  end
+
   describe "ETS Table Failure Recovery" do
     setup do
       FeatureFlags.reset_all()

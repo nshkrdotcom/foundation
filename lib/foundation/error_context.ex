@@ -135,16 +135,24 @@ defmodule Foundation.ErrorContext do
   """
   @spec with_context(map(), (-> term())) :: term()
   def with_context(context, fun) when is_map(context) and is_function(fun, 0) do
-    old_context = get_context() || %{}
+    old_context = get_context()
 
     # Merge new context with existing
-    merged_context = Map.merge(old_context, context)
+    merged_context = 
+      case old_context do
+        nil -> context
+        existing when is_map(existing) -> Map.merge(existing, context)
+      end
 
     try do
       set_context(merged_context)
       fun.()
     after
-      set_context(old_context)
+      if old_context do
+        set_context(old_context)
+      else
+        clear_context()
+      end
     end
   end
 
