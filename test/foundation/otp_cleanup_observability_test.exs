@@ -244,14 +244,14 @@ defmodule Foundation.OTPCleanupObservabilityTest do
 
       :telemetry.attach(
         "span-hierarchy-test",
-        [:foundation, :telemetry, :span, :start],
+        [:foundation, :span, :start],
         span_handler,
         nil
       )
 
       :telemetry.attach(
         "span-hierarchy-end-test",
-        [:foundation, :telemetry, :span, :end],
+        [:foundation, :span, :stop],
         span_handler,
         nil
       )
@@ -288,12 +288,12 @@ defmodule Foundation.OTPCleanupObservabilityTest do
         # Verify we received all expected events
         start_events =
           Enum.filter(span_events, fn {event, _, _} ->
-            event == [:foundation, :telemetry, :span, :start]
+            event == [:foundation, :span, :start]
           end)
 
         end_events =
           Enum.filter(span_events, fn {event, _, _} ->
-            event == [:foundation, :telemetry, :span, :end]
+            event == [:foundation, :span, :stop]
           end)
 
         assert length(start_events) == 4, "Missing span start events"
@@ -356,9 +356,20 @@ defmodule Foundation.OTPCleanupObservabilityTest do
 
       case stage do
         stage when stage >= 3 ->
+          # Start SampledEvents if needed
           if Code.ensure_loaded?(Foundation.Telemetry.SampledEvents) do
             case Process.whereis(Foundation.Telemetry.SampledEvents) do
               nil -> Foundation.Telemetry.SampledEvents.start_link()
+              _ -> :ok
+            end
+          else
+            :ok
+          end
+
+          # Start SpanManager if needed
+          if Code.ensure_loaded?(Foundation.Telemetry.SpanManager) do
+            case Process.whereis(Foundation.Telemetry.SpanManager) do
+              nil -> Foundation.Telemetry.SpanManager.start_link()
               _ -> :ok
             end
           else
@@ -444,7 +455,7 @@ defmodule Foundation.OTPCleanupObservabilityTest do
           assert enriched.context[:metadata][:user_agent] == "TestAgent/1.0"
 
           # Original error properties should be preserved
-          assert enriched.type == error_type
+          assert enriched.error_type == error_type
           assert enriched.message == message
         end
 
@@ -502,7 +513,7 @@ defmodule Foundation.OTPCleanupObservabilityTest do
       final_contexts = Task.await_many(process_results, 30_000)
 
       # Verify each process maintained its own context
-      for {i, context} <- Enum.with_index(final_contexts, 1) do
+      for {context, i} <- Enum.with_index(final_contexts, 1) do
         assert context.process_id == i
         assert context.worker_type == "error_isolation_test"
       end
@@ -529,7 +540,7 @@ defmodule Foundation.OTPCleanupObservabilityTest do
       end
 
       # Verify main process context is clean
-      main_context = ErrorContext.get_context()
+      main_context = ErrorContext.get_context() || %{}
       refute Map.has_key?(main_context, :process_id)
       refute Map.has_key?(main_context, :worker_type)
     end
@@ -575,9 +586,8 @@ defmodule Foundation.OTPCleanupObservabilityTest do
         {4, "full_migration", 1000}
       ]
 
-      performance_results = []
-
-      for {stage, scenario_name, operations} <- test_scenarios do
+      performance_results = 
+        for {stage, scenario_name, operations} <- test_scenarios do
         if stage > 0 do
           FeatureFlags.enable_otp_cleanup_stage(stage)
           start_services_for_stage(stage)
@@ -617,17 +627,14 @@ defmodule Foundation.OTPCleanupObservabilityTest do
         ops_per_second = operations * 1_000_000 / total_time
         avg_time_per_op = total_time / operations
 
-        performance_results = [
-          {scenario_name, stage, ops_per_second, avg_time_per_op, total_time} | performance_results
-        ]
-
         IO.puts(
           "#{scenario_name}: #{Float.round(ops_per_second, 2)} ops/sec, #{Float.round(avg_time_per_op, 2)}μs/op"
         )
+
+        {scenario_name, stage, ops_per_second, avg_time_per_op, total_time}
       end
 
       # Analyze performance across implementations
-      performance_results = Enum.reverse(performance_results)
 
       # Find baseline (legacy)
       {_name, _stage, baseline_ops, _avg, _total} =
@@ -747,7 +754,7 @@ defmodule Foundation.OTPCleanupObservabilityTest do
       all_event_patterns = [
         [:foundation, :registry, :_],
         [:foundation, :error_context, :_],
-        [:foundation, :telemetry, :span, :_],
+        [:foundation, :span, :_],
         [:foundation, :feature_flag, :_],
         [:foundation, :migration, :_]
       ]
@@ -848,7 +855,7 @@ defmodule Foundation.OTPCleanupObservabilityTest do
 
         # Should have span events
         span_events =
-          filter_comprehensive_events(collected_events, [:foundation, :telemetry, :span])
+          filter_comprehensive_events(collected_events, [:foundation, :span])
 
         assert length(span_events) >= 12,
                "Insufficient span events: #{length(span_events)} (expected >= 12)"
@@ -865,7 +872,7 @@ defmodule Foundation.OTPCleanupObservabilityTest do
               # (if context was set when event occurred)
               :ok
 
-            [:foundation, :telemetry, :span, _] ->
+            [:foundation, :span, _] ->
               # Span events should have span info
               assert Map.has_key?(metadata, :span_id) or Map.has_key?(metadata, :name)
 
