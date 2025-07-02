@@ -8,7 +8,7 @@ defmodule Foundation.SerialOperationsTest do
     test "executes successful transaction with multiple operations", %{registry: registry} do
       {:ok, pid1} = TestProcess.start_link()
       {:ok, pid2} = TestProcess.start_link()
-      
+
       on_exit(fn ->
         if Process.alive?(pid1), do: TestProcess.stop(pid1)
         if Process.alive?(pid2), do: TestProcess.stop(pid2)
@@ -32,7 +32,7 @@ defmodule Foundation.SerialOperationsTest do
 
     test "rolls back transaction on failure", %{registry: registry} do
       {:ok, pid1} = TestProcess.start_link()
-      
+
       on_exit(fn ->
         if Process.alive?(pid1), do: TestProcess.stop(pid1)
       end)
@@ -67,7 +67,7 @@ defmodule Foundation.SerialOperationsTest do
     test "supports unregister operations", %{registry: registry} do
       {:ok, pid1} = TestProcess.start_link()
       {:ok, pid2} = TestProcess.start_link()
-      
+
       on_exit(fn ->
         if Process.alive?(pid1), do: TestProcess.stop(pid1)
         if Process.alive?(pid2), do: TestProcess.stop(pid2)
@@ -95,7 +95,7 @@ defmodule Foundation.SerialOperationsTest do
 
     test "transaction with custom registry", %{registry: registry} do
       {:ok, pid} = TestProcess.start_link()
-      
+
       on_exit(fn ->
         if Process.alive?(pid), do: TestProcess.stop(pid)
       end)
@@ -131,12 +131,12 @@ defmodule Foundation.SerialOperationsTest do
 
     test "concurrent transactions are serialized", %{registry: registry} do
       # Create processes first to keep them alive
-      test_processes = 
+      test_processes =
         for i <- 1..10 do
           {:ok, pid} = TestProcess.start_link()
           {i, pid}
         end
-      
+
       on_exit(fn ->
         Enum.each(test_processes, fn {_i, pid} ->
           if Process.alive?(pid), do: TestProcess.stop(pid)
@@ -171,7 +171,7 @@ defmodule Foundation.SerialOperationsTest do
 
     test "transaction with metadata validation failure", %{registry: registry} do
       {:ok, pid} = TestProcess.start_link()
-      
+
       on_exit(fn ->
         if Process.alive?(pid), do: TestProcess.stop(pid)
       end)
@@ -202,7 +202,7 @@ defmodule Foundation.SerialOperationsTest do
       )
 
       {:ok, pid} = TestProcess.start_link()
-      
+
       on_exit(fn ->
         if Process.alive?(pid), do: TestProcess.stop(pid)
       end)
@@ -231,11 +231,11 @@ defmodule Foundation.SerialOperationsTest do
       )
 
       {:ok, pid} = TestProcess.start_link()
-      
+
       on_exit(fn ->
         if Process.alive?(pid), do: TestProcess.stop(pid)
       end)
-      
+
       :ok = GenServer.call(registry, {:register, "existing", pid, test_metadata()})
 
       SerialOperations.transact(registry, fn tx ->

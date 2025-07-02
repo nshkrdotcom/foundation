@@ -9,15 +9,15 @@ defmodule MABEAM.AgentRegistryTest do
     # - Isolated MABEAM.AgentRegistry per test
     # - Automatic cleanup via UnifiedTestFoundation
     # - No manual process management needed
-    
+
     {:ok, agent1} = TestProcess.start_link()
     {:ok, agent2} = TestProcess.start_link()
     {:ok, agent3} = TestProcess.start_link()
 
     # Use the registry provided by Foundation.UnifiedTestFoundation
     %{
-      agent1: agent1, 
-      agent2: agent2, 
+      agent1: agent1,
+      agent2: agent2,
       agent3: agent3
     }
   end
@@ -365,12 +365,13 @@ defmodule MABEAM.AgentRegistryTest do
     test "supports high-concurrency read operations", %{registry: registry} do
       # Register 100 agents
       # Foundation.UnifiedTestFoundation :registry mode handles all process cleanup automatically
-      _agents = for i <- 1..100 do
-        {:ok, agent_pid} = TestProcess.start_link()
-        metadata = valid_metadata()
-        :ok = Foundation.register("agent_#{i}", agent_pid, metadata, registry)
-        agent_pid
-      end
+      _agents =
+        for i <- 1..100 do
+          {:ok, agent_pid} = TestProcess.start_link()
+          metadata = valid_metadata()
+          :ok = Foundation.register("agent_#{i}", agent_pid, metadata, registry)
+          agent_pid
+        end
 
       # Concurrent reads
       tasks =
@@ -386,38 +387,39 @@ defmodule MABEAM.AgentRegistryTest do
 
     test "atomic queries are faster than separate operations", %{registry: registry} do
       # Register agents with various configurations
-      _agents = for i <- 1..50 do
-        {:ok, agent_pid} = TestProcess.start_link()
+      _agents =
+        for i <- 1..50 do
+          {:ok, agent_pid} = TestProcess.start_link()
 
-        capability =
-          case rem(i, 3) do
-            0 -> [:inference]
-            1 -> [:training]
-            _ -> [:optimization]
-          end
+          capability =
+            case rem(i, 3) do
+              0 -> [:inference]
+              1 -> [:training]
+              _ -> [:optimization]
+            end
 
-        health_status =
-          case rem(i, 2) do
-            0 -> :healthy
-            _ -> :degraded
-          end
+          health_status =
+            case rem(i, 2) do
+              0 -> :healthy
+              _ -> :degraded
+            end
 
-        resources = %{
-          memory_usage: 0.1 + rem(i, 10) * 0.08,
-          cpu_usage: 0.1 + rem(i, 8) * 0.1,
-          memory_available: 0.9 - rem(i, 10) * 0.08,
-          cpu_available: 0.9 - rem(i, 8) * 0.1
-        }
+          resources = %{
+            memory_usage: 0.1 + rem(i, 10) * 0.08,
+            cpu_usage: 0.1 + rem(i, 8) * 0.1,
+            memory_available: 0.9 - rem(i, 10) * 0.08,
+            cpu_available: 0.9 - rem(i, 8) * 0.1
+          }
 
-        metadata =
-          valid_metadata()
-          |> Map.put(:capability, capability)
-          |> Map.put(:health_status, health_status)
-          |> Map.put(:resources, resources)
+          metadata =
+            valid_metadata()
+            |> Map.put(:capability, capability)
+            |> Map.put(:health_status, health_status)
+            |> Map.put(:resources, resources)
 
-        :ok = Foundation.register("agent_#{i}", agent_pid, metadata, registry)
-        agent_pid
-      end
+          :ok = Foundation.register("agent_#{i}", agent_pid, metadata, registry)
+          agent_pid
+        end
 
       # Complex atomic query
       atomic_criteria = [

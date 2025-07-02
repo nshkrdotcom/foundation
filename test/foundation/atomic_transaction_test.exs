@@ -8,7 +8,7 @@ defmodule Foundation.AtomicTransactionTest do
     test "executes successful transaction with multiple operations", %{registry: registry} do
       {:ok, pid1} = TestProcess.start_link()
       {:ok, pid2} = TestProcess.start_link()
-      
+
       on_exit(fn ->
         if Process.alive?(pid1), do: TestProcess.stop(pid1)
         if Process.alive?(pid2), do: TestProcess.stop(pid2)
@@ -32,7 +32,7 @@ defmodule Foundation.AtomicTransactionTest do
 
     test "rolls back transaction on failure", %{registry: registry} do
       {:ok, pid1} = TestProcess.start_link()
-      
+
       on_exit(fn ->
         if Process.alive?(pid1), do: TestProcess.stop(pid1)
       end)
@@ -67,7 +67,7 @@ defmodule Foundation.AtomicTransactionTest do
     test "supports unregister operations", %{registry: registry} do
       {:ok, pid1} = TestProcess.start_link()
       {:ok, pid2} = TestProcess.start_link()
-      
+
       on_exit(fn ->
         if Process.alive?(pid1), do: TestProcess.stop(pid1)
         if Process.alive?(pid2), do: TestProcess.stop(pid2)
@@ -95,7 +95,7 @@ defmodule Foundation.AtomicTransactionTest do
 
     test "transaction with custom registry", %{registry: registry} do
       {:ok, pid} = TestProcess.start_link()
-      
+
       on_exit(fn ->
         if Process.alive?(pid), do: TestProcess.stop(pid)
       end)
@@ -135,11 +135,12 @@ defmodule Foundation.AtomicTransactionTest do
           Task.async(fn ->
             {:ok, pid} = TestProcess.start_link()
 
-            result = AtomicTransaction.transact(registry, fn tx ->
-              tx
-              |> AtomicTransaction.register_agent("concurrent_#{i}", pid, test_metadata())
-            end)
-            
+            result =
+              AtomicTransaction.transact(registry, fn tx ->
+                tx
+                |> AtomicTransaction.register_agent("concurrent_#{i}", pid, test_metadata())
+              end)
+
             # Keep process alive for registry lookup
             {result, pid}
           end)
@@ -147,10 +148,10 @@ defmodule Foundation.AtomicTransactionTest do
 
       # Wait for all to complete
       results = Task.await_many(tasks)
-      
+
       # Extract results and pids for cleanup
       {transaction_results, test_pids} = Enum.unzip(results)
-      
+
       on_exit(fn ->
         Enum.each(test_pids, fn pid ->
           if Process.alive?(pid), do: TestProcess.stop(pid)
@@ -171,7 +172,7 @@ defmodule Foundation.AtomicTransactionTest do
 
     test "transaction with metadata validation failure", %{registry: registry} do
       {:ok, pid} = TestProcess.start_link()
-      
+
       on_exit(fn ->
         if Process.alive?(pid), do: TestProcess.stop(pid)
       end)
@@ -202,7 +203,7 @@ defmodule Foundation.AtomicTransactionTest do
       )
 
       {:ok, pid} = TestProcess.start_link()
-      
+
       on_exit(fn ->
         if Process.alive?(pid), do: TestProcess.stop(pid)
       end)
@@ -231,11 +232,11 @@ defmodule Foundation.AtomicTransactionTest do
       )
 
       {:ok, pid} = TestProcess.start_link()
-      
+
       on_exit(fn ->
         if Process.alive?(pid), do: TestProcess.stop(pid)
       end)
-      
+
       :ok = GenServer.call(registry, {:register, "existing", pid, test_metadata()})
 
       AtomicTransaction.transact(registry, fn tx ->
