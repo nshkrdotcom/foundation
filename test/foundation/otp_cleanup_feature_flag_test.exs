@@ -364,6 +364,28 @@ defmodule Foundation.OTPCleanupFeatureFlagTest do
   end
 
   describe "Percentage Rollout Tests" do
+    setup do
+      # Ensure FeatureFlags service is started
+      case Process.whereis(Foundation.FeatureFlags) do
+        nil ->
+          {:ok, _} = Foundation.FeatureFlags.start_link()
+        _pid ->
+          :ok
+      end
+
+      on_exit(fn ->
+        if Process.whereis(Foundation.FeatureFlags) do
+          try do
+            FeatureFlags.reset_all()
+          catch
+            :exit, _ -> :ok
+          end
+        end
+      end)
+
+      :ok
+    end
+
     test "percentage rollout consistency" do
       # Test percentage rollouts for deterministic behavior
       flag = :use_ets_agent_registry
