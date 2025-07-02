@@ -133,29 +133,6 @@ defmodule Foundation.ErrorContext do
 
   Supports both structured ErrorContext structs and simple maps.
   """
-  @spec with_context(map(), (-> term())) :: term()
-  def with_context(context, fun) when is_map(context) and is_function(fun, 0) do
-    old_context = get_context()
-
-    # Merge new context with existing
-    merged_context = 
-      case old_context do
-        nil -> context
-        existing when is_map(existing) -> Map.merge(existing, context)
-      end
-
-    try do
-      set_context(merged_context)
-      fun.()
-    after
-      if old_context do
-        set_context(old_context)
-      else
-        clear_context()
-      end
-    end
-  end
-
   @spec with_context(t(), (-> term())) :: term() | {:error, Error.t()}
   def with_context(%__MODULE__{} = context, fun) when is_function(fun, 0) do
     # Store context using the appropriate storage mechanism
@@ -181,6 +158,30 @@ defmodule Foundation.ErrorContext do
         {:error, enhanced_error}
     end
   end
+
+  @spec with_context(map(), (-> term())) :: term()
+  def with_context(context, fun) when is_map(context) and is_function(fun, 0) do
+    old_context = get_context()
+
+    # Merge new context with existing
+    merged_context = 
+      case old_context do
+        nil -> context
+        existing when is_map(existing) -> Map.merge(existing, context)
+      end
+
+    try do
+      set_context(merged_context)
+      fun.()
+    after
+      if old_context do
+        set_context(old_context)
+      else
+        clear_context()
+      end
+    end
+  end
+
 
   @doc """
   Execute a function in a new task with inherited error context.

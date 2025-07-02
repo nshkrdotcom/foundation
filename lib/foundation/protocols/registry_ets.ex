@@ -136,6 +136,9 @@ defmodule Foundation.Protocols.RegistryETS do
 
   @impl true
   def handle_call({:register_agent, agent_id, pid, metadata}, _from, state) do
+    # Ensure tables exist - they might have been deleted
+    ensure_tables_exist()
+    
     # Check if already registered
     case :ets.lookup(@table_name, agent_id) do
       [{^agent_id, _old_pid, _old_metadata, old_ref}] ->
@@ -161,6 +164,7 @@ defmodule Foundation.Protocols.RegistryETS do
 
   @impl true
   def handle_call({:unregister_agent, agent_id}, _from, state) do
+    ensure_tables_exist()
     case :ets.lookup(@table_name, agent_id) do
       [{^agent_id, _pid, _metadata, ref}] ->
         # Demonitor the process
@@ -179,6 +183,7 @@ defmodule Foundation.Protocols.RegistryETS do
 
   @impl true
   def handle_call({:update_metadata, agent_id, new_metadata}, _from, state) do
+    ensure_tables_exist()
     case :ets.lookup(@table_name, agent_id) do
       [{^agent_id, pid, _old_metadata, ref}] ->
         :ets.insert(@table_name, {agent_id, pid, new_metadata, ref})
@@ -234,6 +239,36 @@ defmodule Foundation.Protocols.RegistryETS do
         # Give the GenServer a moment to create tables
         Process.sleep(10)
 
+      _ ->
+        :ok
+    end
+  end
+  
+  defp ensure_tables_exist do
+    # Check main table
+    case :ets.whereis(@table_name) do
+      :undefined ->
+        :ets.new(@table_name, [
+          :set,
+          :public,
+          :named_table,
+          {:read_concurrency, true},
+          {:write_concurrency, true}
+        ])
+      _ ->
+        :ok
+    end
+    
+    # Check monitors table
+    case :ets.whereis(@monitors_table) do
+      :undefined ->
+        :ets.new(@monitors_table, [
+          :set,
+          :public,
+          :named_table,
+          {:read_concurrency, true},
+          {:write_concurrency, true}
+        ])
       _ ->
         :ok
     end

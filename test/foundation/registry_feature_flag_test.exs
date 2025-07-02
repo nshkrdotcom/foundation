@@ -27,6 +27,16 @@ defmodule Foundation.RegistryFeatureFlagTest do
       RegistryETS.unregister_agent(agent_id)
     end
 
+    on_exit(fn ->
+      # Clean up process dictionary
+      Process.delete(:registered_agents)
+      
+      # Reset feature flags if service is still running
+      if Process.whereis(Foundation.FeatureFlags) do
+        FeatureFlags.reset_all()
+      end
+    end)
+
     :ok
   end
 

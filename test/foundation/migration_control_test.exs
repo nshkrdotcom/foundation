@@ -19,6 +19,13 @@ defmodule Foundation.MigrationControlTest do
       _ -> :ets.delete_all_objects(:migration_history)
     end
 
+    on_exit(fn ->
+      # Reset feature flags if service is still running
+      if Process.whereis(Foundation.FeatureFlags) do
+        FeatureFlags.reset_all()
+      end
+    end)
+
     :ok
   end
 

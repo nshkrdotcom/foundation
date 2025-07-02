@@ -213,6 +213,7 @@ defmodule Foundation.FeatureFlags do
 
   @impl true
   def handle_call(:reset_all, _from, state) do
+    ensure_table_exists_in_server()
     :ets.delete_all_objects(@table_name)
     Logger.info("All feature flags reset to defaults")
     {:reply, :ok, state}
@@ -430,4 +431,5 @@ defmodule Foundation.FeatureFlags do
       end
     end)
   end
+  
 end

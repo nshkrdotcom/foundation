@@ -5,6 +5,17 @@ defmodule Foundation.Telemetry.SpanTest do
   import Foundation.Telemetry.Span
 
   setup do
+    # Ensure FeatureFlags is started first
+    case Process.whereis(Foundation.FeatureFlags) do
+      nil ->
+        {:ok, _} = Foundation.FeatureFlags.start_link()
+      _pid ->
+        :ok
+    end
+
+    # Enable the feature flag for GenServer span management
+    Foundation.FeatureFlags.enable(:use_genserver_span_management)
+
     # Ensure SpanManager is started
     case Process.whereis(Foundation.Telemetry.SpanManager) do
       nil ->
@@ -16,6 +27,14 @@ defmodule Foundation.Telemetry.SpanTest do
 
     # Clean up any existing span stack
     Foundation.Telemetry.SpanManager.clear_stack()
+    
+    on_exit(fn ->
+      # Reset feature flag after test if FeatureFlags is still running
+      if Process.whereis(Foundation.FeatureFlags) do
+        Foundation.FeatureFlags.disable(:use_genserver_span_management)
+      end
+    end)
+    
     :ok
   end
 

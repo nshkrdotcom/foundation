@@ -210,9 +210,24 @@ defmodule Foundation.Telemetry.Span do
   """
   @spec add_attributes(map()) :: :ok
   def add_attributes(attributes) do
-    case SpanManager.update_top_span(fn span ->
-           %{span | metadata: Map.merge(span.metadata, attributes)}
-         end) do
+    result = 
+      if FeatureFlags.enabled?(:use_genserver_span_management) do
+        SpanManager.update_top_span(fn span ->
+          %{span | metadata: Map.merge(span.metadata, attributes)}
+        end)
+      else
+        # Legacy implementation - update top span in Process dictionary
+        case get_stack_legacy() do
+          [] ->
+            :error
+          [span | rest] ->
+            updated_span = %{span | metadata: Map.merge(span.metadata, attributes)}
+            set_stack_legacy([updated_span | rest])
+            :ok
+        end
+      end
+    
+    case result do
       :error ->
         Logger.warning("No active span to add attributes to")
         :ok
@@ -335,7 +350,11 @@ defmodule Foundation.Telemetry.Span do
   def with_propagated_context(context, fun) do
     case context do
       %{span_stack: stack} ->
-        SpanManager.set_stack(stack)
+        if FeatureFlags.enabled?(:use_genserver_span_management) do
+          SpanManager.set_stack(stack)
+        else
+          set_stack_legacy(stack)
+        end
         fun.()
 
       _ ->

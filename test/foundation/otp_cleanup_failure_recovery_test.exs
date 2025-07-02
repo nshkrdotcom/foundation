@@ -79,7 +79,7 @@ defmodule Foundation.OTPCleanupFailureRecoveryTest do
           end
 
         # Manually delete the ETS table to simulate failure
-        table_name = :foundation_agent_registry
+        table_name = :foundation_agent_registry_ets
         # Only delete if table exists
         if :ets.whereis(table_name) != :undefined do
           :ets.delete(table_name)
@@ -95,7 +95,7 @@ defmodule Foundation.OTPCleanupFailureRecoveryTest do
 
         # Old agents should be gone (table was deleted)
         for agent_id <- agents do
-          assert {:error, :not_found} = Registry.lookup(registry, agent_id)
+          assert :error = Registry.lookup(registry, agent_id)
         end
 
         # New registrations should work normally
@@ -405,7 +405,7 @@ defmodule Foundation.OTPCleanupFailureRecoveryTest do
 
         # Verify killed agents are cleaned up
         for {agent_id, _} <- kill_agents do
-          assert {:error, :not_found} = Registry.lookup(registry, agent_id)
+          assert :error = Registry.lookup(registry, agent_id)
         end
 
         # Verify remaining agents are still registered
@@ -465,7 +465,7 @@ defmodule Foundation.OTPCleanupFailureRecoveryTest do
 
         # Verify all are cleaned up
         for {agent_id, _} <- agents do
-          assert {:error, :not_found} = Registry.lookup(registry, agent_id)
+          assert :error = Registry.lookup(registry, agent_id)
         end
 
         # Registry should still be functional
@@ -745,7 +745,7 @@ defmodule Foundation.OTPCleanupFailureRecoveryTest do
 
       # 2. Delete ETS tables
       try do
-        :ets.delete(:foundation_agent_registry)
+        :ets.delete(:foundation_agent_registry_ets)
       rescue
         _ -> :ok
       end
@@ -802,8 +802,8 @@ defmodule Foundation.OTPCleanupFailureRecoveryTest do
         Registry.register(registry, :recovery_time_test, self())
 
         # Delete table
-        if :ets.whereis(:foundation_agent_registry) != :undefined do
-          :ets.delete(:foundation_agent_registry)
+        if :ets.whereis(:foundation_agent_registry_ets) != :undefined do
+          :ets.delete(:foundation_agent_registry_ets)
         end
 
         # Measure recovery time
