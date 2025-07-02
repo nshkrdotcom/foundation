@@ -49,6 +49,56 @@ defmodule Foundation.SupervisionTestHelpers do
   import ExUnit.Assertions
   require Logger
 
+  @typedoc """
+  Service name atoms used for accessing services in isolated supervision trees.
+  
+  Maps to the corresponding JidoFoundation service modules:
+  - :task_pool_manager -> JidoFoundation.TaskPoolManager
+  - :system_command_manager -> JidoFoundation.SystemCommandManager
+  - :coordination_manager -> JidoFoundation.CoordinationManager
+  - :scheduler_manager -> JidoFoundation.SchedulerManager
+  """
+  @type service_name :: 
+          :task_pool_manager 
+          | :system_command_manager 
+          | :coordination_manager 
+          | :scheduler_manager
+
+  @typedoc """
+  Result of service lookup operations.
+  
+  - {:ok, pid} - Service found and running
+  - {:error, :service_not_found} - Service not registered
+  - {:error, :service_not_alive} - Service registered but process not alive
+  - {:error, {:unknown_service, atom}} - Service name not recognized
+  """
+  @type service_result :: 
+          {:ok, pid()} 
+          | {:error, :service_not_found | :service_not_alive | {:unknown_service, atom()}}
+
+  @typedoc """
+  Monitor information for process lifecycle tracking.
+  
+  Maps service names to {pid, monitor_ref} tuples for tracking
+  process termination and restart events.
+  """
+  @type monitor_map :: %{service_name() => {pid(), reference()}}
+
+  @typedoc """
+  Service call result from isolated service interactions.
+  
+  - term() - Successful service call result
+  - {:error, {:service_not_available, service_name, reason}} - Service call failed
+  """
+  @type service_call_result :: 
+          term() 
+          | {:error, {:service_not_available, service_name(), term()}}
+
+  @typedoc """
+  Import the supervision context type from the setup module.
+  """
+  @type supervision_context :: Foundation.SupervisionTestSetup.supervision_context()
+
   # Service name to module mappings for isolated testing
   # These map to the original JidoFoundation modules for registry lookup
   @service_modules %{
@@ -66,6 +116,7 @@ defmodule Foundation.SupervisionTestHelpers do
     :coordination_manager
   ]
 
+  @spec get_service(supervision_context(), service_name()) :: service_result()
   @doc """
   Get a service PID from the test supervision tree.
 
@@ -109,6 +160,8 @@ defmodule Foundation.SupervisionTestHelpers do
     end
   end
 
+  @spec wait_for_service_restart(supervision_context(), service_name(), pid(), timeout()) :: 
+          {:ok, pid()}
   @doc """
   Wait for a service to restart after crash in isolated supervision tree.
 
@@ -153,6 +206,7 @@ defmodule Foundation.SupervisionTestHelpers do
     )
   end
 
+  @spec monitor_all_services(supervision_context()) :: monitor_map()
   @doc """
   Monitor all processes in supervision tree for proper shutdown cascade testing.
 
@@ -199,6 +253,7 @@ defmodule Foundation.SupervisionTestHelpers do
     |> Enum.into(%{})
   end
 
+  @spec verify_rest_for_one_cascade(monitor_map(), service_name()) :: :ok
   @doc """
   Verify rest_for_one supervision behavior in isolated environment.
 
@@ -297,6 +352,8 @@ defmodule Foundation.SupervisionTestHelpers do
     :ok
   end
 
+  @spec wait_for_services_restart(supervision_context(), %{service_name() => pid()}, timeout()) :: 
+          {:ok, %{service_name() => pid()}}
   @doc """
   Wait for all services in a supervision tree to be restarted after a cascade.
 
@@ -355,6 +412,8 @@ defmodule Foundation.SupervisionTestHelpers do
     )
   end
 
+  @spec call_service(supervision_context(), service_name(), term(), timeout()) :: 
+          service_call_result()
   @doc """
   Call a service function in isolated supervision tree.
 
@@ -401,6 +460,8 @@ defmodule Foundation.SupervisionTestHelpers do
     end
   end
 
+  @spec cast_service(supervision_context(), service_name(), term()) :: 
+          :ok | {:error, {:service_not_available, service_name(), term()}}
   @doc """
   Cast a message to a service in isolated supervision tree.
 
@@ -423,6 +484,7 @@ defmodule Foundation.SupervisionTestHelpers do
     end
   end
 
+  @spec get_supervision_order() :: [service_name()]
   @doc """
   Get the supervision order for services.
 
@@ -436,6 +498,7 @@ defmodule Foundation.SupervisionTestHelpers do
   """
   def get_supervision_order, do: @supervision_order
 
+  @spec get_supported_services() :: [service_name()]
   @doc """
   Get all supported service names.
 
@@ -446,6 +509,7 @@ defmodule Foundation.SupervisionTestHelpers do
   """
   def get_supported_services, do: Map.keys(@service_modules)
 
+  @spec service_name_to_module(service_name()) :: module() | nil
   @doc """
   Convert service name to module.
 
@@ -456,6 +520,8 @@ defmodule Foundation.SupervisionTestHelpers do
   """
   def service_name_to_module(service_name), do: Map.get(@service_modules, service_name)
 
+  @spec wait_for_services_ready(supervision_context(), [service_name()] | nil, timeout()) :: 
+          [service_name()]
   @doc """
   Wait for a specific number of services to be available in the supervision context.
 
@@ -500,6 +566,8 @@ defmodule Foundation.SupervisionTestHelpers do
     )
   end
 
+  @spec validate_supervision_context(supervision_context()) :: 
+          :ok | {:error, {:missing_fields, [atom()]}}
   @doc """
   Validate that the supervision context has the required structure.
 

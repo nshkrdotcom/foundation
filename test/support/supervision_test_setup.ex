@@ -58,6 +58,49 @@ defmodule Foundation.SupervisionTestSetup do
   import Foundation.AsyncTestHelpers
   import ExUnit.Callbacks
 
+  @typedoc """
+  Supervision context structure returned by create_isolated_supervision/0.
+  
+  Contains all information needed to interact with an isolated supervision tree:
+  - test_id: Unique identifier for the test instance
+  - registry: Test-specific registry name for service discovery
+  - registry_pid: Registry process PID
+  - supervisor: Test supervisor name
+  - supervisor_pid: Supervisor process PID  
+  - services: List of service modules available in this test instance
+  """
+  @type supervision_context :: %{
+          test_id: pos_integer(),
+          registry: atom(),
+          registry_pid: pid(),
+          supervisor: atom(),
+          supervisor_pid: pid(),
+          services: [module()]
+        }
+
+  @typedoc """
+  Setup context returned by supervision setup functions.
+  
+  Contains the supervision_tree key expected by tests using
+  Foundation.UnifiedTestFoundation in :supervision_testing mode.
+  """
+  @type setup_context :: %{supervision_tree: supervision_context()}
+
+  @typedoc """
+  Statistics about an isolated supervision tree.
+  
+  Provides debugging and monitoring information about the current
+  state of a test supervision tree.
+  """
+  @type supervision_stats :: %{
+          test_id: pos_integer(),
+          supervisor_children: non_neg_integer(),
+          registered_services: non_neg_integer(),
+          registry_entries: non_neg_integer(),
+          supervisor_alive: boolean(),
+          registry_alive: boolean()
+        }
+
   # Service modules that will be created as test doubles for isolation
   @core_services [
     Foundation.TestServices.SchedulerManager,
@@ -66,6 +109,7 @@ defmodule Foundation.SupervisionTestSetup do
     Foundation.TestServices.CoordinationManager
   ]
 
+  @spec create_isolated_supervision() :: setup_context()
   @doc """
   Create an isolated supervision tree for testing JidoFoundation crash recovery.
 
@@ -144,6 +188,7 @@ defmodule Foundation.SupervisionTestSetup do
     %{supervision_tree: supervision_context}
   end
 
+  @spec start_isolated_jido_supervisor(atom(), atom()) :: {:ok, pid()} | {:error, term()}
   @doc """
   Start an isolated JidoSystem supervision tree with test-specific names.
 
@@ -206,6 +251,7 @@ defmodule Foundation.SupervisionTestSetup do
     end
   end
 
+  @spec wait_for_services_ready(atom(), [module()], timeout()) :: :ok
   @doc """
   Wait for services to be ready in the isolated supervision tree.
 
@@ -267,6 +313,7 @@ defmodule Foundation.SupervisionTestSetup do
     :ok
   end
 
+  @spec cleanup_isolated_supervision(supervision_context()) :: :ok
   @doc """
   Clean up isolated supervision tree resources.
 
@@ -326,6 +373,7 @@ defmodule Foundation.SupervisionTestSetup do
     Logger.debug("Isolated supervision tree cleanup complete: test_id=#{test_id}")
   end
 
+  @spec create_isolated_supervision_manual() :: setup_context()
   @doc """
   Create supervision context for testing without automatic cleanup.
 
@@ -381,6 +429,7 @@ defmodule Foundation.SupervisionTestSetup do
     %{supervision_tree: supervision_context}
   end
 
+  @spec get_core_services() :: [module()]
   @doc """
   Get the list of core services that are started in isolated supervision.
 
@@ -396,6 +445,8 @@ defmodule Foundation.SupervisionTestSetup do
   """
   def get_core_services, do: @core_services
 
+  @spec validate_supervision_context(supervision_context()) :: 
+          :ok | {:error, :registry_not_alive | :supervisor_not_alive | {:missing_fields, [atom()]}}
   @doc """
   Validate that a supervision context has the required structure.
 
@@ -454,6 +505,7 @@ defmodule Foundation.SupervisionTestSetup do
     end
   end
 
+  @spec get_supervision_stats(supervision_context()) :: supervision_stats()
   @doc """
   Get statistics about the isolated supervision tree.
 
