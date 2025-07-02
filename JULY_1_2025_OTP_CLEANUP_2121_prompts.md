@@ -44,7 +44,8 @@ Create the enforcement infrastructure for banning Process dictionary usage:
 - All existing tests still pass
 
 **Expected Output**: Updated configuration files and new Credo check that establishes enforcement foundation for the cleanup.
-
+---
+1 done
 ---
 
 ## PROMPT 2: Fix Foundation Registry Anti-Pattern
@@ -98,6 +99,8 @@ Process.put(:registered_agents, new_agents)
 
 **Expected Output**: Refactored registry implementation using ETS with proper OTP patterns and feature flag integration.
 
+---
+2 done
 ---
 
 ## PROMPT 3: Fix MABEAM Agent Registry Cache
@@ -162,6 +165,9 @@ Process.put(cache_key, tables)
 **Expected Output**: ETS-based caching implementation for MABEAM agent registry with proper OTP patterns and comprehensive testing.
 
 ---
+3 
+---
+
 
 ## PROMPT 4: Replace Error Context Process Dictionary Usage
 
@@ -456,7 +462,8 @@ Tests use Process dictionary for:
 1. Read `JULY_1_2025_OTP_CLEANUP_2121.md` - Section "Stage 6: Feature Flag Integration"
 2. Read `JULY_1_2025_PRE_PHASE_2_OTP_report_05.md` - Feature flag system design
 3. Examine if `lib/foundation/feature_flags.ex` already exists
-4. Review all the implementations from previous prompts that need feature flag integration
+4. and check `JULY_1_2025_OTP_CLEANUP_2121_prompts_1_thru_6.md` which was done during prompt 2
+5. Review all the implementations from previous prompts in `JULY_1_2025_OTP_CLEANUP_2121_prompts_guide7.md` that need feature flag integration 
 
 **Files to Examine**:
 - `lib/foundation/feature_flags.ex` (if it exists)

@@ -9,7 +9,7 @@ defimpl Foundation.Registry, for: MABEAM.AgentRegistry do
 
   - Write operations go through the GenServer for consistency
   - Read operations use direct ETS access for maximum concurrency
-  - Table names are cached in the process dictionary to avoid repeated lookups
+  - Table names are cached in ETS with TTL to avoid repeated lookups
   """
 
   require Logger
@@ -93,18 +93,14 @@ defimpl Foundation.Registry, for: MABEAM.AgentRegistry do
   # --- Private Helpers ---
 
   defp get_cached_table_names(registry_pid) do
-    cache_key = {__MODULE__, :table_names, registry_pid}
-
-    case Process.get(cache_key) do
-      nil ->
-        # First access, fetch and cache the table names
-        {:ok, tables} = GenServer.call(registry_pid, {:get_table_names})
-        Process.put(cache_key, tables)
+    case MABEAM.TableCache.get_cached_tables(registry_pid) do
+      {:ok, tables} ->
         tables
 
-      tables ->
-        # Use cached table names
-        tables
+      {:error, reason} ->
+        # Fall back to error handling
+        Logger.error("Failed to get cached table names: #{inspect(reason)}")
+        raise "Failed to get table names from registry: #{inspect(reason)}"
     end
   end
 
