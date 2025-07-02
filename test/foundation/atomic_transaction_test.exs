@@ -2,11 +2,17 @@ defmodule Foundation.AtomicTransactionTest do
   use Foundation.UnifiedTestFoundation, :registry
 
   alias Foundation.AtomicTransaction
+  alias Foundation.TestProcess
 
   describe "transact/1" do
     test "executes successful transaction with multiple operations", %{registry: registry} do
-      pid1 = spawn(fn -> :timer.sleep(:infinity) end)
-      pid2 = spawn(fn -> :timer.sleep(:infinity) end)
+      {:ok, pid1} = TestProcess.start_link()
+      {:ok, pid2} = TestProcess.start_link()
+      
+      on_exit(fn ->
+        if Process.alive?(pid1), do: TestProcess.stop(pid1)
+        if Process.alive?(pid2), do: TestProcess.stop(pid2)
+      end)
 
       result =
         AtomicTransaction.transact(registry, fn tx ->
@@ -25,7 +31,11 @@ defmodule Foundation.AtomicTransactionTest do
     end
 
     test "rolls back transaction on failure", %{registry: registry} do
-      pid1 = spawn(fn -> :timer.sleep(:infinity) end)
+      {:ok, pid1} = TestProcess.start_link()
+      
+      on_exit(fn ->
+        if Process.alive?(pid1), do: TestProcess.stop(pid1)
+      end)
 
       # First register an agent
       :ok = GenServer.call(registry, {:register, "existing", pid1, test_metadata()})
@@ -55,8 +65,13 @@ defmodule Foundation.AtomicTransactionTest do
     end
 
     test "supports unregister operations", %{registry: registry} do
-      pid1 = spawn(fn -> :timer.sleep(:infinity) end)
-      pid2 = spawn(fn -> :timer.sleep(:infinity) end)
+      {:ok, pid1} = TestProcess.start_link()
+      {:ok, pid2} = TestProcess.start_link()
+      
+      on_exit(fn ->
+        if Process.alive?(pid1), do: TestProcess.stop(pid1)
+        if Process.alive?(pid2), do: TestProcess.stop(pid2)
+      end)
 
       # Setup initial agents
       :ok = GenServer.call(registry, {:register, "agent_1", pid1, test_metadata()})
@@ -79,7 +94,11 @@ defmodule Foundation.AtomicTransactionTest do
     end
 
     test "transaction with custom registry", %{registry: registry} do
-      pid = spawn(fn -> :timer.sleep(:infinity) end)
+      {:ok, pid} = TestProcess.start_link()
+      
+      on_exit(fn ->
+        if Process.alive?(pid), do: TestProcess.stop(pid)
+      end)
 
       result =
         AtomicTransaction.transact(registry, fn tx ->
@@ -94,10 +113,10 @@ defmodule Foundation.AtomicTransactionTest do
 
   describe "complex scenarios" do
     test "handles process death during transaction", %{registry: registry} do
-      # Create a process that will die
-      pid = spawn(fn -> :ok end)
-      # Ensure process is dead
-      :timer.sleep(10)
+      # Create and monitor a process that will die immediately
+      {pid, ref} = spawn_monitor(fn -> :ok end)
+      # Wait for process to die
+      assert_receive {:DOWN, ^ref, :process, ^pid, _reason}, 1000
 
       result =
         AtomicTransaction.transact(registry, fn tx ->
@@ -114,20 +133,32 @@ defmodule Foundation.AtomicTransactionTest do
       tasks =
         for i <- 1..10 do
           Task.async(fn ->
-            pid = spawn(fn -> :timer.sleep(:infinity) end)
+            {:ok, pid} = TestProcess.start_link()
 
-            AtomicTransaction.transact(registry, fn tx ->
+            result = AtomicTransaction.transact(registry, fn tx ->
               tx
               |> AtomicTransaction.register_agent("concurrent_#{i}", pid, test_metadata())
             end)
+            
+            # Keep process alive for registry lookup
+            {result, pid}
           end)
         end
 
       # Wait for all to complete
       results = Task.await_many(tasks)
+      
+      # Extract results and pids for cleanup
+      {transaction_results, test_pids} = Enum.unzip(results)
+      
+      on_exit(fn ->
+        Enum.each(test_pids, fn pid ->
+          if Process.alive?(pid), do: TestProcess.stop(pid)
+        end)
+      end)
 
       # All should succeed
-      assert Enum.all?(results, fn
+      assert Enum.all?(transaction_results, fn
                {:ok, _} -> true
                _ -> false
              end)
@@ -139,7 +170,11 @@ defmodule Foundation.AtomicTransactionTest do
     end
 
     test "transaction with metadata validation failure", %{registry: registry} do
-      pid = spawn(fn -> :timer.sleep(:infinity) end)
+      {:ok, pid} = TestProcess.start_link()
+      
+      on_exit(fn ->
+        if Process.alive?(pid), do: TestProcess.stop(pid)
+      end)
 
       result =
         AtomicTransaction.transact(registry, fn tx ->
@@ -166,7 +201,11 @@ defmodule Foundation.AtomicTransactionTest do
         nil
       )
 
-      pid = spawn(fn -> :timer.sleep(:infinity) end)
+      {:ok, pid} = TestProcess.start_link()
+      
+      on_exit(fn ->
+        if Process.alive?(pid), do: TestProcess.stop(pid)
+      end)
 
       AtomicTransaction.transact(registry, fn tx ->
         tx
@@ -191,7 +230,12 @@ defmodule Foundation.AtomicTransactionTest do
         nil
       )
 
-      pid = spawn(fn -> :timer.sleep(:infinity) end)
+      {:ok, pid} = TestProcess.start_link()
+      
+      on_exit(fn ->
+        if Process.alive?(pid), do: TestProcess.stop(pid)
+      end)
+      
       :ok = GenServer.call(registry, {:register, "existing", pid, test_metadata()})
 
       AtomicTransaction.transact(registry, fn tx ->

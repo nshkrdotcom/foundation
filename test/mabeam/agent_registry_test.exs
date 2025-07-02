@@ -2,21 +2,22 @@ defmodule MABEAM.AgentRegistryTest do
   use ExUnit.Case, async: true
 
   alias MABEAM.AgentRegistry
+  alias Foundation.TestProcess
 
   setup do
     # Start a test registry
     {:ok, registry} = AgentRegistry.start_link(name: nil)
 
     # Create test agent PIDs
-    agent1 = spawn(fn -> :timer.sleep(:infinity) end)
-    agent2 = spawn(fn -> :timer.sleep(:infinity) end)
-    agent3 = spawn(fn -> :timer.sleep(:infinity) end)
+    {:ok, agent1} = TestProcess.start_link()
+    {:ok, agent2} = TestProcess.start_link()
+    {:ok, agent3} = TestProcess.start_link()
 
     on_exit(fn ->
       # Clean up processes
-      Process.exit(agent1, :kill)
-      Process.exit(agent2, :kill)
-      Process.exit(agent3, :kill)
+      if Process.alive?(agent1), do: TestProcess.stop(agent1)
+      if Process.alive?(agent2), do: TestProcess.stop(agent2)
+      if Process.alive?(agent3), do: TestProcess.stop(agent3)
     end)
 
     {:ok, registry: registry, agent1: agent1, agent2: agent2, agent3: agent3}
@@ -364,11 +365,22 @@ defmodule MABEAM.AgentRegistryTest do
   describe "performance characteristics" do
     test "supports high-concurrency read operations", %{registry: registry} do
       # Register 100 agents
-      for i <- 1..100 do
-        agent_pid = spawn(fn -> :timer.sleep(:infinity) end)
+      agents = for i <- 1..100 do
+        {:ok, agent_pid} = TestProcess.start_link()
         metadata = valid_metadata()
         :ok = Foundation.register("agent_#{i}", agent_pid, metadata, registry)
+        agent_pid
       end
+      
+      on_exit(fn ->
+        Enum.each(agents, fn pid ->
+          try do
+            if Process.alive?(pid), do: TestProcess.stop(pid)
+          catch
+            :exit, _ -> :ok
+          end
+        end)
+      end)
 
       # Concurrent reads
       tasks =
@@ -384,8 +396,8 @@ defmodule MABEAM.AgentRegistryTest do
 
     test "atomic queries are faster than separate operations", %{registry: registry} do
       # Register agents with various configurations
-      for i <- 1..50 do
-        agent_pid = spawn(fn -> :timer.sleep(:infinity) end)
+      agents = for i <- 1..50 do
+        {:ok, agent_pid} = TestProcess.start_link()
 
         capability =
           case rem(i, 3) do
@@ -414,7 +426,18 @@ defmodule MABEAM.AgentRegistryTest do
           |> Map.put(:resources, resources)
 
         :ok = Foundation.register("agent_#{i}", agent_pid, metadata, registry)
+        agent_pid
       end
+      
+      on_exit(fn ->
+        Enum.each(agents, fn pid ->
+          try do
+            if Process.alive?(pid), do: TestProcess.stop(pid)
+          catch
+            :exit, _ -> :ok
+          end
+        end)
+      end)
 
       # Complex atomic query
       atomic_criteria = [
@@ -505,8 +528,8 @@ defmodule MABEAM.AgentRegistryTest do
       fake_ref = make_ref()
       send(registry, {:DOWN, fake_ref, :process, self(), :normal})
 
-      # Give it time to process
-      Process.sleep(10)
+      # Give it time to process (short wait for message processing)
+      :timer.sleep(10)
 
       # Verify process doesn't accumulate monitors
       {:dictionary, dict} = Process.info(registry, :dictionary)
