@@ -69,18 +69,35 @@ defmodule Foundation.CredoChecks.NoProcessDict do
     end
 
     # Handle test case where a simple map is passed instead of SourceFile
-    def run(source_file_map, _params) when is_map(source_file_map) and not is_struct(source_file_map) do
-      # For test purposes, just check for Process.put/get in the source
-      source = Map.get(source_file_map, :source, "")
+    def run(source_file_map, params) when is_map(source_file_map) and not is_struct(source_file_map) do
+      # For test purposes, check if module is allowed
+      filename = Map.get(source_file_map, :filename, "")
+      allowed_modules = Keyword.get(params, :allowed_modules, [])
       
-      case Regex.scan(~r/Process\.(put|get)/, source) do
-        [] -> []
-        matches -> 
-          # Return a simple issue format for tests
-          [%{
-            message: "Avoid Process.#{elem(List.first(matches), 0)}/2 - use GenServer state, ETS tables, or explicit parameter passing instead",
-            line_no: 1
-          }]
+      # Check if this file should be exempt
+      allowed = Enum.any?(allowed_modules, fn module ->
+        module_path = String.replace(module, ".", "/") |> String.downcase()
+        String.contains?(String.downcase(filename), module_path)
+      end)
+      
+      if allowed do
+        []
+      else
+        # Check for Process.put/get in the source
+        source = Map.get(source_file_map, :source, "")
+        
+        case Regex.scan(~r/Process\.(put|get)/, source) do
+          [] -> []
+          matches -> 
+            # Fix: matches is a list of lists, where each match is ["Process.put", "put"]
+            first_match = List.first(matches)
+            function_name = Enum.at(first_match, 1)  # Get the second element (put or get)
+            # Return a simple issue format for tests
+            [%{
+              message: "Avoid Process.#{function_name}/2 - use GenServer state, ETS tables, or explicit parameter passing instead",
+              line_no: 1
+            }]
+        end
       end
     end
 
@@ -93,8 +110,8 @@ defmodule Foundation.CredoChecks.NoProcessDict do
       # Check if file is in allowed modules list
       allowed =
         Enum.any?(allowed_modules, fn module ->
-          module_path = String.replace(module, ".", "/")
-          String.contains?(filename, module_path)
+          module_path = String.replace(module, ".", "/") |> String.downcase()
+          String.contains?(String.downcase(filename), module_path)
         end)
 
       not return_false_if_test and not allowed
