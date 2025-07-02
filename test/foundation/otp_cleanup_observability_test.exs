@@ -9,9 +9,8 @@ defmodule Foundation.OTPCleanupObservabilityTest do
   use ExUnit.Case, async: false
 
   require Logger
-  import Foundation.AsyncTestHelpers
   alias Foundation.{FeatureFlags, ErrorContext, Registry}
-  alias Foundation.Telemetry.{Span, SampledEvents}
+  alias Foundation.Telemetry.Span
 
   @moduletag :observability
   @moduletag :telemetry
@@ -237,7 +236,7 @@ defmodule Foundation.OTPCleanupObservabilityTest do
       start_services_for_stage(4)
 
       # Create nested spans and verify hierarchy is tracked
-      span_events = []
+      _span_events = []
       test_pid = self()
 
       # Collect span events
@@ -313,7 +312,7 @@ defmodule Foundation.OTPCleanupObservabilityTest do
       end
     end
 
-    defp collect_events_during_operations(context, operation_fun) do
+    defp collect_events_during_operations(_context, operation_fun) do
       # Execute operations and let telemetry events flow
       operation_fun.()
 
@@ -743,7 +742,7 @@ defmodule Foundation.OTPCleanupObservabilityTest do
       start_services_for_stage(4)
 
       # Set up comprehensive telemetry collection
-      all_events = []
+      _all_events = []
       test_pid = self()
 
       comprehensive_handler = fn event, measurements, metadata, _ ->

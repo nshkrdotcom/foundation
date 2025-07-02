@@ -9,8 +9,8 @@ defmodule Foundation.OTPCleanupStressTest do
   use Foundation.UnifiedTestFoundation, :registry
 
   import Foundation.AsyncTestHelpers
-  alias Foundation.{FeatureFlags, ErrorContext, Registry}
-  alias Foundation.Telemetry.{Span, SampledEvents}
+  alias Foundation.{FeatureFlags, ErrorContext}
+  alias Foundation.Telemetry.Span
 
   @moduletag :stress
   @moduletag :concurrency

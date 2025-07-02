@@ -8,9 +8,8 @@ defmodule Foundation.OTPCleanupFeatureFlagTest do
 
   use Foundation.UnifiedTestFoundation, :registry
 
-  import Foundation.AsyncTestHelpers
   alias Foundation.{FeatureFlags, ErrorContext, Registry}
-  alias Foundation.Telemetry.{Span, SampledEvents}
+  alias Foundation.Telemetry.Span
 
   @moduletag :feature_flags
   @moduletag :integration
