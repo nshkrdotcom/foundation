@@ -13,7 +13,66 @@ defmodule Foundation.UnifiedTestFoundation do
   - `:full_isolation` - Complete service isolation
   - `:contamination_detection` - Full isolation + contamination monitoring
   - `:service_integration` - Service Integration Architecture testing with SIA components
-  - `:supervision_testing` - Isolated supervision trees for crash recovery testing
+  - `:supervision_testing` - Isolated supervision trees for crash recovery testing (async: false)
+
+  ## Supervision Testing Mode
+
+  The `:supervision_testing` mode provides complete isolation for testing OTP supervision
+  behavior without global state contamination. Each test gets its own supervision tree
+  with isolated JidoFoundation services.
+
+  ### Features:
+  - Isolated supervision trees per test
+  - Test-specific service registries
+  - No shared global state between tests
+  - Proper rest_for_one supervision behavior testing
+  - Automatic cleanup and resource management
+  - Helper functions for service access and monitoring
+
+  ### Automatic Imports:
+  - `Foundation.AsyncTestHelpers` - For wait_for and async testing patterns
+  - `Foundation.SupervisionTestHelpers` - For service access and supervision testing
+
+  ### Available Services:
+  - `:task_pool_manager` - JidoFoundation.TaskPoolManager
+  - `:system_command_manager` - JidoFoundation.SystemCommandManager
+  - `:coordination_manager` - JidoFoundation.CoordinationManager
+  - `:scheduler_manager` - JidoFoundation.SchedulerManager
+
+  ### When to Use Supervision Testing:
+  - Testing process crash recovery
+  - Verifying supervision strategy behavior (rest_for_one, one_for_one)
+  - Testing service restart functionality
+  - Validating fault tolerance patterns
+  - Testing supervision cascades and dependencies
+
+  ### Migration from ExUnit.Case:
+  ```elixir
+  # Before:
+  defmodule MySupervisionTest do
+    use ExUnit.Case, async: false
+    
+    test "crash recovery" do
+      # Global state contamination issues
+      pid = Process.whereis(JidoFoundation.TaskPoolManager)
+      Process.exit(pid, :kill)
+      # Affects other tests!
+    end
+  end
+
+  # After:
+  defmodule MySupervisionTest do
+    use Foundation.UnifiedTestFoundation, :supervision_testing
+    
+    test "crash recovery", %{supervision_tree: sup_tree} do
+      # Isolated per test - no contamination
+      {:ok, pid} = get_service(sup_tree, :task_pool_manager)
+      Process.exit(pid, :kill)
+      {:ok, new_pid} = wait_for_service_restart(sup_tree, :task_pool_manager, pid)
+      # Only affects this test's supervision tree
+    end
+  end
+  ```
 
   ## Usage Examples
 
@@ -58,7 +117,19 @@ defmodule Foundation.UnifiedTestFoundation do
         use Foundation.UnifiedTestFoundation, :supervision_testing
 
         test "crash recovery", %{supervision_tree: sup_tree} do
-          # Isolated supervision tree for crash testing
+          # Get a service from isolated supervision tree
+          {:ok, task_pid} = get_service(sup_tree, :task_pool_manager)
+          
+          # Kill the service in isolation
+          Process.exit(task_pid, :kill)
+          
+          # Wait for supervision restart
+          {:ok, new_pid} = wait_for_service_restart(sup_tree, :task_pool_manager, task_pid)
+          assert new_pid != task_pid
+          
+          # Verify functionality is restored
+          stats = call_service(sup_tree, :task_pool_manager, :get_all_stats)
+          assert is_map(stats)
         end
       end
   """
@@ -74,6 +145,14 @@ defmodule Foundation.UnifiedTestFoundation do
       import Foundation.UnifiedTestFoundation
       import ExUnit.Callbacks
       alias Foundation.TestIsolation
+
+      # Import supervision test helpers for supervision testing mode
+      unquote(if mode == :supervision_testing do
+        quote do
+          import Foundation.AsyncTestHelpers
+          import Foundation.SupervisionTestHelpers
+        end
+      end)
 
       setup do
         unquote(setup_for_mode(mode))

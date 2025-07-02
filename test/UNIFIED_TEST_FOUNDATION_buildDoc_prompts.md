@@ -78,6 +78,10 @@ Create `test/support/supervision_test_helpers.ex` with complete helper functions
 
 ---
 
+p1 done
+
+---
+
 ## PROMPT 2: Supervision Test Setup Infrastructure
 
 ### Context Files to Read
@@ -161,6 +165,11 @@ Create `test/support/supervision_test_setup.ex` that creates completely isolated
 - Proper cleanup and resource management
 - Integration with `on_exit` callbacks
 - Documentation and error handling
+
+---
+
+p2 done
+
 
 ---
 
