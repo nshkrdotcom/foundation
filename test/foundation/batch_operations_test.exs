@@ -6,18 +6,14 @@ defmodule Foundation.BatchOperationsTest do
 
   describe "batch_register/2" do
     test "registers multiple agents successfully", %{registry: registry} do
-      {agents, pids} =
+      {agents, _pids} =
         for i <- 1..10 do
           {:ok, pid} = TestProcess.start_link()
           {{"batch_agent_#{i}", pid, test_metadata()}, pid}
         end
         |> Enum.unzip()
 
-      on_exit(fn ->
-        Enum.each(pids, fn pid ->
-          if Process.alive?(pid), do: TestProcess.stop(pid)
-        end)
-      end)
+      # Foundation.UnifiedTestFoundation :registry mode handles all process cleanup automatically
 
       assert {:ok, registered_ids} = BatchOperations.batch_register(agents, registry: registry)
       assert length(registered_ids) == 10
@@ -35,9 +31,7 @@ defmodule Foundation.BatchOperationsTest do
       # Wait for process to die
       assert_receive {:DOWN, ^ref, :process, ^dead_pid, :normal}, 1000
 
-      on_exit(fn ->
-        if Process.alive?(pid1), do: Process.exit(pid1, :kill)
-      end)
+      # Foundation.UnifiedTestFoundation :registry mode handles all process cleanup automatically
 
       agents = [
         {"valid_agent", pid1, test_metadata()},
@@ -61,9 +55,7 @@ defmodule Foundation.BatchOperationsTest do
 
       {:ok, pid2} = TestProcess.start_link()
 
-      on_exit(fn ->
-        if Process.alive?(pid2), do: Process.exit(pid2, :kill)
-      end)
+      # Foundation.UnifiedTestFoundation :registry mode handles all process cleanup automatically
 
       agents = [
         {"will_fail", dead_pid, test_metadata()},
@@ -77,18 +69,14 @@ defmodule Foundation.BatchOperationsTest do
 
     test "respects batch_size option", %{registry: registry} do
       # This test mainly verifies the batching doesn't break functionality
-      {agents, pids} =
+      {agents, _pids} =
         for i <- 1..25 do
           {:ok, pid} = TestProcess.start_link()
           {{"batch_size_#{i}", pid, test_metadata()}, pid}
         end
         |> Enum.unzip()
 
-      on_exit(fn ->
-        Enum.each(pids, fn pid ->
-          if Process.alive?(pid), do: TestProcess.stop(pid)
-        end)
-      end)
+      # Foundation.UnifiedTestFoundation :registry mode handles all process cleanup automatically
 
       assert {:ok, registered_ids} =
                BatchOperations.batch_register(agents, batch_size: 5, registry: registry)
@@ -100,20 +88,16 @@ defmodule Foundation.BatchOperationsTest do
   describe "batch_update_metadata/2" do
     setup %{registry: registry} do
       # Pre-register some agents
-      pids =
+      _pids =
         for i <- 1..5 do
           {:ok, pid} = TestProcess.start_link()
           :ok = GenServer.call(registry, {:register, "update_test_#{i}", pid, test_metadata()})
           {i, pid}
         end
 
-      on_exit(fn ->
-        Enum.each(pids, fn {_i, pid} ->
-          if Process.alive?(pid), do: TestProcess.stop(pid)
-        end)
-      end)
+      # Foundation.UnifiedTestFoundation :registry mode handles all process cleanup automatically
 
-      {:ok, pids: pids}
+      :ok
     end
 
     test "updates metadata for multiple agents", %{registry: registry} do
@@ -152,7 +136,7 @@ defmodule Foundation.BatchOperationsTest do
   describe "batch_query/2" do
     setup %{registry: registry} do
       # Register diverse agents for querying
-      pids =
+      _pids =
         for i <- 1..20 do
           {:ok, pid} = TestProcess.start_link()
           capability = if rem(i, 2) == 0, do: :data, else: :compute
@@ -169,11 +153,7 @@ defmodule Foundation.BatchOperationsTest do
           pid
         end
 
-      on_exit(fn ->
-        Enum.each(pids, fn pid ->
-          if Process.alive?(pid), do: TestProcess.stop(pid)
-        end)
-      end)
+      # Foundation.UnifiedTestFoundation :registry mode handles all process cleanup automatically
 
       :ok
     end
@@ -225,7 +205,7 @@ defmodule Foundation.BatchOperationsTest do
   describe "stream_query/2" do
     setup %{registry: registry} do
       # Register many agents for streaming
-      pids =
+      _pids =
         for i <- 1..100 do
           {:ok, pid} = TestProcess.start_link()
 
@@ -241,11 +221,7 @@ defmodule Foundation.BatchOperationsTest do
           pid
         end
 
-      on_exit(fn ->
-        Enum.each(pids, fn pid ->
-          if Process.alive?(pid), do: TestProcess.stop(pid)
-        end)
-      end)
+      # Foundation.UnifiedTestFoundation :registry mode handles all process cleanup automatically
 
       :ok
     end
@@ -283,7 +259,7 @@ defmodule Foundation.BatchOperationsTest do
   describe "batch_unregister/2" do
     setup %{registry: registry} do
       # Pre-register agents
-      {agent_ids, pids} =
+      {agent_ids, _pids} =
         for i <- 1..10 do
           {:ok, pid} = TestProcess.start_link()
           id = "unregister_test_#{i}"
@@ -292,11 +268,7 @@ defmodule Foundation.BatchOperationsTest do
         end
         |> Enum.unzip()
 
-      on_exit(fn ->
-        Enum.each(pids, fn pid ->
-          if Process.alive?(pid), do: TestProcess.stop(pid)
-        end)
-      end)
+      # Foundation.UnifiedTestFoundation :registry mode handles all process cleanup automatically
 
       {:ok, agent_ids: agent_ids}
     end
@@ -334,11 +306,7 @@ defmodule Foundation.BatchOperationsTest do
           {i, pid}
         end
 
-      on_exit(fn ->
-        Enum.each(agent_pids, fn {_i, pid} ->
-          if Process.alive?(pid), do: TestProcess.stop(pid)
-        end)
-      end)
+      # Foundation.UnifiedTestFoundation :registry mode handles all process cleanup automatically
 
       {:ok, agent_pids: agent_pids}
     end
@@ -389,9 +357,7 @@ defmodule Foundation.BatchOperationsTest do
 
       {:ok, pid} = TestProcess.start_link()
 
-      on_exit(fn ->
-        if Process.alive?(pid), do: Process.exit(pid, :kill)
-      end)
+      # Foundation.UnifiedTestFoundation :registry mode handles all process cleanup automatically
 
       agents = [
         {"telemetry_test", pid, test_metadata()}

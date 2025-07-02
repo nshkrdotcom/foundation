@@ -1,26 +1,25 @@
 defmodule MABEAM.AgentRegistryTest do
-  use ExUnit.Case, async: true
+  use Foundation.UnifiedTestFoundation, :registry
 
   alias MABEAM.AgentRegistry
   alias Foundation.TestProcess
 
-  setup do
-    # Start a test registry
-    {:ok, registry} = AgentRegistry.start_link(name: nil)
-
-    # Create test agent PIDs
+  setup %{registry: _registry} do
+    # Foundation.UnifiedTestFoundation :registry mode provides:
+    # - Isolated MABEAM.AgentRegistry per test
+    # - Automatic cleanup via UnifiedTestFoundation
+    # - No manual process management needed
+    
     {:ok, agent1} = TestProcess.start_link()
     {:ok, agent2} = TestProcess.start_link()
     {:ok, agent3} = TestProcess.start_link()
 
-    on_exit(fn ->
-      # Clean up processes
-      if Process.alive?(agent1), do: TestProcess.stop(agent1)
-      if Process.alive?(agent2), do: TestProcess.stop(agent2)
-      if Process.alive?(agent3), do: TestProcess.stop(agent3)
-    end)
-
-    {:ok, registry: registry, agent1: agent1, agent2: agent2, agent3: agent3}
+    # Use the registry provided by Foundation.UnifiedTestFoundation
+    %{
+      agent1: agent1, 
+      agent2: agent2, 
+      agent3: agent3
+    }
   end
 
   # Helper functions for tests
@@ -365,22 +364,13 @@ defmodule MABEAM.AgentRegistryTest do
   describe "performance characteristics" do
     test "supports high-concurrency read operations", %{registry: registry} do
       # Register 100 agents
-      agents = for i <- 1..100 do
+      # Foundation.UnifiedTestFoundation :registry mode handles all process cleanup automatically
+      _agents = for i <- 1..100 do
         {:ok, agent_pid} = TestProcess.start_link()
         metadata = valid_metadata()
         :ok = Foundation.register("agent_#{i}", agent_pid, metadata, registry)
         agent_pid
       end
-      
-      on_exit(fn ->
-        Enum.each(agents, fn pid ->
-          try do
-            if Process.alive?(pid), do: TestProcess.stop(pid)
-          catch
-            :exit, _ -> :ok
-          end
-        end)
-      end)
 
       # Concurrent reads
       tasks =
@@ -396,7 +386,7 @@ defmodule MABEAM.AgentRegistryTest do
 
     test "atomic queries are faster than separate operations", %{registry: registry} do
       # Register agents with various configurations
-      agents = for i <- 1..50 do
+      _agents = for i <- 1..50 do
         {:ok, agent_pid} = TestProcess.start_link()
 
         capability =
@@ -428,16 +418,6 @@ defmodule MABEAM.AgentRegistryTest do
         :ok = Foundation.register("agent_#{i}", agent_pid, metadata, registry)
         agent_pid
       end
-      
-      on_exit(fn ->
-        Enum.each(agents, fn pid ->
-          try do
-            if Process.alive?(pid), do: TestProcess.stop(pid)
-          catch
-            :exit, _ -> :ok
-          end
-        end)
-      end)
 
       # Complex atomic query
       atomic_criteria = [

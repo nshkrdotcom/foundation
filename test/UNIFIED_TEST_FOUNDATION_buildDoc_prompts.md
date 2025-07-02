@@ -781,7 +781,14 @@ Perform comprehensive verification of the complete migration and optimize perfor
 
 9 done
 
+
 ---
+
+
+
+
+
+
 
 ## PROMPT 10: Final Documentation and Cleanup
 
@@ -866,16 +873,155 @@ Create comprehensive documentation, cleanup temporary files, and establish patte
 - CI/CD integration verification
 - Template and patterns for future supervision testing
 
----
+ 
 
-## Summary
 
-These 10 prompts provide a complete, phase-by-phase implementation of isolated supervision testing that will:
+ ---
 
-1. **✅ Eliminate Test Contamination** - Each test gets isolated supervision tree
-2. **✅ Enable Reliable Batch Testing** - No more `(EXIT from #PID<0.95.0>) shutdown` 
-3. **✅ Follow OTP Best Practices** - Proper supervision testing patterns
-4. **✅ Maintain Performance** - Similar or better execution times
-5. **✅ Enable Future Expansion** - Template for additional supervision tests
 
-Each prompt is self-contained with complete context, allowing independent implementation and debugging before proceeding to the next phase.
+
+   ● PROMPT 11: Complete Sleep Anti-Pattern Migration - Remaining Medium & Low Priority Files
+
+  Context Files to Read
+
+  Sleep Audit Report:
+  test/SLEEP_AUDIT_202507011900.md
+
+  Migration Infrastructure & Patterns (Proven):
+  test/20250701_MOCK_LIB_AND_MIGRATION_PATTERNS.md (Complete migration guide)
+  test/support/test_process.ex (Foundation.TestProcess mock library)
+  test/support/unified_test_foundation.ex (:supervision_testing mode)
+  test/support/supervision_test_helpers.ex (wait_for patterns)
+  test/support/async_test_helpers.ex (polling mechanisms)
+
+  Successfully Migrated Reference Cases:
+  test/foundation/monitor_manager_test.exs (✅ Complete - zero anti-patterns)
+  test/jido_system/agents/task_agent_test.exs (✅ Complete - telemetry-based)
+  test/foundation/batch_operations_test.exs (✅ Complete - TestProcess mocks)
+  test/jido_foundation/supervision_crash_recovery_test.exs (✅ Complete reference)
+
+  Medium-Priority Migration Targets (Category B - 35 files remaining):
+  test/foundation/serial_operations_test.exs (Infinity sleep spawns)
+  test/foundation/atomic_transaction_test.exs (Process placeholders)
+  test/foundation/connection_manager_test.exs (Network timing)
+  test/foundation/health_monitor_test.exs (Health check delays)
+  test/foundation/resource_pool_test.exs (Pool coordination)
+  test/foundation/circuit_breaker_test.exs (Failure simulation)
+  test/foundation/rate_limiter_test.exs (Rate limiting waits)
+  test/foundation/cache_manager_test.exs (Cache invalidation)
+  test/jido_system/workflow_executor_test.exs (Workflow coordination)
+  test/jido_system/state_machine_test.exs (State transitions)
+
+  Low-Priority Migration Targets (Category C - 12 files remaining):
+  test/foundation/telemetry_collector_test.exs (Metric collection delays)
+  test/foundation/event_dispatcher_test.exs (Event propagation)
+  test/foundation/registry_cluster_test.exs (Cluster coordination)
+  test/foundation/distributed_lock_test.exs (Lock acquisition)
+
+  Task
+
+  Complete the remaining 49% of sleep anti-pattern migrations using the proven Foundation.TestProcess infrastructure and established patterns.
+
+  Requirements:
+
+  1. Phase 1: Medium-Priority Batch Migration (Target: 15 files):
+     # Test current state for flakiness
+     mix test test/foundation/serial_operations_test.exs --seed 987654
+     mix test test/foundation/atomic_transaction_test.exs --seed 987654
+     mix test test/foundation/connection_manager_test.exs --seed 987654
+
+     # Batch stability check
+     for file in serial_operations atomic_transaction connection_manager; do
+       echo "Testing $file stability"
+       mix test test/foundation/${file}_test.exs
+     done
+
+  2. Migration Implementation Using Proven Patterns:
+     - Apply patterns from test/20250701_MOCK_LIB_AND_MIGRATION_PATTERNS.md
+     - Use Foundation.TestProcess for all infinity sleep replacements
+     - Replace Process.sleep with wait_for patterns from AsyncTestHelpers
+     - Apply Foundation.UnifiedTestFoundation :supervision_testing mode
+     - Use telemetry-based async testing where applicable
+
+  3. Pattern Application Examples:
+     # BEFORE: spawn(fn -> :timer.sleep(:infinity) end)
+     # AFTER: {:ok, pid} = Foundation.TestProcess.start_link()
+
+     # BEFORE: Process.sleep(50)
+     # AFTER: wait_for(fn -> condition_met?() end, 2000)
+
+     # BEFORE: :timer.sleep(100)
+     # AFTER: Use telemetry-based waiting from TaskAgentTestHelpers
+
+  4. Batch Processing Strategy:
+     # Process files in groups of 5 for manageable verification
+     GROUP_1="serial_operations atomic_transaction connection_manager health_monitor resource_pool"
+     GROUP_2="circuit_breaker rate_limiter cache_manager workflow_executor state_machine"
+     GROUP_3="telemetry_collector event_dispatcher registry_cluster distributed_lock"
+
+     # Migrate each group and verify before proceeding
+     for group in GROUP_1 GROUP_2 GROUP_3; do
+       echo "Migrating group: $group"
+       # Apply migrations
+       # Verify all tests pass
+       # Check stability
+     done
+
+  5. Comprehensive Post-Migration Verification:
+     # Verify zero anti-patterns across all files
+     find test/ -name "*_test.exs" -exec grep -l "Process.sleep\|:timer.sleep(:infinity)" {} \; || echo "✅ All clean"
+
+     # Batch test all migrated files
+     mix test test/foundation/ test/jido_system/ --exclude slow
+
+     # Performance comparison (key metric)
+     echo "=== Performance Analysis ==="
+     time mix test test/foundation/ --exclude slow
+
+     # Stability verification across random seeds
+     for seed in 111111 222222 333333 444444 555555; do
+       echo "Stability test with seed $seed"
+       mix test test/foundation/ --seed $seed --exclude slow --max-failures 1
+     done
+
+  6. Final Anti-Pattern Elimination Audit:
+     # Generate updated audit report
+     ./scripts/audit_sleep_patterns.sh > test/SLEEP_AUDIT_FINAL_202507.md
+
+     # Should show 0% anti-patterns remaining
+     grep "Category B" test/SLEEP_AUDIT_FINAL_202507.md || echo "✅ All Category B eliminated"
+
+  Deliverables:
+  - ✅ All 47 remaining test files migrated (49% of original anti-patterns)
+  - ✅ Foundation.TestProcess used consistently across all infinity sleep replacements
+  - ✅ Zero Process.sleep and :timer.sleep(:infinity) anti-patterns remaining
+  - ✅ All tests pass individually and in comprehensive batch mode
+  - ✅ Performance maintained or improved (target: <10% time increase, >95% reliability)
+  - ✅ Zero test contamination verified across multiple seed runs
+  - ✅ Complete resource cleanup verified (no process leaks)
+  - 📊 Final audit report showing 0% anti-patterns remaining
+  - 📋 Migration completion metrics (files processed, reliability achieved, performance impact)
+  - 📚 Updated migration patterns documentation with lessons learned
+
+  Success Criteria:
+  - Follow all patterns from test/20250701_MOCK_LIB_AND_MIGRATION_PATTERNS.md
+  - Achieve 99%+ test reliability across entire Foundation test suite
+  - Eliminate 100% of Category B and Category C anti-patterns
+  - Maintain test execution performance within 10% of original times
+  - Zero flaky test failures in comprehensive CI/CD pipeline
+  - Complete Foundation test suite ready for production deployment
+
+  Advanced Deliverables:
+  - 🔄 CI/CD integration script to prevent sleep anti-pattern regressions
+  - 📊 Comprehensive performance analysis comparing before/after metrics
+  - 🎯 Test reliability dashboard showing Foundation test health
+  - 📖 Best practices guide for future test development
+
+  The key changes in PROMPT 11:
+  1. References the comprehensive migration guide you created
+  2. Builds upon the proven Foundation.TestProcess infrastructure
+  3. Targets the remaining 49% of files identified in the audit
+  4. Uses batch processing strategy for manageable implementation
+  5. Includes comprehensive verification for production readiness
+  6. Focuses on eliminating ALL remaining anti-patterns (Categories B & C)
+  7. Emphasizes proven patterns from the successful migrations
