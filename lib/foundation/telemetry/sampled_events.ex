@@ -248,6 +248,9 @@ defmodule Foundation.Telemetry.SampledEvents do
     end
   end
 
+  # Test-compatible API functions to avoid macro conflicts
+  # Note: These are runtime functions, not compile-time macros
+
   @doc """
   Summarizes a batch of items.
 
@@ -277,4 +280,8 @@ defmodule Foundation.Telemetry.SampledEvents do
       }
     end
   end
+
+  # Test compatibility: Delegate to TestAPI functions to avoid macro conflicts
+  defdelegate emit_event_test(event_name, measurements, metadata), to: Foundation.Telemetry.SampledEvents.TestAPI, as: :emit_event
+  defdelegate emit_batched_test(event_name, measurement, metadata), to: Foundation.Telemetry.SampledEvents.TestAPI, as: :emit_batched
 end

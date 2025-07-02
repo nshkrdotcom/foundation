@@ -84,6 +84,36 @@ defmodule Foundation.Telemetry.Span do
   end
 
   @doc """
+  Function version of with_span for tests and programmatic usage.
+  Executes a function within a traced span.
+  """
+  @spec with_span_fun(span_name(), span_metadata(), (-> term())) :: term()
+  def with_span_fun(name, metadata, fun) when is_function(fun, 0) do
+    span_id = start_span(name, metadata)
+    
+    try do
+      result = fun.()
+      end_span(span_id)
+      result
+    rescue
+      exception ->
+        end_span(:error, %{
+          error: Exception.format(:error, exception),
+          stacktrace: Exception.format_stacktrace(__STACKTRACE__)
+        })
+        reraise exception, __STACKTRACE__
+    catch
+      kind, reason ->
+        end_span(:error, %{
+          error: Exception.format(kind, reason),
+          stacktrace: Exception.format_stacktrace(__STACKTRACE__)
+        })
+        :erlang.raise(kind, reason, __STACKTRACE__)
+    end
+  end
+
+
+  @doc """
   Starts a new span and pushes it onto the span stack.
   """
   @spec start_span(span_name(), span_metadata()) :: span_ref()
@@ -121,6 +151,14 @@ defmodule Foundation.Telemetry.Span do
     )
 
     span_id
+  end
+
+  @doc """
+  Ends a specific span by span_id (simplified API for tests).
+  """
+  @spec end_span(span_ref()) :: :ok
+  def end_span(span_id) when is_reference(span_id) do
+    end_span(:ok, %{target_span_id: span_id})
   end
 
   @doc """

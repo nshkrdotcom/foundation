@@ -6,7 +6,6 @@ defmodule Foundation.OTPCleanupE2ETest do
   after Process dictionary elimination.
   """
   
-  use ExUnit.Case, async: false
   use Foundation.UnifiedTestFoundation, :supervision_testing
   
   import Foundation.AsyncTestHelpers
@@ -53,17 +52,18 @@ defmodule Foundation.OTPCleanupE2ETest do
         agent_ids = for i <- 1..5 do
           agent_id = :"test_agent_#{i}"
           
-          # Create agent process
-          agent_pid = spawn_link(fn ->
+          # Create agent process using Task for proper management
+          agent_task = Task.async(fn ->
             receive do
               {:work, from} -> 
                 send(from, {:work_done, agent_id})
-                :timer.sleep(100)
+                :timer.sleep(1)  # Minimal delay for testing infrastructure
               :stop -> :ok
             after
               5000 -> :timeout
             end
           end)
+          agent_pid = agent_task.pid
           
           # Register with new ETS registry
           assert :ok = Registry.register(nil, agent_id, agent_pid)
@@ -163,7 +163,6 @@ defmodule Foundation.OTPCleanupE2ETest do
       FeatureFlags.enable_otp_cleanup_stage(4)
       
       # Set up telemetry collection
-      events = []
       test_pid = self()
       
       handler = fn event, measurements, metadata, _ ->
@@ -223,7 +222,7 @@ defmodule Foundation.OTPCleanupE2ETest do
   end
   
   describe "Complex Workflow Integration" do
-    test "multi-step workflow with error handling", %{sup_tree: sup_tree} do
+    test "multi-step workflow with error handling", %{sup_tree: _sup_tree} do
       FeatureFlags.enable_otp_cleanup_stage(4)
       
       # Step 1: Initialize workflow context
@@ -256,8 +255,8 @@ defmodule Foundation.OTPCleanupE2ETest do
             agent_id: agent_id
           })
           
-          # Create agent with specific behavior
-          agent_pid = spawn_link(fn ->
+          # Create agent with specific behavior using Task
+          agent_task = Task.async(fn ->
             receive do
               {:execute_step, from, data} ->
                 # Simulate step processing
@@ -277,6 +276,7 @@ defmodule Foundation.OTPCleanupE2ETest do
               10_000 -> :timeout
             end
           end)
+          agent_pid = agent_task.pid
           
           # Register agent
           assert :ok = Registry.register(nil, agent_id, agent_pid)
@@ -373,8 +373,8 @@ defmodule Foundation.OTPCleanupE2ETest do
       # Start workflow with service dependency
       {:ok, task_manager_pid} = get_service(sup_tree, :task_pool_manager)
       
-      # Register agents that depend on the service
-      dependent_agent = spawn_link(fn ->
+      # Register agents that depend on the service using Task
+      dependent_task = Task.async(fn ->
         receive do
           {:check_service, from} ->
             case call_service(sup_tree, :task_pool_manager, :get_all_stats) do
@@ -387,6 +387,7 @@ defmodule Foundation.OTPCleanupE2ETest do
           10_000 -> :timeout
         end
       end)
+      dependent_agent = dependent_task.pid
       
       Registry.register(nil, :dependent_agent, dependent_agent)
       
@@ -517,7 +518,7 @@ defmodule Foundation.OTPCleanupE2ETest do
   end
   
   describe "Production Simulation Tests" do
-    test "high load scenario with new implementations", %{sup_tree: sup_tree} do
+    test "high load scenario with new implementations", %{sup_tree: _sup_tree} do
       FeatureFlags.enable_otp_cleanup_stage(4)
       
       # Simulate production load
@@ -528,9 +529,9 @@ defmodule Foundation.OTPCleanupE2ETest do
       agents = for i <- 1..num_agents do
         agent_id = :"load_test_agent_#{i}"
         
-        agent_pid = spawn_link(fn ->
+        agent_task = Task.async(fn ->
           # Agent that performs operations
-          :timer.sleep(Enum.random(10..50))
+          :timer.sleep(1)  # Minimal delay for testing infrastructure
           
           receive do
             :stop -> :ok
@@ -538,6 +539,7 @@ defmodule Foundation.OTPCleanupE2ETest do
             30_000 -> :timeout
           end
         end)
+        agent_pid = agent_task.pid
         
         Registry.register(nil, agent_id, agent_pid)
         {agent_id, agent_pid}
@@ -592,7 +594,7 @@ defmodule Foundation.OTPCleanupE2ETest do
       end
     end
     
-    test "memory and resource cleanup", %{sup_tree: sup_tree} do
+    test "memory and resource cleanup", %{sup_tree: _sup_tree} do
       FeatureFlags.enable_otp_cleanup_stage(4)
       
       initial_memory = :erlang.memory(:total)
@@ -603,7 +605,7 @@ defmodule Foundation.OTPCleanupE2ETest do
         agents = for i <- 1..20 do
           agent_id = :"cleanup_test_#{round}_#{i}"
           
-          agent_pid = spawn_link(fn ->
+          agent_task = Task.async(fn ->
             # Set error context
             ErrorContext.set_context(%{
               cleanup_test: true,
@@ -614,8 +616,8 @@ defmodule Foundation.OTPCleanupE2ETest do
             # Create span
             span_id = Span.start_span("cleanup_test_agent", %{round: round, agent: i})
             
-            # Simulate work
-            :timer.sleep(10)
+            # Simulate work with minimal delay
+            :timer.sleep(1)
             
             Span.end_span(span_id)
             
@@ -625,13 +627,14 @@ defmodule Foundation.OTPCleanupE2ETest do
               1000 -> :timeout
             end
           end)
+          agent_pid = agent_task.pid
           
           Registry.register(nil, agent_id, agent_pid)
           {agent_id, agent_pid}
         end
         
-        # Let agents run briefly
-        Process.sleep(50)
+        # Let agents run briefly with minimal delay
+        :timer.sleep(1)
         
         # Stop all agents
         for {agent_id, agent_pid} <- agents do

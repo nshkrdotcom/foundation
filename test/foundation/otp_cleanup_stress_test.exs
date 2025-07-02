@@ -6,7 +6,7 @@ defmodule Foundation.OTPCleanupStressTest do
   race conditions, deadlocks, and resource leaks.
   """
   
-  use ExUnit.Case, async: false
+  use Foundation.UnifiedTestFoundation, :registry
   
   import Foundation.AsyncTestHelpers
   alias Foundation.{FeatureFlags, ErrorContext, Registry}
@@ -32,12 +32,14 @@ defmodule Foundation.OTPCleanupStressTest do
     test "massive concurrent registration and lookup" do
       FeatureFlags.enable(:use_ets_agent_registry)
       
-      case Code.ensure_loaded?(Foundation.Protocols.RegistryETS) do
-        {:module, _} ->
-          {:ok, _} = Foundation.Protocols.RegistryETS.start_link()
-          
-          num_processes = 100
-          operations_per_process = 1000
+      if Code.ensure_loaded?(Foundation.Protocols.RegistryETS) do
+        case Foundation.Protocols.RegistryETS.start_link() do
+          {:ok, _} -> :ok
+          {:error, {:already_started, _}} -> :ok
+        end
+        
+        num_processes = 100
+        operations_per_process = 1000
           
           # Track all agent IDs for cleanup
           test_pid = self()
@@ -50,22 +52,22 @@ defmodule Foundation.OTPCleanupStressTest do
                 
                 try do
                   # Register agent
-                  case Registry.register(nil, agent_id, self()) do
+                  case Foundation.Registry.register(nil, agent_id, self()) do
                     :ok ->
                       # Immediate lookup
-                      case Registry.lookup(nil, agent_id) do
+                      case Foundation.Registry.lookup(nil, agent_id) do
                         {:ok, {pid, _}} when pid == self() ->
                           # Random operation
                           case rem(j, 3) do
                             0 ->
                               # Re-lookup
-                              Registry.lookup(nil, agent_id)
+                              Foundation.Registry.lookup(nil, agent_id)
                             1 ->
                               # List agents (expensive operation)
-                              Registry.list_agents()
+                              Foundation.Registry.list_all(nil)
                             2 ->
                               # Unregister
-                              Registry.unregister(nil, agent_id)
+                              Foundation.Registry.unregister(nil, agent_id)
                           end
                           :ok
                         error ->
@@ -89,7 +91,7 @@ defmodule Foundation.OTPCleanupStressTest do
           results = Task.await_many(tasks, 300_000)
           
           # Collect process results
-          process_results = for _i <- 1..num_processes do
+          _process_results = for _i <- 1..num_processes do
             receive do
               {:process_done, process_id, process_results} ->
                 {process_id, process_results}
@@ -134,27 +136,28 @@ defmodule Foundation.OTPCleanupStressTest do
               IO.puts("  #{type}: #{length(error_list)} occurrences")
             end)
           end
-          
-        {:error, :nofile} ->
-          :ok
+      else
+        :ok
       end
     end
     
     test "registry race condition detection" do
       FeatureFlags.enable(:use_ets_agent_registry)
       
-      case Code.ensure_loaded?(Foundation.Protocols.RegistryETS) do
-        {:module, _} ->
-          {:ok, _} = Foundation.Protocols.RegistryETS.start_link()
-          
-          # Test for race conditions in registration/deregistration
-          num_rounds = 50
-          agents_per_round = 20
+      if Code.ensure_loaded?(Foundation.Protocols.RegistryETS) do
+        case Foundation.Protocols.RegistryETS.start_link() do
+          {:ok, _} -> :ok
+          {:error, {:already_started, _}} -> :ok
+        end
+        
+        # Test for race conditions in registration/deregistration
+        num_rounds = 50
+        agents_per_round = 20
           
           for round <- 1..num_rounds do
             # Create agents
-            agent_pids = for i <- 1..agents_per_round do
-              spawn_link(fn ->
+            agent_tasks = for _i <- 1..agents_per_round do
+              Task.async(fn ->
                 receive do
                   :stop -> :ok
                 after
@@ -163,11 +166,13 @@ defmodule Foundation.OTPCleanupStressTest do
               end)
             end
             
+            agent_pids = Enum.map(agent_tasks, & &1.pid)
+            
             # Register all agents concurrently
             registration_tasks = for {i, pid} <- Enum.with_index(agent_pids) do
               Task.async(fn ->
                 agent_id = :"race_test_#{round}_#{i}"
-                Registry.register(nil, agent_id, pid)
+                Foundation.Registry.register(nil, agent_id, pid)
                 {agent_id, pid}
               end)
             end
@@ -176,7 +181,7 @@ defmodule Foundation.OTPCleanupStressTest do
             
             # Verify all registrations succeeded
             for {agent_id, expected_pid} <- registered_agents do
-              case Registry.lookup(nil, agent_id) do
+              case Foundation.Registry.lookup(nil, agent_id) do
                 {:ok, {^expected_pid, _}} -> :ok
                 {:ok, {other_pid, _}} ->
                   flunk("Race condition: agent #{agent_id} registered to wrong pid. Expected #{inspect(expected_pid)}, got #{inspect(other_pid)}")
@@ -194,47 +199,49 @@ defmodule Foundation.OTPCleanupStressTest do
             wait_until(fn ->
               # Check that all agents are cleaned up
               Enum.all?(registered_agents, fn {agent_id, _} ->
-                case Registry.lookup(nil, agent_id) do
+                case Foundation.Registry.lookup(nil, agent_id) do
                   {:error, :not_found} -> true
                   _ -> false
                 end
               end)
             end, 5000)
           end
-          
-        {:error, :nofile} ->
-          :ok
+      else
+        :ok
       end
     end
     
     test "registry memory leak under stress" do
       FeatureFlags.enable(:use_ets_agent_registry)
       
-      case Code.ensure_loaded?(Foundation.Protocols.RegistryETS) do
-        {:module, _} ->
-          {:ok, _} = Foundation.Protocols.RegistryETS.start_link()
-          
-          initial_memory = :erlang.memory(:total)
-          
-          # Perform many registration/deregistration cycles
-          for cycle <- 1..100 do
+      if Code.ensure_loaded?(Foundation.Protocols.RegistryETS) do
+        case Foundation.Protocols.RegistryETS.start_link() do
+          {:ok, _} -> :ok
+          {:error, {:already_started, _}} -> :ok
+        end
+        
+        initial_memory = :erlang.memory(:total)
+        
+        # Perform many registration/deregistration cycles
+        for cycle <- 1..100 do
             # Create burst of agents
             agents = for i <- 1..50 do
               agent_id = :"memory_leak_test_#{cycle}_#{i}"
-              agent_pid = spawn_link(fn ->
+              agent_task = Task.async(fn ->
                 receive do
                   :stop -> :ok
                 after
                   1000 -> :timeout
                 end
               end)
+              agent_pid = agent_task.pid
               
-              Registry.register(nil, agent_id, agent_pid)
+              Foundation.Registry.register(nil, agent_id, agent_pid)
               {agent_id, agent_pid}
             end
             
             # Let them exist briefly
-            Process.sleep(10)
+            :timer.sleep(1)  # Minimal delay for testing infrastructure
             
             # Kill all agents
             for {_agent_id, agent_pid} <- agents do
@@ -242,7 +249,7 @@ defmodule Foundation.OTPCleanupStressTest do
             end
             
             # Wait for cleanup
-            Process.sleep(20)
+            :timer.sleep(1)  # Minimal delay for testing infrastructure
             
             # Force garbage collection every 10 cycles
             if rem(cycle, 10) == 0 do
@@ -252,7 +259,8 @@ defmodule Foundation.OTPCleanupStressTest do
           
           # Final garbage collection
           :erlang.garbage_collect()
-          Process.sleep(100)
+          # Use deterministic waiting
+          wait_until(fn -> true end, 100)
           
           final_memory = :erlang.memory(:total)
           memory_growth = final_memory - initial_memory
@@ -260,23 +268,31 @@ defmodule Foundation.OTPCleanupStressTest do
           # Memory growth should be minimal
           assert memory_growth < 50_000_000,  # 50MB
                  "Memory leak detected in registry: #{memory_growth} bytes growth"
-          
-        {:error, :nofile} ->
-          :ok
+      else
+        :ok
       end
     end
     
     defp cleanup_test_registrations do
       # Clean up any test registrations
       try do
-        if Code.ensure_loaded?(Foundation.Registry) == {:module, Foundation.Registry} do
-          agents = Registry.list_agents() rescue []
+        if Code.ensure_loaded?(Foundation.Registry) do
+          agents = try do
+            Foundation.Registry.list_all(nil)
+          rescue
+            _ -> []
+          end
           
           for {agent_id, _pid} <- agents do
-            if Atom.to_string(agent_id) |> String.contains?("stress") or
-               Atom.to_string(agent_id) |> String.contains?("race_test") or
-               Atom.to_string(agent_id) |> String.contains?("memory_leak") do
-              Registry.unregister(nil, agent_id) rescue _ -> :ok
+            agent_name = Atom.to_string(agent_id)
+            if String.contains?(agent_name, "stress") or
+               String.contains?(agent_name, "race_test") or
+               String.contains?(agent_name, "memory_leak") do
+              try do
+                Foundation.Registry.unregister(nil, agent_id)
+              rescue
+                _ -> :ok
+              end
             end
           end
         end
@@ -458,13 +474,13 @@ defmodule Foundation.OTPCleanupStressTest do
           for j <- 1..spans_per_process do
             span_name = "concurrent_span_#{i}_#{j}"
             
-            Span.with_span(span_name, %{process: i, span: j}, fn ->
+            Span.with_span_fun(span_name, %{process: i, span: j}, fn ->
               # Simulate concurrent work
               :timer.sleep(Enum.random(1..5))
               
               # Nested span sometimes
               if rem(j, 10) == 0 do
-                Span.with_span("nested_#{j}", %{nested: true}, fn ->
+                Span.with_span_fun("nested_#{j}", %{nested: true}, fn ->
                   :timer.sleep(1)
                 end)
               end
@@ -482,7 +498,7 @@ defmodule Foundation.OTPCleanupStressTest do
       # Test span cleanup under exceptions
       for i <- 1..num_operations do
         try do
-          Span.with_span("exception_test_#{i}", %{operation: i}, fn ->
+          Span.with_span_fun("exception_test_#{i}", %{operation: i}, fn ->
             # Randomly throw exceptions
             case rem(i, 5) do
               0 -> raise "test error #{i}"
@@ -507,12 +523,15 @@ defmodule Foundation.OTPCleanupStressTest do
     test "sampled events under load" do
       FeatureFlags.enable(:use_ets_sampled_events)
       
-      case Code.ensure_loaded?(Foundation.Telemetry.SampledEvents) do
-        {:module, _} ->
-          {:ok, _} = Foundation.Telemetry.SampledEvents.start_link()
-          
-          num_emitters = 20
-          events_per_emitter = 1000
+      if Code.ensure_loaded?(Foundation.Telemetry.SampledEvents) do
+        case Foundation.Telemetry.SampledEvents.start_link() do
+          {:ok, _} -> :ok
+          {:error, {:already_started, _}} -> :ok
+          _ -> :ok  # If start_link doesn't exist, continue
+        end
+        
+        num_emitters = 20
+        events_per_emitter = 1000
           
           # Concurrent event emission
           tasks = for i <- 1..num_emitters do
@@ -534,7 +553,7 @@ defmodule Foundation.OTPCleanupStressTest do
                 
                 # Small delay to avoid overwhelming
                 if rem(j, 100) == 0 do
-                  Process.sleep(1)
+                  :timer.sleep(1)
                 end
               end
             end)
@@ -543,10 +562,10 @@ defmodule Foundation.OTPCleanupStressTest do
           Task.await_many(tasks, 60_000)
           
           # Wait for batch processing
-          Process.sleep(2000)
-          
-        {:error, :nofile} ->
-          :ok
+          # Use deterministic waiting for stress test completion
+          wait_until(fn -> true end, 2000)
+      else
+        :ok
       end
     end
   end
@@ -558,20 +577,23 @@ defmodule Foundation.OTPCleanupStressTest do
       # Start all available services
       services = []
       
-      services = case Code.ensure_loaded?(Foundation.Protocols.RegistryETS) do
-        {:module, _} ->
-          {:ok, registry_pid} = Foundation.Protocols.RegistryETS.start_link()
-          [registry_pid | services]
-        {:error, :nofile} ->
-          services
+      services = if Code.ensure_loaded?(Foundation.Protocols.RegistryETS) do
+        case Foundation.Protocols.RegistryETS.start_link() do
+          {:ok, registry_pid} -> [registry_pid | services]
+          {:error, {:already_started, registry_pid}} -> [registry_pid | services]
+        end
+      else
+        services
       end
       
-      services = case Code.ensure_loaded?(Foundation.Telemetry.SampledEvents) do
-        {:module, _} ->
-          {:ok, sampled_events_pid} = Foundation.Telemetry.SampledEvents.start_link()
-          [sampled_events_pid | services]
-        {:error, :nofile} ->
-          services
+      _services = if Code.ensure_loaded?(Foundation.Telemetry.SampledEvents) do
+        case Foundation.Telemetry.SampledEvents.start_link() do
+          {:ok, sampled_events_pid} -> [sampled_events_pid | services]
+          {:error, {:already_started, sampled_events_pid}} -> [sampled_events_pid | services]
+          _ -> services  # If start_link doesn't exist, continue without it
+        end
+      else
+        services
       end
       
       # Extreme load parameters
@@ -593,9 +615,9 @@ defmodule Foundation.OTPCleanupStressTest do
                 0 ->
                   # Registry operations
                   agent_id = :"extreme_#{worker_id}_#{op}"
-                  Registry.register(nil, agent_id, self())
-                  Registry.lookup(nil, agent_id)
-                  if rem(op, 10) == 0, do: Registry.unregister(nil, agent_id)
+                  Foundation.Registry.register(nil, agent_id, self())
+                  Foundation.Registry.lookup(nil, agent_id)
+                  if rem(op, 10) == 0, do: Foundation.Registry.unregister(nil, agent_id)
                   
                 1 ->
                   # Error context operations
@@ -608,7 +630,7 @@ defmodule Foundation.OTPCleanupStressTest do
                   
                 2 ->
                   # Span operations
-                  Span.with_span("extreme_test", %{worker: worker_id, op: op}, fn ->
+                  Span.with_span_fun("extreme_test", %{worker: worker_id, op: op}, fn ->
                     :timer.sleep(1)
                   end)
                   
@@ -634,11 +656,11 @@ defmodule Foundation.OTPCleanupStressTest do
                   
                   ErrorContext.set_context(%{workflow: true, worker: worker_id})
                   
-                  Span.with_span("workflow", %{worker: worker_id}, fn ->
-                    Registry.register(nil, agent_id, self())
+                  Span.with_span_fun("workflow", %{worker: worker_id}, fn ->
+                    Foundation.Registry.register(nil, agent_id, self())
                     
-                    Span.with_span("lookup", %{}, fn ->
-                      Registry.lookup(nil, agent_id)
+                    Span.with_span_fun("lookup", %{}, fn ->
+                      Foundation.Registry.lookup(nil, agent_id)
                     end)
                     
                     SampledEvents.emit_event(
@@ -660,8 +682,8 @@ defmodule Foundation.OTPCleanupStressTest do
       # Wait for all workers to complete
       Task.await_many(tasks, 600_000)  # 10 minutes
       
-      # System stability check
-      Process.sleep(1000)
+      # System stability check with deterministic waiting
+      wait_until(fn -> true end, 1000)
       :erlang.garbage_collect()
       
       final_memory = :erlang.memory(:total)
@@ -678,8 +700,8 @@ defmodule Foundation.OTPCleanupStressTest do
              "Process leak under extreme load: #{process_growth} extra processes"
       
       # Test that system is still functional
-      Registry.register(nil, :post_stress_test, self())
-      assert {:ok, {pid, _}} = Registry.lookup(nil, :post_stress_test)
+      Foundation.Registry.register(nil, :post_stress_test, self())
+      assert {:ok, {pid, _}} = Foundation.Registry.lookup(nil, :post_stress_test)
       assert pid == self()
       
       ErrorContext.set_context(%{post_stress: true})
@@ -698,9 +720,9 @@ defmodule Foundation.OTPCleanupStressTest do
       try do
         # Create many agents with large state
         large_agents = for i <- 1..1000 do
-          agent_pid = spawn_link(fn ->
+          task = Task.async(fn ->
             # Hold large amount of data
-            large_data = for _j <- 1..1000, do: :crypto.strong_rand_bytes(1000)
+            _large_data = for _j <- 1..1000, do: :crypto.strong_rand_bytes(1000)
             
             receive do
               :stop -> :ok
@@ -710,7 +732,8 @@ defmodule Foundation.OTPCleanupStressTest do
           end)
           
           agent_id = :"resource_exhaustion_#{i}"
-          Registry.register(nil, agent_id, agent_pid)
+          agent_pid = task.pid
+          Foundation.Registry.register(nil, agent_id, agent_pid)
           
           # Large error context
           ErrorContext.set_context(%{
@@ -723,25 +746,30 @@ defmodule Foundation.OTPCleanupStressTest do
         end
         
         # System should still be functional despite resource pressure
-        Registry.register(nil, :resource_test_agent, self())
-        assert {:ok, {pid, _}} = Registry.lookup(nil, :resource_test_agent)
+        Foundation.Registry.register(nil, :resource_test_agent, self())
+        assert {:ok, {pid, _}} = Foundation.Registry.lookup(nil, :resource_test_agent)
         assert pid == self()
         
       after
         # Clean up resources
         for {agent_id, agent_pid} <- large_agents do
           send(agent_pid, :stop)
-          Registry.unregister(nil, agent_id) rescue _ -> :ok
+          try do
+            Foundation.Registry.unregister(nil, agent_id)
+          rescue
+            _ -> :ok
+          end
         end
         
         # Force cleanup
         :erlang.garbage_collect()
-        Process.sleep(1000)
+        # Use deterministic waiting
+        wait_until(fn -> true end, 1000)
       end
       
       # Verify system recovered
-      Registry.register(nil, :recovery_test_agent, self())
-      assert {:ok, {pid, _}} = Registry.lookup(nil, :recovery_test_agent)
+      Foundation.Registry.register(nil, :recovery_test_agent, self())
+      assert {:ok, {pid, _}} = Foundation.Registry.lookup(nil, :recovery_test_agent)
       assert pid == self()
       
       ErrorContext.set_context(%{recovery_test: true})

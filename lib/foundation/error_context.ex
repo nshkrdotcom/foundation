@@ -129,6 +129,52 @@ defmodule Foundation.ErrorContext do
   end
 
   @doc """
+  Execute a function with error context.
+  
+  Supports both structured ErrorContext structs and simple maps.
+  """
+  @spec with_context(map(), (-> term())) :: term()
+  def with_context(context, fun) when is_map(context) and is_function(fun, 0) do
+    old_context = get_context() || %{}
+
+    # Merge new context with existing
+    merged_context = Map.merge(old_context, context)
+
+    try do
+      set_context(merged_context)
+      fun.()
+    after
+      set_context(old_context)
+    end
+  end
+
+  @spec with_context(t(), (-> term())) :: term() | {:error, Error.t()}
+  def with_context(%__MODULE__{} = context, fun) when is_function(fun, 0) do
+    # Store context using the appropriate storage mechanism
+    set_context(context)
+
+    try do
+      result = fun.()
+
+      # Clean up and enhance successful results with context
+      clear_context()
+      enhance_result_with_context(result, context)
+    rescue
+      exception ->
+        # Capture and enhance exception with full context
+        enhanced_error = create_exception_error(exception, context, __STACKTRACE__)
+
+        # Clean up
+        clear_context()
+
+        # Emit error telemetry
+        Error.collect_error_metrics(enhanced_error)
+
+        {:error, enhanced_error}
+    end
+  end
+
+  @doc """
   Execute a function in a new task with inherited error context.
   Uses Task.start/1 for proper OTP supervision compliance.
   """
@@ -274,44 +320,6 @@ defmodule Foundation.ErrorContext do
   end
 
   ## Error Context Integration
-
-  @doc """
-  Execute a function with error context tracking.
-
-  Automatically captures exceptions and enhances them with context information.
-
-  ## Parameters
-  - `context`: The context to use for the operation
-  - `fun`: Zero-arity function to execute
-
-  ## Returns
-  - The result of the function, or {:error, enhanced_error} on exception
-  """
-  @spec with_context(t(), (-> term())) :: term() | {:error, Error.t()}
-  def with_context(%__MODULE__{} = context, fun) when is_function(fun, 0) do
-    # Store context using the appropriate storage mechanism
-    set_context(context)
-
-    try do
-      result = fun.()
-
-      # Clean up and enhance successful results with context
-      clear_context()
-      enhance_result_with_context(result, context)
-    rescue
-      exception ->
-        # Capture and enhance exception with full context
-        enhanced_error = create_exception_error(exception, context, __STACKTRACE__)
-
-        # Clean up
-        clear_context()
-
-        # Emit error telemetry
-        Error.collect_error_metrics(enhanced_error)
-
-        {:error, enhanced_error}
-    end
-  end
 
   @doc """
   Enrich an error with the current context from Logger metadata or process dictionary.

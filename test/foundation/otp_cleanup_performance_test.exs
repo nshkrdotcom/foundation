@@ -6,7 +6,7 @@ defmodule Foundation.OTPCleanupPerformanceTest do
   to ensure no significant performance degradation.
   """
   
-  use ExUnit.Case, async: false
+  use Foundation.UnifiedTestFoundation, :registry
   
   import Foundation.AsyncTestHelpers
   alias Foundation.{FeatureFlags, ErrorContext, Registry}
@@ -129,7 +129,7 @@ defmodule Foundation.OTPCleanupPerformanceTest do
                   Registry.lookup(nil, agent_id)
                   
                   # Small delay to avoid overwhelming
-                  if rem(j, 10) == 0, do: Process.sleep(1)
+                  if rem(j, 10) == 0, do: :timer.sleep(1)
                 end
               end)
             end
@@ -470,7 +470,11 @@ defmodule Foundation.OTPCleanupPerformanceTest do
               end
               
               # Cleanup
-              Registry.unregister(nil, agent_id) rescue _ -> :ok
+              try do
+                Registry.unregister(nil, agent_id)
+              rescue
+                _ -> :ok
+              end
             end)
           end)
         end
@@ -530,7 +534,8 @@ defmodule Foundation.OTPCleanupPerformanceTest do
         
         # Force garbage collection between rounds
         :erlang.garbage_collect()
-        Process.sleep(100)
+        # Use deterministic waiting instead of sleep
+        wait_until(fn -> Process.alive?(agent_pid) end, 1000)
       end
       
       final_memory = :erlang.memory(:total)

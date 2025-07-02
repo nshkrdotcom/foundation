@@ -205,6 +205,26 @@ defmodule Foundation.Error do
   end
 
   @doc """
+  Create a business error for common business logic validation failures.
+
+  ## Parameters
+  - `error_type`: The specific business error type atom
+  - `message`: Error message describing the business rule violation
+
+  ## Examples
+
+      iex> error = Foundation.Error.business_error(:validation_failed, "Invalid input")
+      iex> error.error_type
+      :validation_failed
+      iex> error.message
+      "Invalid input"
+  """
+  @spec business_error(error_code(), String.t()) :: t()
+  def business_error(error_type, message) do
+    new(error_type, message, context: %{error_category: :business_logic})
+  end
+
+  @doc """
   Wrap an existing result with additional error context.
 
   ## Parameters

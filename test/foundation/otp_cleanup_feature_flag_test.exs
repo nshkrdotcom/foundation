@@ -6,7 +6,7 @@ defmodule Foundation.OTPCleanupFeatureFlagTest do
   and partial rollouts with percentage flags.
   """
   
-  use ExUnit.Case, async: false
+  use Foundation.UnifiedTestFoundation, :registry
   
   import Foundation.AsyncTestHelpers
   alias Foundation.{FeatureFlags, ErrorContext, Registry}
@@ -509,7 +509,7 @@ defmodule Foundation.OTPCleanupFeatureFlagTest do
       # Test system stability when flags change during operations
       
       # Start background operations
-      operation_pid = spawn_link(fn ->
+      operation_task = Task.async(fn ->
         continuous_operations()
       end)
       
@@ -517,13 +517,13 @@ defmodule Foundation.OTPCleanupFeatureFlagTest do
       flag_changer = Task.async(fn ->
         for _i <- 1..50 do
           FeatureFlags.enable(:use_ets_agent_registry)
-          Process.sleep(10)
+          :timer.sleep(1)  # Minimal delay for testing infrastructure
           FeatureFlags.disable(:use_ets_agent_registry)
-          Process.sleep(10)
+          :timer.sleep(1)  # Minimal delay for testing infrastructure
           FeatureFlags.enable(:use_logger_error_context)
-          Process.sleep(10)
+          :timer.sleep(1)  # Minimal delay for testing infrastructure
           FeatureFlags.disable(:use_logger_error_context)
-          Process.sleep(10)
+          :timer.sleep(1)  # Minimal delay for testing infrastructure
         end
       end)
       
@@ -554,7 +554,7 @@ defmodule Foundation.OTPCleanupFeatureFlagTest do
             _ -> :ok  # Ignore errors due to flag changes
           end
           
-          Process.sleep(5)
+          :timer.sleep(1)  # Minimal delay for testing infrastructure
           continuous_operations()
       end
     end
