@@ -6,7 +6,7 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
   with no leaked resources and proper state recovery according to OTP principles.
   """
 
-  use Foundation.UnifiedTestFoundation, :supervision_testing
+  use ExUnit.Case, async: false
   require Logger
 
   alias JidoFoundation.{
@@ -14,7 +14,7 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
     SystemCommandManager
   }
 
-  alias Foundation.IsolatedServiceDiscovery, as: ServiceDiscovery
+  import Foundation.AsyncTestHelpers
 
   # Setup helper to ensure services are running
   defp ensure_service_running(service_name, timeout \\ 5000) do
@@ -117,38 +117,46 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
     %{initial_process_count: initial_process_count}
   end
 
-  describe "JidoFoundation.TaskPoolManager crash recovery - MIGRATED TO ISOLATED SUPERVISION" do
-    test "TaskPoolManager restarts after crash and maintains functionality", 
-         %{supervision_tree: sup_tree} do
-      # Get service from isolated supervision tree
-      {:ok, initial_pid} = get_service(sup_tree, :task_pool_manager)
+  describe "JidoFoundation.TaskPoolManager crash recovery" do
+    test "TaskPoolManager restarts after crash and maintains functionality" do
+      # Ensure TaskPoolManager is running and get its pid
+      initial_pid = ensure_service_running(JidoFoundation.TaskPoolManager)
       assert is_pid(initial_pid), "TaskPoolManager should be running"
 
-      # Verify it's working before crash using isolated service calls
-      stats = ServiceDiscovery.call_service(sup_tree, TaskPoolManager, :get_all_stats)
+      # Verify it's working before crash
+      stats = TaskPoolManager.get_all_stats()
       assert is_map(stats)
 
       # Kill the TaskPoolManager process
       Process.exit(initial_pid, :kill)
 
-      # Wait for service restart using isolated supervision helper
-      {:ok, new_pid} = wait_for_service_restart(sup_tree, :task_pool_manager, initial_pid, 5000)
+      # Wait for supervisor to restart it with new pid
+      new_pid =
+        wait_for(
+          fn ->
+            case Process.whereis(JidoFoundation.TaskPoolManager) do
+              pid when pid != initial_pid and is_pid(pid) -> pid
+              _ -> nil
+            end
+          end,
+          5000
+        )
 
       # Verify it restarted with new pid
       assert is_pid(new_pid), "TaskPoolManager should be restarted"
       assert new_pid != initial_pid, "Should have new pid after restart"
 
       # Verify functionality is restored
-      new_stats = ServiceDiscovery.call_service(sup_tree, TaskPoolManager, :get_all_stats)
+      new_stats = TaskPoolManager.get_all_stats()
       assert is_map(new_stats)
 
       # Test that pools can be created and used (may need to wait for pools to be ready)
-      case ServiceDiscovery.call_service(sup_tree, TaskPoolManager, :execute_batch, [
+      case TaskPoolManager.execute_batch(
              :general,
              [1, 2, 3],
              fn x -> x * 2 end,
              timeout: 1000
-           ]) do
+           ) do
         {:ok, stream} ->
           results = Enum.to_list(stream)
           assert length(results) == 3
@@ -162,31 +170,29 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
       end
     end
 
-    test "TaskPoolManager survives pool supervisor crashes", 
-         %{supervision_tree: sup_tree} do
-      {:ok, manager_pid} = get_service(sup_tree, :task_pool_manager)
+    test "TaskPoolManager survives pool supervisor crashes" do
+      manager_pid = Process.whereis(JidoFoundation.TaskPoolManager)
       assert is_pid(manager_pid)
 
-      # Create a test pool using isolated service calls
-      assert :ok = ServiceDiscovery.call_service(sup_tree, TaskPoolManager, :create_pool, [
-        :test_crash_pool, 
-        %{max_concurrency: 2, timeout: 5000}
-      ])
+      # Create a test pool
+      assert :ok =
+               TaskPoolManager.create_pool(:test_crash_pool, %{max_concurrency: 2, timeout: 5000})
 
       # Get pool stats to verify it's working
-      {:ok, stats} = ServiceDiscovery.call_service(sup_tree, TaskPoolManager, :get_pool_stats, [:test_crash_pool])
+      {:ok, stats} = TaskPoolManager.get_pool_stats(:test_crash_pool)
       assert stats.max_concurrency == 2
 
       # Test the pool with a simple batch operation instead of individual tasks
-      {:ok, stream} = ServiceDiscovery.call_service(sup_tree, TaskPoolManager, :execute_batch, [
-        :test_crash_pool,
-        [1, 2, 3],
-        fn i ->
-          # Just compute result
-          i * 10
-        end,
-        timeout: 2000
-      ])
+      {:ok, stream} =
+        TaskPoolManager.execute_batch(
+          :test_crash_pool,
+          [1, 2, 3],
+          fn i ->
+            # Just compute result
+            i * 10
+          end,
+          timeout: 2000
+        )
 
       results = Enum.to_list(stream)
 
@@ -200,79 +206,71 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
 
       # Verify TaskPoolManager is still alive and functional
       assert Process.alive?(manager_pid)
-      {:ok, final_stats} = ServiceDiscovery.call_service(sup_tree, TaskPoolManager, :get_pool_stats, [:test_crash_pool])
+      {:ok, final_stats} = TaskPoolManager.get_pool_stats(:test_crash_pool)
       assert is_map(final_stats)
     end
   end
 
-  describe "JidoFoundation.SystemCommandManager crash recovery - MIGRATED TO ISOLATED SUPERVISION" do
-    test "SystemCommandManager restarts after crash and maintains functionality", 
-         %{supervision_tree: sup_tree} do
-      {:ok, initial_pid} = get_service(sup_tree, :system_command_manager)
+  describe "JidoFoundation.SystemCommandManager crash recovery" do
+    test "SystemCommandManager restarts after crash and maintains functionality" do
+      initial_pid = ensure_service_running(JidoFoundation.SystemCommandManager)
       assert is_pid(initial_pid), "SystemCommandManager should be running"
 
-      # Test functionality before crash using isolated service calls
-      case ServiceDiscovery.call_service(sup_tree, SystemCommandManager, :get_load_average) do
+      # Test functionality before crash
+      case SystemCommandManager.get_load_average() do
         {:ok, load_avg} -> assert is_float(load_avg)
         # May fail if uptime command not available
         {:error, _} -> :ok
-        # Test service may return :ok instead of {:ok, value}
-        :ok -> :ok
       end
 
       # Kill the process
       Process.exit(initial_pid, :kill)
 
-      # Wait for service restart using isolated supervision helper
-      {:ok, new_pid} = wait_for_service_restart(sup_tree, :system_command_manager, initial_pid, 5000)
+      # Wait for supervisor to restart with new pid
+      new_pid =
+        wait_for(
+          fn ->
+            case Process.whereis(JidoFoundation.SystemCommandManager) do
+              pid when pid != initial_pid and is_pid(pid) -> pid
+              _ -> nil
+            end
+          end,
+          5000
+        )
 
       # Verify restart
       assert is_pid(new_pid)
       assert new_pid != initial_pid
 
       # Verify functionality is restored
-      case ServiceDiscovery.call_service(sup_tree, SystemCommandManager, :get_load_average) do
+      case SystemCommandManager.get_load_average() do
         {:ok, new_load_avg} -> assert is_float(new_load_avg)
         # May fail if uptime command not available
         {:error, _} -> :ok
-        # Test service may return :ok instead of {:ok, value}
-        :ok -> :ok
       end
 
       # Test that cache is reset (new instance)
-      stats = ServiceDiscovery.call_service(sup_tree, SystemCommandManager, :get_stats)
+      stats = SystemCommandManager.get_stats()
       assert stats.commands_executed >= 0
     end
 
-    test "SystemCommandManager handles command execution failures gracefully", 
-         %{supervision_tree: sup_tree} do
+    test "SystemCommandManager handles command execution failures gracefully" do
       # Test with invalid command (should be rejected by allowed commands list)
-      # Test service may have simplified interface, so accept multiple return values
-      result = ServiceDiscovery.call_service(sup_tree, SystemCommandManager, :execute_command, ["invalid_command", []])
-      case result do
-        {:error, {:command_not_allowed, "invalid_command"}} -> :ok
-        {:error, _} -> :ok  # Any error is acceptable for invalid command
-        :ok -> :ok  # Test service may return :ok instead of error
-      end
+      {:error, {:command_not_allowed, "invalid_command"}} =
+        SystemCommandManager.execute_command("invalid_command", [])
 
       # Verify manager is still functional
-      case ServiceDiscovery.call_service(sup_tree, SystemCommandManager, :get_load_average) do
+      case SystemCommandManager.get_load_average() do
         {:ok, load_avg} -> assert is_float(load_avg)
         # May fail if uptime command not available
         {:error, _} -> :ok
-        # Test service may return :ok instead of {:ok, value}
-        :ok -> :ok
       end
 
-      stats = ServiceDiscovery.call_service(sup_tree, SystemCommandManager, :get_stats)
+      stats = SystemCommandManager.get_stats()
       assert is_map(stats)
     end
   end
 
-  # ============================================================================
-  # NON-MIGRATED TESTS - Still using global supervision (original implementation)
-  # ============================================================================
-  
   describe "JidoFoundation.CoordinationManager crash recovery" do
     test "CoordinationManager restarts after crash and maintains functionality" do
       initial_pid = ensure_service_running(JidoFoundation.CoordinationManager)

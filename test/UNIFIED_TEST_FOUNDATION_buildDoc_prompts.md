@@ -420,6 +420,10 @@ Create `test/support/isolated_service_discovery.ex` for transparent access to Ji
 
 ---
 
+p5 done
+
+---
+
 ## PROMPT 6: Test Migration - Phase 1 (Basic Tests)
 
 ### Context Files to Read
