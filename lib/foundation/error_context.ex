@@ -130,7 +130,7 @@ defmodule Foundation.ErrorContext do
 
   @doc """
   Execute a function with error context.
-  
+
   Supports both structured ErrorContext structs and simple maps.
   """
   @spec with_context(map(), (-> term())) :: term()

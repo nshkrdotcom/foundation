@@ -15,17 +15,18 @@ defimpl Foundation.Registry, for: Any do
   """
   def register(_impl, key, pid, metadata \\ %{}) do
     start_time = System.monotonic_time()
-    
-    result = if FeatureFlags.enabled?(:use_ets_agent_registry) do
-      register_ets(key, pid, metadata)
-    else
-      register_legacy(key, pid, metadata)
-    end
-    
+
+    result =
+      if FeatureFlags.enabled?(:use_ets_agent_registry) do
+        register_ets(key, pid, metadata)
+      else
+        register_legacy(key, pid, metadata)
+      end
+
     # Emit telemetry event
     end_time = System.monotonic_time()
     duration = end_time - start_time
-    
+
     :telemetry.execute(
       [:foundation, :registry, :register],
       %{duration: duration, count: 1},
@@ -37,7 +38,7 @@ defimpl Foundation.Registry, for: Any do
         result: result
       }
     )
-    
+
     result
   end
 
@@ -69,29 +70,32 @@ defimpl Foundation.Registry, for: Any do
   """
   def lookup(_impl, key) do
     start_time = :erlang.monotonic_time(:microsecond)
-    
-    result = if FeatureFlags.enabled?(:use_ets_agent_registry) do
-      lookup_ets(key)
-    else
-      lookup_legacy(key)
-    end
-    
+
+    result =
+      if FeatureFlags.enabled?(:use_ets_agent_registry) do
+        lookup_ets(key)
+      else
+        lookup_legacy(key)
+      end
+
     # Emit telemetry event
     end_time = :erlang.monotonic_time(:microsecond)
     duration = end_time - start_time
-    
+
     implementation_type = if FeatureFlags.enabled?(:use_ets_agent_registry), do: :ets, else: :legacy
-    status = case result do
-      {:ok, _} -> :success
-      :error -> :not_found
-    end
-    
+
+    status =
+      case result do
+        {:ok, _} -> :success
+        :error -> :not_found
+      end
+
     :telemetry.execute(
       [:foundation, :registry, :lookup],
       %{duration: duration},
       %{key: key, result: status, implementation: implementation_type}
     )
-    
+
     result
   end
 

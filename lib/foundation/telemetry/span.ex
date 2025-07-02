@@ -90,7 +90,7 @@ defmodule Foundation.Telemetry.Span do
   @spec with_span_fun(span_name(), span_metadata(), (-> term())) :: term()
   def with_span_fun(name, metadata, fun) when is_function(fun, 0) do
     span_id = start_span(name, metadata)
-    
+
     try do
       result = fun.()
       end_span(span_id)
@@ -101,6 +101,7 @@ defmodule Foundation.Telemetry.Span do
           error: Exception.format(:error, exception),
           stacktrace: Exception.format_stacktrace(__STACKTRACE__)
         })
+
         reraise exception, __STACKTRACE__
     catch
       kind, reason ->
@@ -108,10 +109,10 @@ defmodule Foundation.Telemetry.Span do
           error: Exception.format(kind, reason),
           stacktrace: Exception.format_stacktrace(__STACKTRACE__)
         })
+
         :erlang.raise(kind, reason, __STACKTRACE__)
     end
   end
-
 
   @doc """
   Starts a new span and pushes it onto the span stack.
@@ -166,11 +167,12 @@ defmodule Foundation.Telemetry.Span do
   """
   @spec end_span(atom(), map()) :: :ok
   def end_span(status \\ :ok, additional_metadata \\ %{}) do
-    span = if FeatureFlags.enabled?(:use_genserver_span_management) do
-      SpanManager.pop_span()
-    else
-      pop_span_legacy()
-    end
+    span =
+      if FeatureFlags.enabled?(:use_genserver_span_management) do
+        SpanManager.pop_span()
+      else
+        pop_span_legacy()
+      end
 
     case span do
       nil ->
@@ -267,11 +269,12 @@ defmodule Foundation.Telemetry.Span do
   """
   @spec current_span() :: map() | nil
   def current_span do
-    stack = if FeatureFlags.enabled?(:use_genserver_span_management) do
-      SpanManager.get_stack()
-    else
-      get_stack_legacy()
-    end
+    stack =
+      if FeatureFlags.enabled?(:use_genserver_span_management) do
+        SpanManager.get_stack()
+      else
+        get_stack_legacy()
+      end
 
     case stack do
       [] -> nil
@@ -310,11 +313,12 @@ defmodule Foundation.Telemetry.Span do
         %{}
 
       span ->
-        stack = if FeatureFlags.enabled?(:use_genserver_span_management) do
-          SpanManager.get_stack()
-        else
-          get_stack_legacy()
-        end
+        stack =
+          if FeatureFlags.enabled?(:use_genserver_span_management) do
+            SpanManager.get_stack()
+          else
+            get_stack_legacy()
+          end
 
         %{
           trace_id: span.trace_id,
@@ -372,7 +376,7 @@ defmodule Foundation.Telemetry.Span do
   end
 
   # Legacy process dictionary implementations (for feature flag fallback)
-  
+
   @span_stack_key {__MODULE__, :span_stack}
 
   defp get_stack_legacy do
@@ -390,7 +394,9 @@ defmodule Foundation.Telemetry.Span do
 
   defp pop_span_legacy do
     case get_stack_legacy() do
-      [] -> nil
+      [] ->
+        nil
+
       [span | rest] ->
         set_stack_legacy(rest)
         span

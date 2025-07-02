@@ -69,34 +69,42 @@ defmodule Foundation.CredoChecks.NoProcessDict do
     end
 
     # Handle test case where a simple map is passed instead of SourceFile
-    def run(source_file_map, params) when is_map(source_file_map) and not is_struct(source_file_map) do
+    def run(source_file_map, params)
+        when is_map(source_file_map) and not is_struct(source_file_map) do
       # For test purposes, check if module is allowed
       filename = Map.get(source_file_map, :filename, "")
       allowed_modules = Keyword.get(params, :allowed_modules, [])
-      
+
       # Check if this file should be exempt
-      allowed = Enum.any?(allowed_modules, fn module ->
-        module_path = String.replace(module, ".", "/") |> String.downcase()
-        String.contains?(String.downcase(filename), module_path)
-      end)
-      
+      allowed =
+        Enum.any?(allowed_modules, fn module ->
+          module_path = String.replace(module, ".", "/") |> String.downcase()
+          String.contains?(String.downcase(filename), module_path)
+        end)
+
       if allowed do
         []
       else
         # Check for Process.put/get in the source
         source = Map.get(source_file_map, :source, "")
-        
+
         case Regex.scan(~r/Process\.(put|get)/, source) do
-          [] -> []
-          matches -> 
+          [] ->
+            []
+
+          matches ->
             # Fix: matches is a list of lists, where each match is ["Process.put", "put"]
             first_match = List.first(matches)
-            function_name = Enum.at(first_match, 1)  # Get the second element (put or get)
+            # Get the second element (put or get)
+            function_name = Enum.at(first_match, 1)
             # Return a simple issue format for tests
-            [%{
-              message: "Avoid Process.#{function_name}/2 - use GenServer state, ETS tables, or explicit parameter passing instead",
-              line_no: 1
-            }]
+            [
+              %{
+                message:
+                  "Avoid Process.#{function_name}/2 - use GenServer state, ETS tables, or explicit parameter passing instead",
+                line_no: 1
+              }
+            ]
         end
       end
     end

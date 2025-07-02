@@ -1,7 +1,7 @@
 defmodule Foundation.Telemetry.SampledEvents.TestAPI do
   @moduledoc """
   Test-compatible API for SampledEvents to avoid macro conflicts.
-  
+
   This module provides simple function-based APIs that tests can use
   without conflicting with the macro-based DSL in the main module.
   """

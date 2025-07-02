@@ -225,9 +225,12 @@ defmodule Foundation.UnifiedTestFoundation do
           case Foundation.Protocols.RegistryETS.start_link() do
             {:ok, _pid} -> :ok
             {:error, {:already_started, _pid}} -> :ok
-            {:error, _reason} -> :ok # Continue without it
+            # Continue without it
+            {:error, _reason} -> :ok
           end
-        _pid -> :ok
+
+        _pid ->
+          :ok
       end
     end
 
@@ -244,9 +247,12 @@ defmodule Foundation.UnifiedTestFoundation do
             case service.start_link() do
               {:ok, _pid} -> :ok
               {:error, {:already_started, _pid}} -> :ok
-              {:error, _reason} -> :ok # Continue without it
+              # Continue without it
+              {:error, _reason} -> :ok
             end
-          _pid -> :ok
+
+          _pid ->
+            :ok
         end
       end
     end)

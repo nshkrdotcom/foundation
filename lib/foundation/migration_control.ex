@@ -1,7 +1,7 @@
 defmodule Foundation.MigrationControl do
   @moduledoc """
   Migration control system with admin interface and monitoring for OTP cleanup.
-  
+
   This module provides:
   - Administrative interface for migration control
   - Monitoring of flag usage and performance
@@ -24,7 +24,7 @@ defmodule Foundation.MigrationControl do
       risk_level: :low
     },
     2 => %{
-      name: "Error Context Migration", 
+      name: "Error Context Migration",
       description: "Switch from Process dictionary to Logger metadata for error context",
       flags: [:use_logger_error_context],
       risk_level: :medium
@@ -45,9 +45,12 @@ defmodule Foundation.MigrationControl do
 
   # Error thresholds for automatic rollback
   @rollback_thresholds %{
-    error_rate: 0.05,              # 5% error rate
-    restart_frequency: 10,         # 10 restarts per minute
-    response_time_degradation: 2.0 # 2x normal response time
+    # 5% error rate
+    error_rate: 0.05,
+    # 10 restarts per minute
+    restart_frequency: 10,
+    # 2x normal response time
+    response_time_degradation: 2.0
   }
 
   # Public API
@@ -64,7 +67,7 @@ defmodule Foundation.MigrationControl do
   """
   def status do
     flag_status = FeatureFlags.migration_status()
-    
+
     %{
       current_stage: flag_status.stage,
       stage_info: Map.get(@migration_stages, flag_status.stage),
@@ -86,10 +89,10 @@ defmodule Foundation.MigrationControl do
     cond do
       target_stage <= current_stage ->
         {:error, "Cannot migrate backwards. Use rollback_to_stage/1 instead."}
-        
+
       target_stage > current_stage + 1 ->
         {:error, "Cannot skip stages. Must migrate sequentially."}
-        
+
       true ->
         perform_migration(target_stage)
     end
@@ -100,14 +103,14 @@ defmodule Foundation.MigrationControl do
   """
   def rollback_to_stage(target_stage) when target_stage in 0..3 do
     current_status = FeatureFlags.migration_status()
-    
+
     if target_stage < current_status.stage do
       Logger.warning("Manual rollback initiated to stage #{target_stage}")
-      
+
       result = FeatureFlags.rollback_migration_stage(target_stage)
-      
+
       record_migration_event(:rollback, current_status.stage, target_stage, "Manual rollback")
-      
+
       result
     else
       {:error, "Cannot rollback to current or future stage"}
@@ -119,20 +122,20 @@ defmodule Foundation.MigrationControl do
   """
   def emergency_rollback(reason \\ "Emergency rollback requested") do
     Logger.error("EMERGENCY ROLLBACK: #{reason}")
-    
+
     current_status = FeatureFlags.migration_status()
-    
+
     result = FeatureFlags.emergency_rollback(reason)
-    
+
     record_migration_event(:emergency_rollback, current_status.stage, 0, reason)
-    
+
     # Alert operations team
     send_alert(:emergency_rollback, %{
       reason: reason,
       previous_stage: current_status.stage,
       timestamp: System.monotonic_time()
     })
-    
+
     result
   end
 
@@ -142,13 +145,13 @@ defmodule Foundation.MigrationControl do
   def check_health_and_rollback do
     health = get_system_health()
     violations = check_health_violations(health)
-    
+
     if not Enum.empty?(violations) do
       reason = "Automatic rollback due to health violations: #{inspect(violations)}"
       Logger.error(reason)
-      
+
       emergency_rollback(reason)
-      
+
       {:rollback_triggered, violations}
     else
       {:ok, health}
@@ -183,7 +186,7 @@ defmodule Foundation.MigrationControl do
   """
   def validate_readiness_for_stage(stage) when stage in 1..4 do
     current_status = FeatureFlags.migration_status()
-    
+
     validations = [
       {:current_stage, current_status.stage == stage - 1},
       {:system_health, system_healthy?()},
@@ -191,9 +194,9 @@ defmodule Foundation.MigrationControl do
       {:test_suite_passing, test_suite_passing?()},
       {:dependencies_ready, dependencies_ready_for_stage?(stage)}
     ]
-    
+
     failed_validations = Enum.filter(validations, fn {_name, passed} -> not passed end)
-    
+
     if Enum.empty?(failed_validations) do
       :ok
     else
@@ -205,34 +208,52 @@ defmodule Foundation.MigrationControl do
 
   defp perform_migration(target_stage) do
     stage_info = Map.get(@migration_stages, target_stage)
-    
+
     Logger.info("Starting migration to stage #{target_stage}: #{stage_info.name}")
-    
+
     # Pre-migration validation
     case validate_readiness_for_stage(target_stage) do
       :ok ->
         # Record migration start
-        record_migration_event(:migration_start, target_stage - 1, target_stage, "Stage migration initiated")
-        
+        record_migration_event(
+          :migration_start,
+          target_stage - 1,
+          target_stage,
+          "Stage migration initiated"
+        )
+
         # Perform migration
         result = FeatureFlags.enable_otp_cleanup_stage(target_stage)
-        
+
         case result do
           :ok ->
             Logger.info("Successfully migrated to stage #{target_stage}")
-            record_migration_event(:migration_complete, target_stage - 1, target_stage, "Stage migration completed")
-            
+
+            record_migration_event(
+              :migration_complete,
+              target_stage - 1,
+              target_stage,
+              "Stage migration completed"
+            )
+
             # Start health monitoring for this stage
             start_health_monitoring()
-            
+
             {:ok, %{stage: target_stage, info: stage_info}}
-            
+
           error ->
             Logger.error("Migration to stage #{target_stage} failed: #{inspect(error)}")
-            record_migration_event(:migration_failed, target_stage - 1, target_stage, "Migration failed: #{inspect(error)}")
+
+            record_migration_event(
+              :migration_failed,
+              target_stage - 1,
+              target_stage,
+              "Migration failed: #{inspect(error)}"
+            )
+
             error
         end
-        
+
       {:error, failed_validations} ->
         {:error, {:validation_failed, failed_validations}}
     end
@@ -251,24 +272,30 @@ defmodule Foundation.MigrationControl do
 
   defp check_health_violations(health) do
     violations = []
-    
-    violations = if health.error_rate > @rollback_thresholds.error_rate do
-      [{:error_rate, health.error_rate, @rollback_thresholds.error_rate} | violations]
-    else
-      violations
-    end
-    
-    violations = if health.restart_frequency > @rollback_thresholds.restart_frequency do
-      [{:restart_frequency, health.restart_frequency, @rollback_thresholds.restart_frequency} | violations]
-    else
-      violations
-    end
-    
+
+    violations =
+      if health.error_rate > @rollback_thresholds.error_rate do
+        [{:error_rate, health.error_rate, @rollback_thresholds.error_rate} | violations]
+      else
+        violations
+      end
+
+    violations =
+      if health.restart_frequency > @rollback_thresholds.restart_frequency do
+        [
+          {:restart_frequency, health.restart_frequency, @rollback_thresholds.restart_frequency}
+          | violations
+        ]
+      else
+        violations
+      end
+
     # Check response time degradation (compared to baseline)
     baseline_response_time = get_baseline_response_time()
-    
-    if baseline_response_time > 0 and 
-       health.response_time > baseline_response_time * @rollback_thresholds.response_time_degradation do
+
+    if baseline_response_time > 0 and
+         health.response_time >
+           baseline_response_time * @rollback_thresholds.response_time_degradation do
       [{:response_time_degradation, health.response_time, baseline_response_time} | violations]
     else
       violations
@@ -294,13 +321,13 @@ defmodule Foundation.MigrationControl do
       timestamp: System.monotonic_time(),
       system_time: DateTime.utc_now()
     }
-    
+
     # Ensure migration history table exists
     ensure_migration_history_table()
-    
+
     # Store in ETS for history tracking
     :ets.insert(:migration_history, {System.monotonic_time(), event})
-    
+
     # Emit telemetry
     :telemetry.execute(
       [:foundation, :migration, type],
@@ -312,7 +339,7 @@ defmodule Foundation.MigrationControl do
   defp send_alert(type, data) do
     # In a real system, this would send alerts to monitoring systems
     Logger.warning("MIGRATION ALERT [#{type}]: #{inspect(data)}")
-    
+
     :telemetry.execute(
       [:foundation, :migration, :alert],
       %{count: 1},
@@ -321,25 +348,29 @@ defmodule Foundation.MigrationControl do
   end
 
   # Health check functions (simplified implementations)
-  
+
   defp calculate_error_rate do
     # In real implementation, this would check actual error metrics
-    0.001  # 0.1% baseline error rate
+    # 0.1% baseline error rate
+    0.001
   end
 
   defp calculate_restart_frequency do
     # In real implementation, this would check supervisor restart counts
-    1  # 1 restart per minute baseline
+    # 1 restart per minute baseline
+    1
   end
 
   defp calculate_average_response_time do
     # In real implementation, this would check actual response times
-    50.0  # 50ms baseline
+    # 50ms baseline
+    50.0
   end
 
   defp get_baseline_response_time do
     # In real implementation, this would load from stored baselines
-    50.0  # 50ms baseline
+    # 50ms baseline
+    50.0
   end
 
   defp get_memory_usage do
@@ -363,16 +394,18 @@ defmodule Foundation.MigrationControl do
   defp no_recent_rollbacks? do
     # Check if there have been rollbacks in the last hour
     cutoff = System.monotonic_time() - :timer.hours(1)
-    
+
     case :ets.whereis(:migration_history) do
-      :undefined -> true
+      :undefined ->
+        true
+
       _ ->
-        rollback_events = :ets.select(:migration_history, [
-          {{:"$1", :"$2"}, 
-           [{:andalso, {:>, :"$1", cutoff}, {:==, {:map_get, :type, :"$2"}, :rollback}}], 
-           [:"$2"]}
-        ])
-        
+        rollback_events =
+          :ets.select(:migration_history, [
+            {{:"$1", :"$2"},
+             [{:andalso, {:>, :"$1", cutoff}, {:==, {:map_get, :type, :"$2"}, :rollback}}], [:"$2"]}
+          ])
+
         Enum.empty?(rollback_events)
     end
   end
@@ -393,10 +426,12 @@ defmodule Foundation.MigrationControl do
         # Create table if it doesn't exist
         :ets.new(:migration_history, [:set, :public, :named_table])
         []
+
       _ ->
         :ets.tab2list(:migration_history)
         |> Enum.sort_by(fn {timestamp, _event} -> timestamp end, :desc)
-        |> Enum.take(20)  # Last 20 events
+        # Last 20 events
+        |> Enum.take(20)
         |> Enum.map(fn {_timestamp, event} -> event end)
     end
   end
@@ -413,9 +448,12 @@ defmodule Foundation.MigrationControl do
   defp get_performance_metrics do
     # In real implementation, this would track performance impact of flags
     %{
-      response_time_impact: 0.05,  # 5% impact
-      memory_impact: 0.02,         # 2% impact
-      cpu_impact: 0.01             # 1% impact
+      # 5% impact
+      response_time_impact: 0.05,
+      # 2% impact
+      memory_impact: 0.02,
+      # 1% impact
+      cpu_impact: 0.01
     }
   end
 
@@ -441,6 +479,7 @@ defmodule Foundation.MigrationControl do
     case :ets.whereis(:migration_history) do
       :undefined ->
         :ets.new(:migration_history, [:set, :public, :named_table])
+
       _ ->
         :migration_history
     end
