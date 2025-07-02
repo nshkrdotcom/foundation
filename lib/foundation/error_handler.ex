@@ -318,24 +318,18 @@ defmodule Foundation.ErrorHandler do
   end
 
   # Helper function to check network errors without compile-time dependencies
-  defp is_network_error?(error) do
-    case error do
-      %{__struct__: module} ->
-        # Check for common network error modules dynamically
-        module_name = Module.split(module) |> List.last()
+  defp is_network_error?(error) when is_exception(error) do
+    module = error.__struct__
+    # Check for common network error modules dynamically
+    module_name = Module.split(module) |> List.last()
 
-        module_name in ["HTTPError", "Error"] or
-          module == :hackney_error or
-          (Code.ensure_loaded?(Mint.HTTPError) and module == Mint.HTTPError) or
-          (Code.ensure_loaded?(Finch.Error) and module == Finch.Error)
-
-      {:error, _} ->
-        true
-
-      _ ->
-        false
-    end
+    module_name in ["HTTPError", "Error"] or
+      module == :hackney_error or
+      (Code.ensure_loaded?(Mint.HTTPError) and module == Mint.HTTPError) or
+      (Code.ensure_loaded?(Finch.Error) and module == Finch.Error)
   end
+
+  defp is_network_error?(_), do: false
 
   @doc """
   Handles database-related errors specifically.
@@ -359,22 +353,19 @@ defmodule Foundation.ErrorHandler do
   end
 
   # Helper function to check database errors without compile-time dependencies
-  defp is_database_error?(error) do
-    case error do
-      %{__struct__: module} ->
-        # Check for common database error modules dynamically
-        module_name = Module.split(module) |> List.last()
+  defp is_database_error?(error) when is_exception(error) do
+    module = error.__struct__
+    # Check for common database error modules dynamically
+    module_name = Module.split(module) |> List.last()
 
-        module_name in ["ConnectionError", "Error", "CastError"] or
-          (Code.ensure_loaded?(DBConnection.ConnectionError) and
-             module == DBConnection.ConnectionError) or
-          (Code.ensure_loaded?(Postgrex.Error) and module == Postgrex.Error) or
-          (Code.ensure_loaded?(Ecto.Query.CastError) and module == Ecto.Query.CastError)
-
-      _ ->
-        false
-    end
+    module_name in ["ConnectionError", "Error", "CastError"] or
+      (Code.ensure_loaded?(DBConnection.ConnectionError) and
+         module == DBConnection.ConnectionError) or
+      (Code.ensure_loaded?(Postgrex.Error) and module == Postgrex.Error) or
+      (Code.ensure_loaded?(Ecto.Query.CastError) and module == Ecto.Query.CastError)
   end
+
+  defp is_database_error?(_), do: false
 
   @doc """
   Handles validation errors specifically.

@@ -76,9 +76,12 @@ defmodule FoundationJidoSupervisor do
     # 1. JidoSystem services shutdown first (SystemCommandManager -> JidoSystem.AgentSupervisor)
     # 2. Foundation services shutdown last (Services.Supervisor -> TaskSupervisor)
     # This prevents JidoSystem from trying to use Foundation services during shutdown
+    # Use Application environment instead of Mix.env for runtime compatibility
+    test_env? = Application.get_env(:foundation, :test_mode, false)
+    
     supervisor_flags = %{
       strategy: :rest_for_one,
-      max_restarts: if(Mix.env() == :test, do: 10, else: 3),
+      max_restarts: if(test_env?, do: 10, else: 3),
       max_seconds: 5
     }
 

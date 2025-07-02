@@ -168,7 +168,7 @@ defmodule Foundation.ServiceIntegration.SignalCoordinator do
   - `{:error, {:signals_not_processed, remaining}}` - Some signals not processed
   """
   @spec wait_for_signal_processing([signal_id()], non_neg_integer()) ::
-          {:ok, :all_signals_processed} | {:error, term()}
+          {:ok, :all_signals_processed}
   def wait_for_signal_processing(signal_ids, _timeout \\ 5000) when is_list(signal_ids) do
     # This function is deprecated - telemetry should not be used for control flow
     # Instead, use emit_signal_sync for each signal if you need synchronous processing
@@ -234,7 +234,7 @@ defmodule Foundation.ServiceIntegration.SignalCoordinator do
   - `{:error, reason}` - Timeout or other error
   """
   @spec wait_for_session_completion(coordination_session(), non_neg_integer()) ::
-          {:ok, coordination_session()} | {:error, term()}
+          {:ok, coordination_session()}
   def wait_for_session_completion(session, timeout \\ 10000) do
     signal_ids = MapSet.to_list(session.active_signals)
 

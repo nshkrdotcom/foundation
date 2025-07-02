@@ -148,9 +148,9 @@ defmodule MABEAM.CoordinationPatterns do
 
       supervisor when is_pid(supervisor) ->
         results =
-          assignments
-          |> Task.Supervisor.async_stream_nolink(
+          Task.Supervisor.async_stream_nolink(
             Foundation.TaskSupervisor,
+            assignments,
             fn {agent_pid, work_items} ->
               execute_agent_work(agent_pid, work_items, operation_fn, timeout)
             end,

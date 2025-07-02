@@ -352,7 +352,7 @@ defmodule Foundation.MonitorMigration do
               :nomatch ->
                 case :binary.match(code, "end") do
                   {pos, _} -> max(0, pos - 3)
-                  :nomatch -> 0
+                  :nomatch -> nil
                 end
             end
         end

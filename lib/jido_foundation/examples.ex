@@ -258,9 +258,9 @@ defmodule JidoFoundation.Examples do
       agent_array = List.to_tuple(agent_pids)
 
       results =
-        indexed_chunks
-        |> Task.Supervisor.async_stream_nolink(
+        Task.Supervisor.async_stream_nolink(
           Foundation.TaskSupervisor,
+          indexed_chunks,
           fn {chunk, index} ->
             agent_pid = elem(agent_array, index)
             GenServer.call(agent_pid, {:process_batch, chunk}, 10_000)
