@@ -78,6 +78,14 @@ defmodule Foundation.RaceConditionTest do
         cleanup_interval: 60_000
       })
 
+      # Clear any existing state for this limiter by waiting for a clean window
+      current_time = System.monotonic_time(:millisecond)
+      window_start = current_time - rem(current_time, 50)
+      time_until_next_window = 50 - (current_time - window_start)
+      
+      # Sleep until we're in a fresh window
+      Process.sleep(time_until_next_window + 5)
+
       # First batch - should allow 5
       first_batch =
         for _ <- 1..7 do
@@ -87,10 +95,11 @@ defmodule Foundation.RaceConditionTest do
       first_allowed = Enum.count(first_batch, &match?({:ok, :allowed}, &1))
       assert first_allowed == 5
 
-      # Wait for window to expire
+      # Wait for the current window to completely expire
+      # We need to wait until the next window boundary + some buffer
       Process.sleep(60)
 
-      # Second batch - should allow 5 more
+      # Second batch - should allow 5 more (in new window)
       second_batch =
         for _ <- 1..7 do
           RateLimiter.check_rate_limit(:window_test, "user_3")
