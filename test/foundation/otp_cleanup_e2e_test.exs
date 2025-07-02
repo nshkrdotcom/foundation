@@ -58,6 +58,8 @@ defmodule Foundation.OTPCleanupE2ETest do
       # Enable all OTP cleanup flags
       FeatureFlags.enable_otp_cleanup_stage(4)
 
+      registry = %{}
+
       # Set error context for tracing
       ErrorContext.set_context(%{
         test_id: "e2e_agent_test",
@@ -96,10 +98,10 @@ defmodule Foundation.OTPCleanupE2ETest do
             agent_pid = agent_task.pid
 
             # Register with new ETS registry
-            assert :ok = Registry.register(nil, agent_id, agent_pid)
+            assert :ok = Registry.register(registry, agent_id, agent_pid)
 
             # Verify registration
-            assert {:ok, {^agent_pid, _}} = Registry.lookup(nil, agent_id)
+            assert {:ok, {^agent_pid, _}} = Registry.lookup(registry, agent_id)
 
             {agent_id, agent_pid}
           end
@@ -155,7 +157,7 @@ defmodule Foundation.OTPCleanupE2ETest do
         # Step 4: Clean up agents
         for {agent_id, agent_pid} <- agent_ids do
           # Unregister the agent first
-          Registry.unregister(nil, agent_id)
+          Registry.unregister(registry, agent_id)
 
           # Then stop the process
           send(agent_pid, :stop)
@@ -163,7 +165,7 @@ defmodule Foundation.OTPCleanupE2ETest do
           # Wait for process to die and registry cleanup
           wait_until(
             fn ->
-              case Registry.lookup(nil, agent_id) do
+              case Registry.lookup(registry, agent_id) do
                 {:error, :not_found} -> true
                 # Legacy implementation returns :error
                 :error -> true
@@ -176,7 +178,7 @@ defmodule Foundation.OTPCleanupE2ETest do
 
         # Step 5: Verify all agents are cleaned up
         for {agent_id, _} <- agent_ids do
-          result = Registry.lookup(nil, agent_id)
+          result = Registry.lookup(registry, agent_id)
           assert result in [{:error, :not_found}, :error]
         end
 
@@ -189,14 +191,16 @@ defmodule Foundation.OTPCleanupE2ETest do
     test "service integration with supervision tree", %{supervision_tree: sup_tree} do
       FeatureFlags.enable_otp_cleanup_stage(4)
 
+      registry = %{}
+
       # Get a service from supervision tree
       {:ok, task_manager_pid} = get_service(sup_tree, :task_pool_manager)
 
       # Register the service in our new registry
-      assert :ok = Registry.register(nil, :supervised_task_manager, task_manager_pid)
+      assert :ok = Registry.register(registry, :supervised_task_manager, task_manager_pid)
 
       # Verify we can look it up
-      assert {:ok, {^task_manager_pid, _}} = Registry.lookup(nil, :supervised_task_manager)
+      assert {:ok, {^task_manager_pid, _}} = Registry.lookup(registry, :supervised_task_manager)
 
       # Test service functionality
       stats = call_service(sup_tree, :task_pool_manager, :get_all_stats)
@@ -249,8 +253,9 @@ defmodule Foundation.OTPCleanupE2ETest do
         span_id = Span.start_span("e2e_telemetry_test", %{test: true})
 
         # Registry operations
-        Registry.register(nil, :telemetry_test_agent, self())
-        Registry.lookup(nil, :telemetry_test_agent)
+        registry = %{}
+        Registry.register(registry, :telemetry_test_agent, self())
+        Registry.lookup(registry, :telemetry_test_agent)
 
         # Service operations
         call_service(sup_tree, :task_pool_manager, :get_all_stats)
@@ -302,6 +307,8 @@ defmodule Foundation.OTPCleanupE2ETest do
 
     test "multi-step workflow with error handling", %{supervision_tree: _supervision_tree} do
       FeatureFlags.enable_otp_cleanup_stage(4)
+
+      registry = %{}
 
       # Step 1: Initialize workflow context
       workflow_id = "workflow_#{System.unique_integer()}"
@@ -368,7 +375,7 @@ defmodule Foundation.OTPCleanupE2ETest do
               end)
 
             # Register agent
-            assert :ok = Registry.register(nil, agent_id, agent_pid)
+            assert :ok = Registry.register(registry, agent_id, agent_pid)
 
             Span.end_span(step_span)
 
@@ -442,7 +449,7 @@ defmodule Foundation.OTPCleanupE2ETest do
           # Verify cleanup
           wait_until(
             fn ->
-              case Registry.lookup(nil, agent_id) do
+              case Registry.lookup(registry, agent_id) do
                 {:error, :not_found} -> true
                 _ -> false
               end
@@ -494,7 +501,8 @@ defmodule Foundation.OTPCleanupE2ETest do
           loop.(loop)
         end)
 
-      Registry.register(nil, :dependent_agent, dependent_agent)
+      registry = %{}
+      Registry.register(registry, :dependent_agent, dependent_agent)
 
       # Verify service works initially
       send(dependent_agent, {:check_service, self()})
@@ -556,8 +564,9 @@ defmodule Foundation.OTPCleanupE2ETest do
           {:error, {:already_started, _}} -> :ok
         end
 
-        Registry.register(nil, :migration_test_agent, self())
-        assert {:ok, {pid, _}} = Registry.lookup(nil, :migration_test_agent)
+        registry = %{}
+        Registry.register(registry, :migration_test_agent, self())
+        assert {:ok, {pid, _}} = Registry.lookup(registry, :migration_test_agent)
         assert pid == self()
       else
         :ok
@@ -587,14 +596,15 @@ defmodule Foundation.OTPCleanupE2ETest do
 
       # Test that everything still works
       ErrorContext.set_context(%{final_test: true})
-      Registry.register(nil, :final_test_agent, self())
+      registry = %{}
+      Registry.register(registry, :final_test_agent, self())
 
       final_span = Span.start_span("final_test", %{})
       Span.end_span(final_span)
 
       # All functionality should work
       assert ErrorContext.get_context().final_test == true
-      assert {:ok, {pid, _}} = Registry.lookup(nil, :final_test_agent)
+      assert {:ok, {pid, _}} = Registry.lookup(registry, :final_test_agent)
       assert pid == self()
     end
 
@@ -604,12 +614,13 @@ defmodule Foundation.OTPCleanupE2ETest do
 
       # Establish baseline functionality
       ErrorContext.set_context(%{rollback_test: true})
-      Registry.register(nil, :rollback_test_agent, self())
+      registry = %{}
+      Registry.register(registry, :rollback_test_agent, self())
       span_id = Span.start_span("rollback_test", %{})
 
       # Verify everything works
       assert ErrorContext.get_context().rollback_test == true
-      assert {:ok, {pid, _}} = Registry.lookup(nil, :rollback_test_agent)
+      assert {:ok, {pid, _}} = Registry.lookup(registry, :rollback_test_agent)
       assert pid == self()
 
       Span.end_span(span_id)
@@ -619,11 +630,12 @@ defmodule Foundation.OTPCleanupE2ETest do
 
       # Verify system still functions
       ErrorContext.set_context(%{after_rollback: true})
-      Registry.register(nil, :post_rollback_agent, self())
+      registry = %{}
+      Registry.register(registry, :post_rollback_agent, self())
 
       # Both should work regardless of implementation
       assert ErrorContext.get_context().after_rollback == true
-      assert {:ok, {pid, _}} = Registry.lookup(nil, :post_rollback_agent)
+      assert {:ok, {pid, _}} = Registry.lookup(registry, :post_rollback_agent)
       assert pid == self()
 
       # Emergency rollback
@@ -631,7 +643,8 @@ defmodule Foundation.OTPCleanupE2ETest do
 
       # System should still function with all legacy implementations
       ErrorContext.set_context(%{emergency_rollback: true})
-      Registry.register(nil, :emergency_test_agent, self())
+      registry = %{}
+      Registry.register(registry, :emergency_test_agent, self())
 
       assert ErrorContext.get_context().emergency_rollback == true
       assert {:ok, {pid, _}} = Registry.lookup(nil, :emergency_test_agent)
@@ -655,6 +668,8 @@ defmodule Foundation.OTPCleanupE2ETest do
 
     test "high load scenario with new implementations", %{supervision_tree: _supervision_tree} do
       FeatureFlags.enable_otp_cleanup_stage(4)
+
+      registry = %{}
 
       # Simulate production load
       num_agents = 50
@@ -680,7 +695,8 @@ defmodule Foundation.OTPCleanupE2ETest do
 
           agent_pid = agent_task.pid
 
-          Registry.register(nil, agent_id, agent_pid)
+          registry = %{}
+          Registry.register(registry, agent_id, agent_pid)
           {agent_id, agent_pid}
         end
 
@@ -699,7 +715,7 @@ defmodule Foundation.OTPCleanupE2ETest do
               # Perform span-wrapped operation
               Span.with_span_fun("load_test_operation", %{agent: agent_id, op: j}, fn ->
                 # Lookup agent (handle race conditions)
-                case Registry.lookup(nil, agent_id) do
+                case Registry.lookup(registry, agent_id) do
                   {:ok, {_pid, _}} ->
                     # Simulate work
                     :timer.sleep(1)
@@ -729,7 +745,8 @@ defmodule Foundation.OTPCleanupE2ETest do
       assert is_nil(test_context) or is_map(test_context)
 
       # Test that we can still register new agents
-      Registry.register(nil, :post_load_test_agent, self())
+      registry = %{}
+      Registry.register(registry, :post_load_test_agent, self())
       assert {:ok, {pid, _}} = Registry.lookup(nil, :post_load_test_agent)
       assert pid == self()
 
@@ -779,7 +796,8 @@ defmodule Foundation.OTPCleanupE2ETest do
 
             agent_pid = agent_task.pid
 
-            Registry.register(nil, agent_id, agent_pid)
+            registry = %{}
+          Registry.register(registry, agent_id, agent_pid)
             {agent_id, agent_pid}
           end
 
