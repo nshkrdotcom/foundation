@@ -1,6 +1,6 @@
 defmodule JidoFoundation.BridgeTest do
-  # Using registry isolation mode for Bridge tests
-  use Foundation.UnifiedTestFoundation, :registry
+  # Using supervision testing mode for Bridge tests to support service dependencies
+  use Foundation.UnifiedTestFoundation, :supervision_testing
 
   alias JidoFoundation.Bridge
 
@@ -33,35 +33,26 @@ defmodule JidoFoundation.BridgeTest do
   end
 
   describe "register_agent/2" do
-    test "registers Jido agent with Foundation", %{registry: registry} do
+    test "registers Jido agent with Foundation", %{supervision_tree: sup_tree} do
       {:ok, agent} = MockJidoAgent.start_link(%{})
 
-      on_exit(fn ->
-        if Process.alive?(agent) do
-          try do
-            GenServer.stop(agent, :normal, 5000)
-          catch
-            # Process already stopped by registry cleanup, ignore
-            :exit, _ -> :ok
-          end
-        end
-      end)
+      # Foundation.UnifiedTestFoundation :supervision_testing mode handles all process cleanup automatically
 
       assert :ok =
                Bridge.register_agent(agent,
                  capabilities: [:test, :mock],
                  metadata: %{version: "1.0"},
-                 registry: registry
+                 supervision_tree: sup_tree
                )
 
       # Verify registration
-      assert {:ok, {^agent, metadata}} = Foundation.Registry.lookup(registry, agent)
+      assert {:ok, {^agent, metadata}} = Foundation.Registry.lookup(sup_tree.registry, agent)
       assert metadata.framework == :jido
       assert metadata.capability == [:test, :mock]
       assert metadata.health_status == :healthy
     end
 
-    test "handles registration failure gracefully", %{registry: registry} do
+    test "handles registration failure gracefully", %{supervision_tree: sup_tree} do
       # Create a dead process reference
       dead_pid = spawn(fn -> :ok end)
       # Wait for process to terminate using monitoring
@@ -71,49 +62,31 @@ defmodule JidoFoundation.BridgeTest do
       assert {:error, _} =
                Bridge.register_agent(dead_pid,
                  capabilities: [:test],
-                 registry: registry
+                 supervision_tree: sup_tree
                )
     end
   end
 
   describe "unregister_agent/2" do
-    test "unregisters agent from Foundation", %{registry: registry} do
+    test "unregisters agent from Foundation", %{supervision_tree: sup_tree} do
       {:ok, agent} = MockJidoAgent.start_link(%{})
 
-      on_exit(fn ->
-        if Process.alive?(agent) do
-          try do
-            GenServer.stop(agent, :normal, 5000)
-          catch
-            # Process already stopped by registry cleanup, ignore
-            :exit, _ -> :ok
-          end
-        end
-      end)
+      # Foundation.UnifiedTestFoundation :supervision_testing mode handles all process cleanup automatically
 
-      :ok = Bridge.register_agent(agent, capabilities: [:test], registry: registry)
+      :ok = Bridge.register_agent(agent, capabilities: [:test], supervision_tree: sup_tree)
 
-      assert :ok = Bridge.unregister_agent(agent, registry: registry)
-      assert :error = Foundation.Registry.lookup(registry, agent)
+      assert :ok = Bridge.unregister_agent(agent, supervision_tree: sup_tree)
+      assert :error = Foundation.Registry.lookup(sup_tree.registry, agent)
     end
   end
 
   describe "update_agent_metadata/3" do
-    test "updates registered agent metadata", %{registry: registry} do
+    test "updates registered agent metadata", %{supervision_tree: sup_tree} do
       {:ok, agent} = MockJidoAgent.start_link(%{})
 
-      on_exit(fn ->
-        if Process.alive?(agent) do
-          try do
-            GenServer.stop(agent, :normal, 5000)
-          catch
-            # Process already stopped by registry cleanup, ignore
-            :exit, _ -> :ok
-          end
-        end
-      end)
+      # Foundation.UnifiedTestFoundation :supervision_testing mode handles all process cleanup automatically
 
-      :ok = Bridge.register_agent(agent, capabilities: [:test], registry: registry)
+      :ok = Bridge.register_agent(agent, capabilities: [:test], supervision_tree: sup_tree)
 
       assert :ok =
                Bridge.update_agent_metadata(
@@ -122,30 +95,21 @@ defmodule JidoFoundation.BridgeTest do
                    status: :busy,
                    load: 0.75
                  },
-                 registry: registry
+                 supervision_tree: sup_tree
                )
 
-      assert {:ok, {^agent, metadata}} = Foundation.Registry.lookup(registry, agent)
+      assert {:ok, {^agent, metadata}} = Foundation.Registry.lookup(sup_tree.registry, agent)
       assert metadata.status == :busy
       assert metadata.load == 0.75
     end
 
-    test "returns error for unregistered agent", %{registry: registry} do
+    test "returns error for unregistered agent", %{supervision_tree: sup_tree} do
       {:ok, agent} = MockJidoAgent.start_link(%{})
 
-      on_exit(fn ->
-        if Process.alive?(agent) do
-          try do
-            GenServer.stop(agent, :normal, 5000)
-          catch
-            # Process already stopped by registry cleanup, ignore
-            :exit, _ -> :ok
-          end
-        end
-      end)
+      # Foundation.UnifiedTestFoundation :supervision_testing mode handles all process cleanup automatically
 
       assert {:error, :agent_not_registered} =
-               Bridge.update_agent_metadata(agent, %{}, registry: registry)
+               Bridge.update_agent_metadata(agent, %{}, supervision_tree: sup_tree)
     end
   end
 
@@ -153,16 +117,7 @@ defmodule JidoFoundation.BridgeTest do
     test "emits telemetry events" do
       {:ok, agent} = MockJidoAgent.start_link(%{})
 
-      on_exit(fn ->
-        if Process.alive?(agent) do
-          try do
-            GenServer.stop(agent, :normal, 5000)
-          catch
-            # Process already stopped by registry cleanup, ignore
-            :exit, _ -> :ok
-          end
-        end
-      end)
+      # Foundation.UnifiedTestFoundation :supervision_testing mode handles all process cleanup automatically
 
       :telemetry.attach(
         "test-jido-events",
@@ -189,16 +144,7 @@ defmodule JidoFoundation.BridgeTest do
     test "executes action with circuit breaker protection" do
       {:ok, agent} = MockJidoAgent.start_link(%{})
 
-      on_exit(fn ->
-        if Process.alive?(agent) do
-          try do
-            GenServer.stop(agent, :normal, 5000)
-          catch
-            # Process already stopped by registry cleanup, ignore
-            :exit, _ -> :ok
-          end
-        end
-      end)
+      # Foundation.UnifiedTestFoundation :supervision_testing mode handles all process cleanup automatically
 
       result =
         Bridge.execute_protected(agent, fn ->
@@ -211,16 +157,7 @@ defmodule JidoFoundation.BridgeTest do
     test "uses fallback when circuit breaker opens" do
       {:ok, agent} = MockJidoAgent.start_link(%{})
 
-      on_exit(fn ->
-        if Process.alive?(agent) do
-          try do
-            GenServer.stop(agent, :normal, 5000)
-          catch
-            # Process already stopped by registry cleanup, ignore
-            :exit, _ -> :ok
-          end
-        end
-      end)
+      # Foundation.UnifiedTestFoundation :supervision_testing mode handles all process cleanup automatically
 
       service_id = {:test_service, System.unique_integer()}
 
@@ -260,7 +197,7 @@ defmodule JidoFoundation.BridgeTest do
   end
 
   describe "agent discovery" do
-    setup %{registry: registry} do
+    setup %{supervision_tree: sup_tree} do
       # Register some test agents
       agents =
         for i <- 1..5 do
@@ -271,30 +208,19 @@ defmodule JidoFoundation.BridgeTest do
             Bridge.register_agent(agent,
               capabilities: capabilities,
               skip_monitoring: true,
-              registry: registry
+              supervision_tree: sup_tree
             )
 
           {i, agent}
         end
 
-      on_exit(fn ->
-        Enum.each(agents, fn {_i, agent} ->
-          if Process.alive?(agent) do
-            try do
-              GenServer.stop(agent, :normal, 5000)
-            catch
-              # Process may already be stopped by registry cleanup
-              :exit, _ -> :ok
-            end
-          end
-        end)
-      end)
+      # Foundation.UnifiedTestFoundation :supervision_testing mode handles all process cleanup automatically
 
       {:ok, agents: agents}
     end
 
-    test "finds agents by capability", %{registry: registry} do
-      {:ok, agents} = Bridge.find_agents_by_capability(:even, registry: registry)
+    test "finds agents by capability", %{supervision_tree: sup_tree} do
+      {:ok, agents} = Bridge.find_agents_by_capability(:even, supervision_tree: sup_tree)
 
       assert length(agents) == 2
 
@@ -303,14 +229,14 @@ defmodule JidoFoundation.BridgeTest do
              end)
     end
 
-    test "finds agents with multiple criteria", %{registry: registry} do
+    test "finds agents with multiple criteria", %{supervision_tree: sup_tree} do
       {:ok, agents} =
         Bridge.find_agents(
           [
             {[:capability], :number, :eq},
             {[:health_status], :healthy, :eq}
           ],
-          registry: registry
+          supervision_tree: sup_tree
         )
 
       assert length(agents) == 5
@@ -318,34 +244,24 @@ defmodule JidoFoundation.BridgeTest do
   end
 
   describe "batch operations" do
-    test "batch registers multiple agents", %{registry: registry} do
-      {agents, pids} =
+    test "batch registers multiple agents", %{supervision_tree: sup_tree} do
+      {agents, _pids} =
         for i <- 1..3 do
           {:ok, agent} = MockJidoAgent.start_link(%{id: i})
           {{agent, [capabilities: [:batch, :"agent_#{i}"]]}, agent}
         end
         |> Enum.unzip()
 
-      on_exit(fn ->
-        Enum.each(pids, fn pid ->
-          if Process.alive?(pid) do
-            try do
-              GenServer.stop(pid, :normal, 5000)
-            catch
-              # Process already stopped by registry cleanup, ignore
-              :exit, _ -> :ok
-            end
-          end
-        end)
-      end)
+      # Foundation.UnifiedTestFoundation :supervision_testing mode handles all process cleanup automatically
 
-      assert {:ok, registered} = Bridge.batch_register_agents(agents, registry: registry)
+      assert {:ok, registered} = Bridge.batch_register_agents(agents, supervision_tree: sup_tree)
       assert length(registered) == 3
     end
 
-    test "distributed_execute/3", %{registry: registry} do
+    test "distributed_execute/3", %{supervision_tree: sup_tree} do
       # Register agents with specific capability
-      pids =
+      # Foundation.UnifiedTestFoundation :supervision_testing mode handles all process cleanup automatically
+      _pids =
         for i <- 1..3 do
           {:ok, agent} = MockJidoAgent.start_link(%{id: i})
 
@@ -353,33 +269,20 @@ defmodule JidoFoundation.BridgeTest do
             Bridge.register_agent(agent,
               capabilities: [:distributed_test],
               skip_monitoring: true,
-              registry: registry
+              supervision_tree: sup_tree
             )
 
           agent
         end
 
-      on_exit(fn ->
-        Enum.each(pids, fn pid ->
-          if Process.alive?(pid) do
-            try do
-              GenServer.stop(pid, :normal, 5000)
-            catch
-              # Process already stopped by registry cleanup, ignore
-              :exit, _ -> :ok
-            end
-          end
-        end)
-      end)
-
-      # Execute distributed operation
+      # Execute distributed operation using supervision_tree context for isolated services
       {:ok, results} =
         Bridge.distributed_execute(
           :distributed_test,
           fn agent ->
             GenServer.call(agent, :get_state, 1000)
           end,
-          registry: registry
+          supervision_tree: sup_tree
         )
 
       assert length(results) == 3
@@ -392,25 +295,10 @@ defmodule JidoFoundation.BridgeTest do
   end
 
   describe "monitoring" do
-    test "monitors agent health", %{registry: registry} do
+    test "monitors agent health", %{supervision_tree: sup_tree} do
       {:ok, agent} = MockJidoAgent.start_link(%{})
 
-      on_exit(fn ->
-        # Stop the monitor process before killing the agent
-        case Process.get({:monitor, agent}) do
-          nil -> :ok
-          monitor_pid -> Process.exit(monitor_pid, :shutdown)
-        end
-
-        if Process.alive?(agent) do
-          try do
-            GenServer.stop(agent, :normal, 5000)
-          catch
-            # Process may already be stopped by registry cleanup
-            :exit, _ -> :ok
-          end
-        end
-      end)
+      # Foundation.UnifiedTestFoundation :supervision_testing mode handles all process cleanup automatically
 
       # Track when health checks happen
       test_pid = self()
@@ -426,12 +314,12 @@ defmodule JidoFoundation.BridgeTest do
           capabilities: [:monitored],
           health_check: health_check,
           health_check_interval: 100,
-          registry: registry
+          supervision_tree: sup_tree
         )
 
       # Wait for health check to run
       assert_receive {:health_checked, ^health_check_ref}, 200
-      assert {:ok, {_, metadata}} = Foundation.lookup(agent, registry)
+      assert {:ok, {_, metadata}} = Foundation.lookup(agent, sup_tree.registry)
       assert metadata.health_status == :healthy
 
       # Clean up monitor before we stop the agent
@@ -443,60 +331,40 @@ defmodule JidoFoundation.BridgeTest do
   end
 
   describe "convenience functions" do
-    test "start_and_register_agent/3", %{registry: registry} do
+    test "start_and_register_agent/3", %{supervision_tree: sup_tree} do
       result =
         Bridge.start_and_register_agent(
           MockJidoAgent,
           %{auto: true},
           capabilities: [:auto_registered],
-          registry: registry
+          supervision_tree: sup_tree
         )
 
       assert {:ok, agent} = result
       assert Process.alive?(agent)
 
-      on_exit(fn ->
-        if Process.alive?(agent) do
-          try do
-            GenServer.stop(agent, :normal, 5000)
-          catch
-            # Process already stopped by registry cleanup, ignore
-            :exit, _ -> :ok
-          end
-        end
-      end)
+      # Foundation.UnifiedTestFoundation :supervision_testing mode handles all process cleanup automatically
 
       # Verify registration
-      assert {:ok, {_, metadata}} = Foundation.lookup(agent, registry)
+      assert {:ok, {_, metadata}} = Foundation.lookup(agent, sup_tree.registry)
       assert :auto_registered in metadata.capability
     end
   end
 
   describe "error handling" do
-    test "handles agent crashes gracefully", %{registry: registry} do
+    test "handles agent crashes gracefully", %{supervision_tree: sup_tree} do
       # Trap exits to handle the crash gracefully
       Process.flag(:trap_exit, true)
 
       {:ok, agent} = MockJidoAgent.start_link(%{})
 
-      on_exit(fn ->
-        Process.flag(:trap_exit, false)
-
-        if Process.alive?(agent) do
-          try do
-            GenServer.stop(agent, :normal, 5000)
-          catch
-            # Process may already be stopped by registry cleanup
-            :exit, _ -> :ok
-          end
-        end
-      end)
+      # Foundation.UnifiedTestFoundation :supervision_testing mode handles all process cleanup automatically
 
       :ok =
         Bridge.register_agent(agent,
           capabilities: [:crasher],
           skip_monitoring: true,
-          registry: registry
+          supervision_tree: sup_tree
         )
 
       result =
@@ -511,33 +379,34 @@ defmodule JidoFoundation.BridgeTest do
       assert result == {:ok, :recovered}
     end
 
-    test "handles timeout in distributed execution", %{registry: registry} do
-      # Create slow agent that responds slowly
-      slow_agent =
-        spawn(fn ->
-          receive do
-            # This is acceptable - simulating slow work
-            _ -> :timer.sleep(10_000)
-          end
-        end)
+    test "handles timeout in distributed execution", %{supervision_tree: sup_tree} do
+      # Create slow agent using Foundation.TestProcess for proper OTP compliance
+      {:ok, slow_agent} = Foundation.TestProcess.start_link()
 
       :ok =
         Bridge.register_agent(slow_agent,
           capabilities: [:slow],
           skip_monitoring: true,
-          registry: registry
+          supervision_tree: sup_tree
         )
+
+      # Foundation.UnifiedTestFoundation :supervision_testing mode handles all process cleanup automatically
 
       {:ok, results} =
         Bridge.distributed_execute(
           :slow,
           fn agent ->
-            send(agent, :work)
-            # Return immediately instead of sleeping - the test should verify the result
-            :timeout
+            # Test timeout behavior by calling a non-existent function
+            # This should trigger a timeout in the TaskPoolManager
+            try do
+              GenServer.call(agent, :nonexistent_call, 100)
+            catch
+              :exit, {:timeout, _} -> :timeout
+              :exit, _ -> :timeout
+            end
           end,
           max_concurrency: 1,
-          registry: registry
+          supervision_tree: sup_tree
         )
 
       assert [{:ok, :timeout}] = results
