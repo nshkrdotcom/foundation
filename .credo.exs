@@ -7,7 +7,7 @@
         included: ["lib/", "test/"],
         excluded: [~r"/_build/", ~r"/deps/"]
       },
-      requires: [],
+      requires: ["./lib/foundation/credo_checks/*.ex"],
       strict: false,
       parse_timeout: 5000,
       color: true,
@@ -82,6 +82,15 @@
         # Custom check for raw send usage (disabled for CI)
         # {Foundation.CredoChecks.NoRawSend, []},
         
+        # Custom check for Process.put/get usage with whitelist
+        {Foundation.CredoChecks.NoProcessDict, [
+          # Allow in specific whitelisted modules during migration
+          allowed_modules: [
+            "Foundation.Telemetry.Span",  # Temporary - will be fixed
+            "Foundation.Telemetry.SampledEvents"  # Temporary - will be fixed
+          ]
+        ]},
+        
         # Disable logger metadata check - we use structured logging
         # and don't want to pollute the logger config with 50+ keys
         {Credo.Check.Warning.MissedMetadataKeyInLoggerConfig, false}
@@ -93,7 +102,7 @@
         included: ["lib/", "test/"],
         excluded: [~r"/_build/", ~r"/deps/"]
       },
-      requires: [],
+      requires: ["./lib/foundation/credo_checks/*.ex"],
       strict: true,
       parse_timeout: 5000,
       color: true,
@@ -167,6 +176,15 @@
         
         # Custom check for raw send usage (disabled for CI)
         # {Foundation.CredoChecks.NoRawSend, []},
+        
+        # Custom check for Process.put/get usage with whitelist
+        {Foundation.CredoChecks.NoProcessDict, [
+          # Allow in specific whitelisted modules during migration
+          allowed_modules: [
+            "Foundation.Telemetry.Span",  # Temporary - will be fixed
+            "Foundation.Telemetry.SampledEvents"  # Temporary - will be fixed
+          ]
+        ]},
         
         # Disable logger metadata check - we use structured logging
         # and don't want to pollute the logger config with 50+ keys
