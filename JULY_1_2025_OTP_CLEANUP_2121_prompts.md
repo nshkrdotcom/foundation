@@ -388,7 +388,7 @@ Process.put(@span_stack_key, [span | stack])
 **Expected Output**: ETS-based span context management system with proper process monitoring and cleanup.
 
 ---
-
+6 done
 ---
 
 ## PROMPT 7: Clean Up Test Process Dictionary Usage
@@ -459,6 +459,8 @@ Tests use Process dictionary for:
 
 **Expected Output**: Clean test suite using proper OTP async patterns with comprehensive helper library and documentation.
 
+---
+7 
 ---
 
 ## PROMPT 8: Implement Feature Flag Migration System

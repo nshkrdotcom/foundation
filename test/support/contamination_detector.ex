@@ -42,9 +42,8 @@ defmodule Foundation.ContaminationDetector do
       strict_mode: Keyword.get(opts, :strict_mode, false)
     }
 
-    # Store monitor in process dictionary for easy access
-    Process.put({:contamination_monitor, test_id}, monitor)
-
+    # Monitor is returned to caller - no need to store in Process dictionary
+    # since the caller manages the monitor lifecycle
     monitor
   end
 
@@ -57,8 +56,7 @@ defmodule Foundation.ContaminationDetector do
 
     contamination_report = analyze_contamination(monitor, final_state)
 
-    # Clean up monitor from process dictionary
-    Process.delete({:contamination_monitor, test_id})
+    # Monitor cleanup is handled by caller - no Process dictionary cleanup needed
 
     # Report contamination if found
     if contamination_report.has_contamination do

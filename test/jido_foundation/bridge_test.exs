@@ -322,11 +322,8 @@ defmodule JidoFoundation.BridgeTest do
       assert {:ok, {_, metadata}} = Foundation.lookup(agent, sup_tree.registry)
       assert metadata.health_status == :healthy
 
-      # Clean up monitor before we stop the agent
-      case Process.get({:monitor, agent}) do
-        nil -> :ok
-        monitor_pid -> Process.exit(monitor_pid, :shutdown)
-      end
+      # Monitor cleanup is handled automatically by the supervision testing framework
+      # No need for manual cleanup as isolated supervision trees handle this
     end
   end
 
