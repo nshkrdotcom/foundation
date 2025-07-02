@@ -165,7 +165,7 @@ Process.put(cache_key, tables)
 **Expected Output**: ETS-based caching implementation for MABEAM agent registry with proper OTP patterns and comprehensive testing.
 
 ---
-3 
+3 done
 ---
 
 
@@ -236,6 +236,8 @@ Process.get(:error_context)
 
 **Expected Output**: Logger metadata-based error context system with proper OTP patterns and comprehensive testing.
 
+---
+4 done
 ---
 
 ## PROMPT 5: Replace Telemetry Process Dictionary Usage - Part 1 (SampledEvents)

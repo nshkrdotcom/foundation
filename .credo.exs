@@ -86,8 +86,7 @@
         {Foundation.CredoChecks.NoProcessDict, [
           # Allow in specific whitelisted modules during migration
           allowed_modules: [
-            "Foundation.Telemetry.Span",  # Temporary - will be fixed
-            "Foundation.Telemetry.SampledEvents"  # Temporary - will be fixed
+            "Foundation.Telemetry.Span"  # Temporary - will be fixed
           ]
         ]},
         
@@ -181,8 +180,7 @@
         {Foundation.CredoChecks.NoProcessDict, [
           # Allow in specific whitelisted modules during migration
           allowed_modules: [
-            "Foundation.Telemetry.Span",  # Temporary - will be fixed
-            "Foundation.Telemetry.SampledEvents"  # Temporary - will be fixed
+            "Foundation.Telemetry.Span"  # Temporary - will be fixed
           ]
         ]},
         

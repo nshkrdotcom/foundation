@@ -176,25 +176,15 @@ defmodule Foundation.Telemetry.SampledEvents do
         %{error_type: :database_connection_failed}
   """
   def emit_once_per(event_name, interval_ms, measurements, metadata, prefix \\ []) do
+    ensure_server_started()
+
     key = {prefix ++ [event_name], metadata}
-    now = System.monotonic_time(:millisecond)
 
-    case Process.get({:telemetry_dedup, key}) do
-      nil ->
-        # First time
-        Process.put({:telemetry_dedup, key}, now)
-        event = prefix ++ [event_name]
-        Sampler.execute(event, measurements, metadata)
-
-      last_emit when now - last_emit >= interval_ms ->
-        # Enough time has passed
-        Process.put({:telemetry_dedup, key}, now)
-        event = prefix ++ [event_name]
-        Sampler.execute(event, measurements, metadata)
-
-      _ ->
-        # Too soon, skip
-        :ok
+    if Foundation.Telemetry.SampledEvents.Server.should_emit?(key, interval_ms) do
+      event = prefix ++ [event_name]
+      Sampler.execute(event, measurements, metadata)
+    else
+      :ok
     end
   end
 
@@ -213,24 +203,78 @@ defmodule Foundation.Telemetry.SampledEvents do
   """
   defmacro batch_events(event_name, batch_size, timeout_ms, do: summary_fn) do
     quote do
-      batch_key = {:telemetry_batch, __telemetry_prefix__() ++ [unquote(event_name)]}
+      Foundation.Telemetry.SampledEvents.ensure_server_started()
 
-      {batch, last_emit} = Process.get(batch_key, {[], System.monotonic_time(:millisecond)})
+      batch_key = __telemetry_prefix__() ++ [unquote(event_name)]
+      item = unquote(summary_fn)
+
+      # Add item to batch
+      Foundation.Telemetry.SampledEvents.Server.add_to_batch(batch_key, item)
+
+      # Check if we should emit now
+      {:ok, count, last_emit} = Foundation.Telemetry.SampledEvents.Server.get_batch_info(batch_key)
       now = System.monotonic_time(:millisecond)
 
-      new_batch = [unquote(summary_fn) | batch]
+      if count >= unquote(batch_size) or now - last_emit >= unquote(timeout_ms) do
+        # Process batch immediately
+        case Foundation.Telemetry.SampledEvents.Server.process_batch(batch_key) do
+          {:ok, items} when is_list(items) and length(items) > 0 ->
+            summary = Foundation.Telemetry.SampledEvents.summarize_batch(items)
+            emit_event(unquote(event_name), summary, %{batch_size: length(items)})
 
-      if length(new_batch) >= unquote(batch_size) or now - last_emit >= unquote(timeout_ms) do
-        # Emit batch summary
-        summary = summarize_batch(new_batch)
-        emit_event(unquote(event_name), summary, %{batch_size: length(new_batch)})
-
-        # Reset batch
-        Process.put(batch_key, {[], now})
-      else
-        # Add to batch
-        Process.put(batch_key, {new_batch, last_emit})
+          _ ->
+            :ok
+        end
       end
+    end
+  end
+
+  @doc """
+  Ensures the SampledEvents server is started.
+  This is called internally by functions that need the server.
+  """
+  def ensure_server_started do
+    case Process.whereis(Foundation.Telemetry.SampledEvents.Server) do
+      nil ->
+        # Server not started, try to start it
+        case Foundation.Telemetry.SampledEvents.Server.start_link() do
+          {:ok, _pid} -> :ok
+          {:error, {:already_started, _pid}} -> :ok
+          error -> error
+        end
+
+      _pid ->
+        :ok
+    end
+  end
+
+  @doc """
+  Summarizes a batch of items.
+
+  This function can be overridden by applications to provide custom summarization logic.
+  By default, it attempts to merge maps or average numeric values.
+  """
+  def summarize_batch([]), do: %{}
+
+  def summarize_batch(items) when is_list(items) do
+    # If all items are maps, merge them
+    if Enum.all?(items, &is_map/1) do
+      Enum.reduce(items, %{}, fn item, acc ->
+        Map.merge(acc, item, fn _k, v1, v2 ->
+          cond do
+            is_number(v1) and is_number(v2) -> v1 + v2
+            is_list(v1) and is_list(v2) -> v1 ++ v2
+            true -> v2
+          end
+        end)
+      end)
+    else
+      # For non-map items, just return count and items
+      %{
+        count: length(items),
+        items: items,
+        timestamp: System.system_time()
+      }
     end
   end
 end

@@ -81,7 +81,9 @@ defmodule Foundation.Services.Supervisor do
         {Foundation.Services.RateLimiter, service_opts[:rate_limiter] || []},
         # Signal service: Jido Signal Bus for event routing
         {Foundation.Services.SignalBus, service_opts[:signal_bus] || []}
-      ] ++ get_otp_cleanup_children(service_opts) ++ get_sia_children(service_opts)
+      ] ++
+        get_otp_cleanup_children(service_opts) ++
+        get_telemetry_children(service_opts) ++ get_sia_children(service_opts)
 
     # Use one_for_one strategy - services can fail independently
     supervisor_opts = [
@@ -131,6 +133,40 @@ defmodule Foundation.Services.Supervisor do
         # ETS-based agent registry (OTP cleanup phase)
         {Foundation.Protocols.RegistryETS, service_opts[:registry_ets] || []}
       ]
+    else
+      []
+    end
+  end
+
+  # Gets telemetry children (OTP cleanup phase)
+  defp get_telemetry_children(service_opts) do
+    if Keyword.get(
+         service_opts,
+         :include_telemetry,
+         !Application.get_env(:foundation, :test_mode, false)
+       ) do
+      telemetry_children = []
+
+      # Add SampledEvents server if module is available
+      telemetry_children =
+        if Code.ensure_loaded?(Foundation.Telemetry.SampledEvents.Server) do
+          opts = service_opts[:sampled_events_server] || []
+          [{Foundation.Telemetry.SampledEvents.Server, opts} | telemetry_children]
+        else
+          telemetry_children
+        end
+
+      # Add Telemetry.Sampler if available and configured
+      telemetry_children =
+        if Code.ensure_loaded?(Foundation.Telemetry.Sampler) and
+             Application.get_env(:foundation, :telemetry_sampling, %{})[:enabled] do
+          opts = service_opts[:telemetry_sampler] || []
+          [{Foundation.Telemetry.Sampler, opts} | telemetry_children]
+        else
+          telemetry_children
+        end
+
+      telemetry_children
     else
       []
     end
