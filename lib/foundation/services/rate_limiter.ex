@@ -519,42 +519,35 @@ defmodule Foundation.Services.RateLimiter do
   # Simple in-memory rate limiting implementation
   # TO DO: Replace with distributed solution for production use
 
-  # Atomic rate limiting using ETS update_counter
+  # Atomic rate limiting using ETS update_counter with proper race handling
   defp check_and_increment_rate_limit(limiter_key, limiter_config, current_time) do
-    # Calculate window start
     window_start = current_time - rem(current_time, limiter_config.scale_ms)
     bucket_key = {limiter_key, window_start}
 
-    # Ensure ETS table exists
     ensure_rate_limit_table()
 
-    # Try to get current count and check limit atomically
-    case :ets.lookup(:rate_limit_buckets, bucket_key) do
-      [] ->
-        # First request in window - insert with count 1
+    # Try atomic increment first
+    try do
+      new_count = :ets.update_counter(:rate_limit_buckets, bucket_key, {2, 1})
+
+      if new_count <= limiter_config.limit do
+        {:allow, new_count}
+      else
+        # We went over the limit, decrement back
+        :ets.update_counter(:rate_limit_buckets, bucket_key, {2, -1})
+        {:deny, new_count - 1}
+      end
+    catch
+      :error, :badarg ->
+        # Key doesn't exist, try to insert
         case :ets.insert_new(:rate_limit_buckets, {bucket_key, 1}) do
-          true -> 
+          true ->
             {:allow, 1}
+
           false ->
-            # Another process inserted first, retry
+            # Another process inserted, retry the whole operation
             check_and_increment_rate_limit(limiter_key, limiter_config, current_time)
         end
-        
-      [{^bucket_key, count}] when count < limiter_config.limit ->
-        # Under limit - try to increment atomically
-        new_count = :ets.update_counter(:rate_limit_buckets, bucket_key, {2, 1})
-        if new_count <= limiter_config.limit do
-          {:allow, new_count}
-        else
-          # We went over - another process also incremented
-          # This is the race condition we're trying to minimize
-          # In worst case, we might go slightly over limit
-          {:deny, new_count}
-        end
-        
-      [{^bucket_key, count}] ->
-        # Already at or over limit
-        {:deny, count}
     end
   end
 

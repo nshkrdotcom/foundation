@@ -63,7 +63,7 @@ defmodule JidoSystem.Actions.ProcessTask do
 
     # Let unexpected exceptions crash - OTP supervisor will restart the process
     # Only catch specific, expected exceptions if needed in execute_task_logic
-    
+
     # Validate task parameters
     case validate_task_params(params) do
       :ok ->

@@ -169,6 +169,13 @@ defmodule JidoSystem.Agents.TaskAgent do
               current_count = updated_agent.state.error_count
               new_count = current_count + increment
 
+              # Emit telemetry for error count update
+              :telemetry.execute(
+                [:jido_system, :agent, :error_count_updated],
+                %{count: new_count, previous_count: current_count},
+                %{agent_id: agent.id}
+              )
+
               new_state_base = %{
                 updated_agent.state
                 | error_count: new_count,
@@ -290,18 +297,15 @@ defmodule JidoSystem.Agents.TaskAgent do
       # This is the correct way - business logic through actions, not supervision callbacks
       agent_pid = self()
 
-      Foundation.TaskHelper.spawn_supervised_safe(fn ->
-        # Let error processing complete
-        Process.sleep(100)
+      # NO SLEEP! Send the error count update immediately
+      instruction =
+        Jido.Instruction.new!(%{
+          action: JidoSystem.Actions.UpdateErrorCount,
+          params: %{increment: 1}
+        })
 
-        instruction =
-          Jido.Instruction.new!(%{
-            action: JidoSystem.Actions.UpdateErrorCount,
-            params: %{increment: 1}
-          })
-
-        Jido.Agent.Server.cast(agent_pid, instruction)
-      end)
+      # Use cast to process the instruction
+      Jido.Agent.Server.cast(agent_pid, instruction)
     end
 
     # on_error is for cleanup and telemetry only, not state mutations

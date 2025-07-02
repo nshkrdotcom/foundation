@@ -80,7 +80,7 @@ defmodule JidoSystem.Application do
       JidoFoundation.TaskPoolManager,
       JidoFoundation.SystemCommandManager,
       JidoFoundation.CoordinationManager,
-      
+
       # 5. Supervisors that use the managers
       JidoFoundation.MonitorSupervisor,
       JidoSystem.Supervisors.WorkflowSupervisor,
@@ -93,7 +93,8 @@ defmodule JidoSystem.Application do
     # FIXED: Use consistent supervision strategy for all environments
     # Tests should use Foundation.TestSupervisor for controlled crashes
     opts = [
-      strategy: :rest_for_one,  # CRITICAL: Dependencies respected!
+      # CRITICAL: Dependencies respected!
+      strategy: :rest_for_one,
       name: JidoSystem.Supervisor,
       max_restarts: 3,
       max_seconds: 5

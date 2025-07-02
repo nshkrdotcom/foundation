@@ -78,66 +78,73 @@ defmodule Foundation.ServiceIntegration.SignalCoordinator do
   def emit_signal_sync(_agent, signal, opts \\ []) do
     timeout = Keyword.get(opts, :timeout, 5000)
     _signal_bus = Keyword.get(opts, :bus, :foundation_signal_bus)
-    
+
     # Generate signal ID if not present
     signal_id = Map.get(signal, :id, generate_signal_id())
     signal_with_id = Map.put(signal, :id, signal_id)
-    
+
     start_time = System.monotonic_time()
-    
+
     # Use SignalRouter's synchronous API directly
-    result = case route_signal_sync(signal_with_id[:type] || signal_with_id[:event], 
-                                    signal_with_id, 
-                                    :foundation_signal_bus, 
-                                    timeout) do
-      {:ok, handlers_count} ->
-        routing_time = System.convert_time_unit(
-          System.monotonic_time() - start_time,
-          :native,
-          :millisecond
-        )
-        
-        {:ok, %{
-          signal_id: signal_id,
-          handlers_notified: handlers_count,
-          routing_time_ms: routing_time
-        }}
-        
-      {:error, reason} ->
-        {:error, {:signal_routing_failed, reason}}
-    end
-    
+    result =
+      case route_signal_sync(
+             signal_with_id[:type] || signal_with_id[:event],
+             signal_with_id,
+             :foundation_signal_bus,
+             timeout
+           ) do
+        {:ok, handlers_count} ->
+          routing_time =
+            System.convert_time_unit(
+              System.monotonic_time() - start_time,
+              :native,
+              :millisecond
+            )
+
+          {:ok,
+           %{
+             signal_id: signal_id,
+             handlers_notified: handlers_count,
+             routing_time_ms: routing_time
+           }}
+
+        {:error, reason} ->
+          {:error, {:signal_routing_failed, reason}}
+      end
+
     # Emit coordination telemetry (for observability only, not control flow)
     duration = System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
-    
+
     :telemetry.execute(
       [:foundation, :service_integration, :signal_coordination],
       %{duration: duration},
       %{result: elem(result, 0), signal_id: signal_id}
     )
-    
+
     result
   end
-  
+
   # Helper function to route signal synchronously via SignalRouter
   defp route_signal_sync(signal_type, signal, _signal_bus, timeout) do
     # Try to use JidoFoundation.SignalRouter directly
     case Process.whereis(JidoFoundation.SignalRouter) do
       nil ->
         {:error, :signal_router_not_available}
-        
+
       pid ->
         try do
           # Use GenServer.call for guaranteed synchronous routing
           measurements = %{timestamp: System.system_time()}
           metadata = signal
-          
+
           GenServer.call(pid, {:route_signal, signal_type, measurements, metadata}, timeout)
         catch
           :exit, {:timeout, _} ->
             {:error, {:routing_timeout, timeout}}
+
           :exit, {:noproc, _} ->
             {:error, :signal_router_died}
+
           kind, reason ->
             {:error, {:routing_error, {kind, reason}}}
         end
@@ -165,8 +172,10 @@ defmodule Foundation.ServiceIntegration.SignalCoordinator do
   def wait_for_signal_processing(signal_ids, _timeout \\ 5000) when is_list(signal_ids) do
     # This function is deprecated - telemetry should not be used for control flow
     # Instead, use emit_signal_sync for each signal if you need synchronous processing
-    Logger.warning("wait_for_signal_processing is deprecated. Use emit_signal_sync for synchronous signal routing.")
-    
+    Logger.warning(
+      "wait_for_signal_processing is deprecated. Use emit_signal_sync for synchronous signal routing."
+    )
+
     # For backward compatibility, just return success immediately
     # The signals should be processed asynchronously through normal routing
     {:ok, :all_signals_processed}
@@ -231,7 +240,7 @@ defmodule Foundation.ServiceIntegration.SignalCoordinator do
 
     # wait_for_signal_processing always returns {:ok, :all_signals_processed}
     {:ok, :all_signals_processed} = wait_for_signal_processing(signal_ids, timeout)
-    
+
     completed_session = %{
       session
       | active_signals: MapSet.new(),

@@ -1,0 +1,141 @@
+[warning] No coordination implementation configured. Foundation.Coordination functions will raise errors.
+[warning] No infrastructure implementation configured. Foundation.Infrastructure functions will raise errors.
+Running ExUnit with seed: 0, max_cases: 48
+Excluding tags: [:slow]
+
+..............................................................................
+
+  1) test RateLimiter race condition fix rate limiter correctly resets after window expires (Foundation.RaceConditionTest)
+     test/foundation/race_condition_test.exs:68
+     Assertion with == failed
+     code:  assert second_allowed == 5
+     left:  0
+     right: 5
+     stacktrace:
+       test/foundation/race_condition_test.exs:94: (test)
+
+.............[error] Task failed after all retries with RetryService
+.[error] Task processing failed
+...........[warning] Task validation failed
+........................................................................................[error] GenServer :"finch_-576460752303419325.Supervisor" terminating
+** (stop) killed
+Last message: {:EXIT, #PID<0.276.0>, :killed}
+...........................................***..................[warning] Serial operations tx_320_317548 failed: {:register_failed, "existing", :already_exists}. ETS changes NOT rolled back.
+....[warning] Serial operations tx_326_178305 failed: {:register_failed, "dead_agent", :process_not_alive}. ETS changes NOT rolled back.
+..[warning] Serial operations tx_337_473175 failed: {:register_failed, "invalid", {:missing_required_fields, [:capability, :health_status, :node, :resources]}}. ETS changes NOT rolled back.
+..[warning] Serial operations tx_340_57105 failed: {:register_failed, "existing", :already_exists}. ETS changes NOT rolled back.
+..[warning] Serial operations tx_343_765498 failed: {:register_failed, "existing", :already_exists}. ETS changes NOT rolled back.
+....[warning] Serial operations tx_349_4569 failed: {:register_failed, "dead_agent", :process_not_alive}. ETS changes NOT rolled back.
+..[warning] Serial operations tx_360_433104 failed: {:register_failed, "invalid", {:missing_required_fields, [:capability, :health_status, :node, :resources]}}. ETS changes NOT rolled back.
+..[warning] Serial operations tx_363_58080 failed: {:register_failed, "existing", :already_exists}. ETS changes NOT rolled back.
+...................[error] GenServer :TaskPool_general_Supervisor terminating
+** (stop) killed
+Last message: {:EXIT, #PID<0.302.0>, :killed}
+[error] GenServer :TaskPool_coordination_Supervisor terminating
+** (stop) killed
+Last message: {:EXIT, #PID<0.302.0>, :killed}
+[error] GenServer :TaskPool_distributed_computation_Supervisor terminating
+** (stop) killed
+Last message: {:EXIT, #PID<0.302.0>, :killed}
+[error] GenServer :TaskPool_monitoring_Supervisor terminating
+** (stop) killed
+Last message: {:EXIT, #PID<0.302.0>, :killed}
+[error] GenServer :TaskPool_agent_operations_Supervisor terminating
+** (stop) killed
+Last message: {:EXIT, #PID<0.302.0>, :killed}
+....Mount called! Storage: %{}
+No saved state found
+[error] Elixir.JidoSystem.Agents.FinalPersistenceDemoTest.SimplePersistentAgent server terminating
+
+Reason:
+** (ErlangError) Erlang error: :normal
+
+Stacktrace:
+
+
+
+Agent State:
+- ID: test123
+- Status: idle
+- Queue Size: 0
+- Mode: auto
+
+Mount called! Storage: %{"test123" => %{value: "persisted!"}}
+Restoring state: %{value: "persisted!"}
+[error] Elixir.JidoSystem.Agents.FinalPersistenceDemoTest.SimplePersistentAgent server terminating
+
+Reason:
+** (ErlangError) Erlang error: :normal
+
+Stacktrace:
+
+
+
+Agent State:
+- ID: test123
+- Status: idle
+- Queue Size: 0
+- Mode: auto
+
+.[error] Elixir.JidoSystem.Agents.FinalPersistenceDemoTest.InitialStateDemo server terminating
+
+Reason:
+** (ErlangError) Erlang error: :normal
+
+Stacktrace:
+
+
+
+Agent State:
+- ID: init1
+- Status: idle
+- Queue Size: 0
+- Mode: auto
+
+.[error] Elixir.JidoSystem.Agents.FinalPersistenceDemoTest.IncrementalPersistAgent server terminating
+
+Reason:
+** (ErlangError) Erlang error: :normal
+
+Stacktrace:
+
+
+
+Agent State:
+- ID: inc1
+- Status: idle
+- Queue Size: 0
+- Mode: auto
+
+...........[error] GenServer :TaskPool_distributed_computation_Supervisor terminating
+** (stop) killed
+Last message: {:EXIT, #PID<0.2950.0>, :killed}
+[error] GenServer :TaskPool_general_Supervisor terminating
+** (stop) killed
+Last message: {:EXIT, #PID<0.2950.0>, :killed}
+[error] GenServer :TaskPool_coordination_Supervisor terminating
+** (stop) killed
+Last message: {:EXIT, #PID<0.2950.0>, :killed}
+[error] GenServer :TaskPool_agent_operations_Supervisor terminating
+** (stop) killed
+Last message: {:EXIT, #PID<0.2950.0>, :killed}
+[error] GenServer :TaskPool_monitoring_Supervisor terminating
+** (stop) killed
+Last message: {:EXIT, #PID<0.2950.0>, :killed}
+...[error] GenServer :TaskPool_general_Supervisor terminating
+** (stop) killed
+Last message: {:EXIT, #PID<0.3054.0>, :killed}
+[error] GenServer :TaskPool_distributed_computation_Supervisor terminating
+** (stop) killed
+Last message: {:EXIT, #PID<0.3054.0>, :killed}
+[error] GenServer :TaskPool_coordination_Supervisor terminating
+** (stop) killed
+Last message: {:EXIT, #PID<0.3054.0>, :killed}
+[error] GenServer :TaskPool_monitoring_Supervisor terminating
+** (stop) killed
+Last message: {:EXIT, #PID<0.3054.0>, :killed}
+[error] GenServer :TaskPool_agent_operations_Supervisor terminating
+** (stop) killed
+Last message: {:EXIT, #PID<0.3054.0>, :killed}
+** (EXIT from #PID<0.95.0>) shutdown
+

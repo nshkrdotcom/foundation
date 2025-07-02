@@ -281,19 +281,21 @@ defmodule Foundation.ErrorHandler do
       end
     rescue
       exception ->
-        {:error, create_error(:system, exception, %{
-          message: Exception.message(exception),
-          stacktrace: __STACKTRACE__
-        })}
+        {:error,
+         create_error(:system, exception, %{
+           message: Exception.message(exception),
+           stacktrace: __STACKTRACE__
+         })}
     catch
       kind, reason ->
-        {:error, create_error(:system, {kind, reason}, %{
-          caught: kind,
-          stacktrace: __STACKTRACE__
-        })}
+        {:error,
+         create_error(:system, {kind, reason}, %{
+           caught: kind,
+           stacktrace: __STACKTRACE__
+         })}
     end
   end
-  
+
   @doc """
   Handles network-related errors specifically.
   Only catches expected network exceptions.
@@ -301,13 +303,40 @@ defmodule Foundation.ErrorHandler do
   def handle_network_error(fun) when is_function(fun, 0) do
     fun.()
   rescue
-    error in [Mint.HTTPError, Finch.Error, :hackney_error] ->
-      {:error, create_error(:transient, error, %{
-        type: :network_error,
-        message: Exception.message(error)
-      })}
+    error ->
+      # Check if the error is a known network error type
+      if is_network_error?(error) do
+        {:error,
+         create_error(:transient, error, %{
+           type: :network_error,
+           message: Exception.message(error)
+         })}
+      else
+        # Re-raise if not a network error
+        reraise error, __STACKTRACE__
+      end
   end
-  
+
+  # Helper function to check network errors without compile-time dependencies
+  defp is_network_error?(error) do
+    case error do
+      %{__struct__: module} ->
+        # Check for common network error modules dynamically
+        module_name = Module.split(module) |> List.last()
+
+        module_name in ["HTTPError", "Error"] or
+          module == :hackney_error or
+          (Code.ensure_loaded?(Mint.HTTPError) and module == Mint.HTTPError) or
+          (Code.ensure_loaded?(Finch.Error) and module == Finch.Error)
+
+      {:error, _} ->
+        true
+
+      _ ->
+        false
+    end
+  end
+
   @doc """
   Handles database-related errors specifically.
   Only catches expected database exceptions.
@@ -315,13 +344,38 @@ defmodule Foundation.ErrorHandler do
   def handle_database_error(fun) when is_function(fun, 0) do
     fun.()
   rescue
-    error in [DBConnection.ConnectionError, Postgrex.Error] ->
-      {:error, create_error(:transient, error, %{
-        type: :database_error,
-        message: Exception.message(error)
-      })}
+    error ->
+      # Check if the error is a known database error type
+      if is_database_error?(error) do
+        {:error,
+         create_error(:transient, error, %{
+           type: :database_error,
+           message: Exception.message(error)
+         })}
+      else
+        # Re-raise if not a database error
+        reraise error, __STACKTRACE__
+      end
   end
-  
+
+  # Helper function to check database errors without compile-time dependencies
+  defp is_database_error?(error) do
+    case error do
+      %{__struct__: module} ->
+        # Check for common database error modules dynamically
+        module_name = Module.split(module) |> List.last()
+
+        module_name in ["ConnectionError", "Error", "CastError"] or
+          (Code.ensure_loaded?(DBConnection.ConnectionError) and
+             module == DBConnection.ConnectionError) or
+          (Code.ensure_loaded?(Postgrex.Error) and module == Postgrex.Error) or
+          (Code.ensure_loaded?(Ecto.Query.CastError) and module == Ecto.Query.CastError)
+
+      _ ->
+        false
+    end
+  end
+
   @doc """
   Handles validation errors specifically.
   These are usually permanent errors that won't succeed on retry.
@@ -330,10 +384,11 @@ defmodule Foundation.ErrorHandler do
     fun.()
   rescue
     error in [ArgumentError, FunctionClauseError] ->
-      {:error, create_error(:validation, error, %{
-        type: :validation_error,
-        message: Exception.message(error)
-      })}
+      {:error,
+       create_error(:validation, error, %{
+         type: :validation_error,
+         message: Exception.message(error)
+       })}
   end
 
   defp increment_retry_count(%Error{} = error) do

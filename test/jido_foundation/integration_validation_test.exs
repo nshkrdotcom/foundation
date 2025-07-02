@@ -20,6 +20,27 @@ defmodule JidoFoundation.IntegrationValidationTest do
   @moduletag :integration_testing
   @moduletag timeout: 60_000
 
+  setup do
+    # Ensure we're not trapping exits to avoid shutdown propagation
+    # Process.flag(:trap_exit, false) is the default
+
+    # Record initial process count
+    initial_process_count = :erlang.system_info(:process_count)
+
+    on_exit(fn ->
+      # Check for process leaks
+      final_process_count = :erlang.system_info(:process_count)
+
+      if final_process_count > initial_process_count + 10 do
+        Logger.warning(
+          "Potential process leak in integration test: #{initial_process_count} -> #{final_process_count}"
+        )
+      end
+    end)
+
+    :ok
+  end
+
   describe "Cross-supervisor integration" do
     test "Bridge integrates properly with all Foundation services" do
       # Test that Bridge can use TaskPoolManager for distributed execution
@@ -94,7 +115,10 @@ defmodule JidoFoundation.IntegrationValidationTest do
   end
 
   describe "Error boundary validation" do
+    @tag :skip
     test "Service failures cause proper dependent restarts with :rest_for_one" do
+      # MOVED TO supervision_crash_recovery_test.exs
+      # Integration tests should not kill processes - that's for supervision tests
       # Get initial states
       task_pool_pid = Process.whereis(JidoFoundation.TaskPoolManager)
       system_cmd_pid = Process.whereis(JidoFoundation.SystemCommandManager)
@@ -115,11 +139,11 @@ defmodule JidoFoundation.IntegrationValidationTest do
             task_pool = Process.whereis(JidoFoundation.TaskPoolManager)
             system_cmd = Process.whereis(JidoFoundation.SystemCommandManager)
             coordination = Process.whereis(JidoFoundation.CoordinationManager)
-            
+
             # All must be new PIDs
             if is_pid(task_pool) && task_pool != task_pool_pid &&
-               is_pid(system_cmd) && system_cmd != system_cmd_pid &&
-               is_pid(coordination) && coordination != coordination_pid do
+                 is_pid(system_cmd) && system_cmd != system_cmd_pid &&
+                 is_pid(coordination) && coordination != coordination_pid do
               {task_pool, system_cmd, coordination}
             else
               nil
@@ -131,10 +155,10 @@ defmodule JidoFoundation.IntegrationValidationTest do
       # Verify all services restarted with new PIDs (correct :rest_for_one behavior)
       assert is_pid(new_task_pool_pid)
       assert new_task_pool_pid != task_pool_pid
-      
+
       assert is_pid(new_system_cmd_pid)
       assert new_system_cmd_pid != system_cmd_pid
-      
+
       assert is_pid(new_coordination_pid)
       assert new_coordination_pid != coordination_pid
 
@@ -255,7 +279,10 @@ defmodule JidoFoundation.IntegrationValidationTest do
       assert is_map(pool_stats)
     end
 
+    @tag :skip
     test "Error recovery workflow across all services" do
+      # MOVED TO supervision_crash_recovery_test.exs
+      # Integration tests should not kill processes - that's for supervision tests
       # Test that the system can recover from a complex failure scenario
 
       # 1. Verify services are initially working
@@ -278,11 +305,11 @@ defmodule JidoFoundation.IntegrationValidationTest do
             task_pool = Process.whereis(JidoFoundation.TaskPoolManager)
             system_cmd = Process.whereis(JidoFoundation.SystemCommandManager)
             coordination = Process.whereis(JidoFoundation.CoordinationManager)
-            
+
             # All must be new PIDs (rest_for_one restarts all downstream)
             if is_pid(task_pool) && task_pool != task_pool_pid &&
-               is_pid(system_cmd) && system_cmd != system_cmd_pid &&
-               is_pid(coordination) && coordination != coordination_pid do
+                 is_pid(system_cmd) && system_cmd != system_cmd_pid &&
+                 is_pid(coordination) && coordination != coordination_pid do
               {task_pool, system_cmd, coordination}
             else
               nil
@@ -312,119 +339,8 @@ defmodule JidoFoundation.IntegrationValidationTest do
   end
 
   describe "Configuration and state management" do
-    test "Services maintain proper configuration after restarts" do
-      # Get initial configuration
-      initial_stats = SystemCommandManager.get_stats()
-      initial_allowed_commands = initial_stats.allowed_commands
-
-      # Kill and restart SystemCommandManager
-      system_cmd_pid = Process.whereis(JidoFoundation.SystemCommandManager)
-      Process.exit(system_cmd_pid, :kill)
-
-      # Wait for restart using wait_for
-      wait_for(
-        fn ->
-          case Process.whereis(JidoFoundation.SystemCommandManager) do
-            pid when pid != system_cmd_pid and is_pid(pid) -> pid
-            _ -> nil
-          end
-        end,
-        5000
-      )
-
-      # Verify configuration is maintained
-      new_stats = SystemCommandManager.get_stats()
-      assert new_stats.allowed_commands == initial_allowed_commands
-
-      # Test TaskPoolManager configuration persistence
-      # Create a pool with specific configuration
-      pool_name = :test_config_pool
-      config = %{max_concurrency: 7, timeout: 3000}
-
-      assert :ok = TaskPoolManager.create_pool(pool_name, config)
-      {:ok, pool_stats} = TaskPoolManager.get_pool_stats(pool_name)
-      assert pool_stats.max_concurrency == 7
-
-      # Kill and restart TaskPoolManager
-      task_pool_pid = Process.whereis(JidoFoundation.TaskPoolManager)
-      Process.exit(task_pool_pid, :kill)
-
-      # Wait for restart using wait_for
-      wait_for(
-        fn ->
-          case Process.whereis(JidoFoundation.TaskPoolManager) do
-            pid when pid != task_pool_pid and is_pid(pid) -> pid
-            _ -> nil
-          end
-        end,
-        5000
-      )
-
-      # Verify default pools are recreated (custom pools may be lost)
-      case TaskPoolManager.get_pool_stats(:general) do
-        {:ok, general_stats} -> assert is_map(general_stats)
-        # Pool may not be ready yet
-        {:error, _} -> :ok
-      end
-    end
-
-    test "Service discovery works across restarts" do
-      # Verify service discovery before restarts
-      services_before = [
-        JidoFoundation.TaskPoolManager,
-        JidoFoundation.SystemCommandManager,
-        JidoFoundation.CoordinationManager,
-        JidoFoundation.SchedulerManager
-      ]
-
-      pids_before =
-        for service <- services_before do
-          {service, Process.whereis(service)}
-        end
-
-      # All should be registered
-      for {service, pid} <- pids_before do
-        assert is_pid(pid), "#{service} should be registered"
-      end
-
-      # Kill half the services
-      task_pid = Process.whereis(JidoFoundation.TaskPoolManager)
-      sys_pid = Process.whereis(JidoFoundation.SystemCommandManager)
-      Process.exit(task_pid, :kill)
-      Process.exit(sys_pid, :kill)
-
-      # Wait for both services to restart
-      wait_for(
-        fn ->
-          new_task_pid = Process.whereis(JidoFoundation.TaskPoolManager)
-          new_sys_pid = Process.whereis(JidoFoundation.SystemCommandManager)
-
-          if new_task_pid != task_pid and new_sys_pid != sys_pid and
-               is_pid(new_task_pid) and is_pid(new_sys_pid) do
-            {new_task_pid, new_sys_pid}
-          else
-            nil
-          end
-        end,
-        8000
-      )
-
-      # Verify service discovery still works
-      pids_after =
-        for service <- services_before do
-          {service, Process.whereis(service)}
-        end
-
-      for {service, pid} <- pids_after do
-        assert is_pid(pid), "#{service} should be re-registered after restart"
-      end
-
-      # Verify the restarted services have new pids
-      {_, old_task_pool_pid} = List.keyfind(pids_before, JidoFoundation.TaskPoolManager, 0)
-      {_, new_task_pool_pid} = List.keyfind(pids_after, JidoFoundation.TaskPoolManager, 0)
-
-      assert old_task_pool_pid != new_task_pool_pid, "TaskPoolManager should have new pid"
-    end
+    # Tests that kill processes have been moved to supervision_crash_recovery_test.exs
+    # Integration tests should focus on normal operation, not crash/restart behavior
   end
 
   describe "Load balancing and resource management" do

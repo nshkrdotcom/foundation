@@ -42,23 +42,25 @@ defmodule JidoSystem.Agents.PersistentFoundationAgent do
         if @persistent_fields != [] do
           agent_id = server_state.agent.id
           Logger.info("Restoring persistent state for agent #{agent_id}")
-          
+
           # StatePersistence already handles defaults!
           persisted_state = load_persisted_state(agent_id)
-          
+
           # Simple merge, no complex logic
-          updated_agent = update_in(
-            server_state.agent.state, 
-            &Map.merge(&1, persisted_state)
-          )
-          
+          updated_agent =
+            update_in(
+              server_state.agent.state,
+              &Map.merge(&1, persisted_state)
+            )
+
           # Call hook for custom deserialization
-          final_agent = if function_exported?(__MODULE__, :on_after_load, 1) do
-            __MODULE__.on_after_load(updated_agent)
-          else
-            updated_agent
-          end
-          
+          final_agent =
+            if function_exported?(__MODULE__, :on_after_load, 1) do
+              __MODULE__.on_after_load(updated_agent)
+            else
+              updated_agent
+            end
+
           {:ok, %{server_state | agent: final_agent}}
         else
           {:ok, server_state}
@@ -99,12 +101,13 @@ defmodule JidoSystem.Agents.PersistentFoundationAgent do
 
       defp persist_state(agent) do
         # Call hook for custom serialization
-        agent_to_save = if function_exported?(__MODULE__, :on_before_save, 1) do
-          __MODULE__.on_before_save(agent)
-        else
-          agent
-        end
-        
+        agent_to_save =
+          if function_exported?(__MODULE__, :on_before_save, 1) do
+            __MODULE__.on_before_save(agent)
+          else
+            agent
+          end
+
         state_to_persist = Map.take(agent_to_save.state, @persistent_fields)
 
         cond do

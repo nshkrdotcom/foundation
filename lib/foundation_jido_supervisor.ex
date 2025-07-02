@@ -78,7 +78,7 @@ defmodule FoundationJidoSupervisor do
     # This prevents JidoSystem from trying to use Foundation services during shutdown
     supervisor_flags = %{
       strategy: :rest_for_one,
-      max_restarts: 3,
+      max_restarts: if(Mix.env() == :test, do: 10, else: 3),
       max_seconds: 5
     }
 

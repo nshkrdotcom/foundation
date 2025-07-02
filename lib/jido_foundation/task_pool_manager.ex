@@ -367,6 +367,44 @@ defmodule JidoFoundation.TaskPoolManager do
     {:noreply, state}
   end
 
+  def handle_info({:EXIT, pid, reason}, state) do
+    # Handle EXIT messages from linked processes
+    # Check if it's one of our pool supervisors
+    case find_pool_by_supervisor_pid(state.pools, pid) do
+      {pool_name, pool_info} ->
+        Logger.warning("Task pool supervisor #{pool_name} exited: #{inspect(reason)}")
+
+        # Remove the dead pool from state
+        new_pools = Map.delete(state.pools, pool_name)
+        new_state = %{state | pools: new_pools}
+
+        # Optionally restart the pool if it wasn't a normal shutdown
+        case reason do
+          :normal ->
+            {:noreply, new_state}
+
+          :shutdown ->
+            {:noreply, new_state}
+
+          _ ->
+            # Restart the pool
+            case start_pool_supervisor(pool_name, pool_info.config) do
+              {:ok, new_supervisor_pid} ->
+                new_pool_info = %{pool_info | supervisor_pid: new_supervisor_pid}
+                new_pools = Map.put(new_state.pools, pool_name, new_pool_info)
+                {:noreply, %{new_state | pools: new_pools}}
+
+              {:error, _} ->
+                {:noreply, new_state}
+            end
+        end
+
+      nil ->
+        # Not one of our supervisors, ignore
+        {:noreply, state}
+    end
+  end
+
   def handle_info(_msg, state) do
     {:noreply, state}
   end
@@ -390,6 +428,12 @@ defmodule JidoFoundation.TaskPoolManager do
 
   # Private helper functions
 
+  defp find_pool_by_supervisor_pid(pools, pid) do
+    Enum.find(pools, fn {_name, pool_info} ->
+      pool_info.supervisor_pid == pid
+    end)
+  end
+
   defp start_pool_supervisor(pool_name, _config) do
     supervisor_name = :"TaskPool_#{pool_name}_Supervisor"
 
@@ -406,10 +450,19 @@ defmodule JidoFoundation.TaskPoolManager do
         end
     end
 
-    DynamicSupervisor.start_link(
-      strategy: :one_for_one,
-      name: supervisor_name
-    )
+    # Start the supervisor without linking to avoid EXIT signal propagation
+    case DynamicSupervisor.start_link(
+           strategy: :one_for_one,
+           name: supervisor_name
+         ) do
+      {:ok, pid} ->
+        # Unlink immediately to prevent EXIT propagation when TaskPoolManager dies
+        Process.unlink(pid)
+        {:ok, pid}
+
+      error ->
+        error
+    end
     |> case do
       {:ok, supervisor_pid} ->
         # Start the actual Task.Supervisor under the DynamicSupervisor
