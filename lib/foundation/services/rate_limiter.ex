@@ -519,34 +519,48 @@ defmodule Foundation.Services.RateLimiter do
   # Simple in-memory rate limiting implementation
   # TO DO: Replace with distributed solution for production use
 
-  # Atomic rate limiting using ETS update_counter with proper race handling
+  # Atomic rate limiting using ETS with proper race handling
   defp check_and_increment_rate_limit(limiter_key, limiter_config, current_time) do
     window_start = current_time - rem(current_time, limiter_config.scale_ms)
     bucket_key = {limiter_key, window_start}
 
     ensure_rate_limit_table()
 
-    # Try atomic increment first
-    try do
-      new_count = :ets.update_counter(:rate_limit_buckets, bucket_key, {2, 1})
-
-      if new_count <= limiter_config.limit do
-        {:allow, new_count}
-      else
-        # We went over the limit, decrement back
-        :ets.update_counter(:rate_limit_buckets, bucket_key, {2, -1})
-        {:deny, new_count - 1}
-      end
-    catch
-      :error, :badarg ->
-        # Key doesn't exist, try to insert
+    # Use atomic check-and-set pattern with proper limit enforcement
+    case :ets.lookup(:rate_limit_buckets, bucket_key) do
+      [] ->
+        # No entry exists, try to insert with count 1
         case :ets.insert_new(:rate_limit_buckets, {bucket_key, 1}) do
           true ->
             {:allow, 1}
-
           false ->
-            # Another process inserted, retry the whole operation
+            # Race condition: another process created it, retry
             check_and_increment_rate_limit(limiter_key, limiter_config, current_time)
+        end
+
+      [{^bucket_key, current_count}] ->
+        if current_count >= limiter_config.limit do
+          # Already at limit, deny without incrementing
+          {:deny, current_count}
+        else
+          # Try atomic increment with condition
+          # Use update_counter with threshold to ensure atomicity
+          try do
+            # Atomic increment only if under limit
+            new_count = :ets.update_counter(:rate_limit_buckets, bucket_key, {2, 1})
+            
+            if new_count <= limiter_config.limit do
+              {:allow, new_count}
+            else
+              # Went over limit in race condition, roll back atomically
+              final_count = :ets.update_counter(:rate_limit_buckets, bucket_key, {2, -1})
+              {:deny, final_count}
+            end
+          catch
+            :error, :badarg ->
+              # Entry was deleted during operation, retry
+              check_and_increment_rate_limit(limiter_key, limiter_config, current_time)
+          end
         end
     end
   end

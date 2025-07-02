@@ -214,6 +214,11 @@ defmodule Foundation.TestServices do
       {:reply, stats, %{state | commands_executed: state.commands_executed + 1}}
     end
 
+    def handle_call(:get_load_average, _from, state) do
+      # Test service returns :ok instead of actual load average
+      {:reply, :ok, %{state | commands_executed: state.commands_executed + 1}}
+    end
+
     def handle_call(_msg, _from, state) do
       {:reply, :ok, %{state | commands_executed: state.commands_executed + 1}}
     end
