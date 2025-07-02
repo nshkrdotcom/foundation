@@ -253,8 +253,8 @@ defmodule JidoFoundation.Bridge.AgentManager do
   defp extract_registry(opts) do
     case {Keyword.get(opts, :registry), Keyword.get(opts, :supervision_tree)} do
       {nil, %{registry: registry}} -> registry
-      {registry, _} -> registry
-      {nil, nil} -> nil
+      {registry, _} when registry != nil -> registry
+      _ -> nil
     end
   end
 

@@ -107,5 +107,9 @@
   ~r/deps\/jido\//,
   
   # FoundationJidoSupervisor - Dialyzer doesn't understand our supervisor init format
-  {"lib/foundation_jido_supervisor.ex", :callback_type_mismatch}
+  {"lib/foundation_jido_supervisor.ex", :callback_type_mismatch},
+  
+  # Credo custom checks - Dialyzer has issues with conditional Credo API usage
+  {"lib/foundation/credo_checks/no_raw_send.ex", :callback_info_missing},
+  {"lib/foundation/credo_checks/no_raw_send.ex", :unknown_function}
 ]

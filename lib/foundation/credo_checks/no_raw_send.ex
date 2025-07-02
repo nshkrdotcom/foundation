@@ -1,12 +1,13 @@
-if Code.ensure_loaded?(Credo.Check) do
-  defmodule Foundation.CredoChecks.NoRawSend do
-    @moduledoc """
-    Custom Credo check to ban raw send/2 usage.
+defmodule Foundation.CredoChecks.NoRawSend do
+  @moduledoc """
+  Custom Credo check to ban raw send/2 usage.
 
-    Raw send/2 provides no delivery guarantees and can lead to silent message loss.
-    Use GenServer.call/cast or monitored sends for critical communication.
-    """
+  Raw send/2 provides no delivery guarantees and can lead to silent message loss.
+  Use GenServer.call/cast or monitored sends for critical communication.
+  """
 
+  # Define empty module if Credo is not available
+  if Code.ensure_loaded?(Credo.Check) do
     use Credo.Check,
       base_priority: :high,
       category: :warning,
@@ -33,10 +34,11 @@ if Code.ensure_loaded?(Credo.Check) do
       ]
 
     @doc false
-    def run(source_file, params) do
-      issue_meta = Credo.IssueMeta.for(source_file, params)
+    def run(%Credo.SourceFile{} = source_file, params) do
+      issue_meta = IssueMeta.for(source_file, params)
 
-      Credo.Code.prewalk(source_file, &traverse(&1, &2, issue_meta))
+      source_file
+      |> Credo.Code.prewalk(&traverse(&1, &2, issue_meta))
     end
 
     defp traverse({:send, meta, [_target, _message]} = ast, issues, issue_meta) do
@@ -77,14 +79,8 @@ if Code.ensure_loaded?(Credo.Check) do
 
       Enum.any?(allowed_modules, &String.ends_with?(filename, &1))
     end
-  end
-else
-  # Credo not available, define empty module
-  defmodule Foundation.CredoChecks.NoRawSend do
-    @moduledoc """
-    Custom Credo check to ban raw send/2 usage.
-
-    Note: Credo is not available, so this check is disabled.
-    """
+  else
+    @doc false
+    def run(_source_file, _params), do: []
   end
 end
