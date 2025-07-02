@@ -24,7 +24,31 @@ defmodule JidoFoundation.IntegrationValidationTest do
     # Ensure we're not trapping exits to avoid shutdown propagation
     # Process.flag(:trap_exit, false) is the default
 
-    # Record initial process count
+    # CRITICAL: Wait for JidoFoundation services to be available after supervision changes
+    services = [
+      JidoFoundation.TaskPoolManager,
+      JidoFoundation.SystemCommandManager,
+      JidoFoundation.CoordinationManager,
+      JidoFoundation.SchedulerManager
+    ]
+
+    # Wait for all services to be properly registered and stable
+    for service <- services do
+      wait_for(
+        fn ->
+          case Process.whereis(service) do
+            pid when is_pid(pid) ->
+              if Process.alive?(pid), do: pid, else: nil
+
+            _ ->
+              nil
+          end
+        end,
+        5000
+      )
+    end
+
+    # Record initial process count after services are stable
     initial_process_count = :erlang.system_info(:process_count)
 
     on_exit(fn ->

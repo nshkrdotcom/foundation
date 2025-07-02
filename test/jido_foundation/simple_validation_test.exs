@@ -11,7 +11,33 @@ defmodule JidoFoundation.SimpleValidationTest do
 
   alias JidoFoundation.{TaskPoolManager, SystemCommandManager}
 
-  # Remove broken setup that causes infinite waits
+  setup do
+    # CRITICAL: Wait for JidoFoundation services to be available after supervision changes
+    services = [
+      JidoFoundation.TaskPoolManager,
+      JidoFoundation.SystemCommandManager,
+      JidoFoundation.CoordinationManager,
+      JidoFoundation.SchedulerManager
+    ]
+
+    # Wait for all services to be properly registered and stable
+    for service <- services do
+      wait_for(
+        fn ->
+          case Process.whereis(service) do
+            pid when is_pid(pid) ->
+              if Process.alive?(pid), do: pid, else: nil
+
+            _ ->
+              nil
+          end
+        end,
+        5000
+      )
+    end
+
+    :ok
+  end
 
   describe "Basic service availability" do
     test "All Foundation services are running and registered" do

@@ -118,7 +118,7 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
   end
 
   describe "JidoFoundation.TaskPoolManager crash recovery - MIGRATED TO ISOLATED SUPERVISION" do
-    test "TaskPoolManager restarts after crash and maintains functionality", 
+    test "TaskPoolManager restarts after crash and maintains functionality",
          %{supervision_tree: sup_tree} do
       # Get service from isolated supervision tree
       {:ok, initial_pid} = get_service(sup_tree, :task_pool_manager)
@@ -162,31 +162,35 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
       end
     end
 
-    test "TaskPoolManager survives pool supervisor crashes", 
+    test "TaskPoolManager survives pool supervisor crashes",
          %{supervision_tree: sup_tree} do
       {:ok, manager_pid} = get_service(sup_tree, :task_pool_manager)
       assert is_pid(manager_pid)
 
       # Create a test pool using isolated service calls
-      assert :ok = ServiceDiscovery.call_service(sup_tree, TaskPoolManager, :create_pool, [
-        :test_crash_pool, 
-        %{max_concurrency: 2, timeout: 5000}
-      ])
+      assert :ok =
+               ServiceDiscovery.call_service(sup_tree, TaskPoolManager, :create_pool, [
+                 :test_crash_pool,
+                 %{max_concurrency: 2, timeout: 5000}
+               ])
 
       # Get pool stats to verify it's working
-      {:ok, stats} = ServiceDiscovery.call_service(sup_tree, TaskPoolManager, :get_pool_stats, [:test_crash_pool])
+      {:ok, stats} =
+        ServiceDiscovery.call_service(sup_tree, TaskPoolManager, :get_pool_stats, [:test_crash_pool])
+
       assert stats.max_concurrency == 2
 
       # Test the pool with a simple batch operation instead of individual tasks
-      {:ok, stream} = ServiceDiscovery.call_service(sup_tree, TaskPoolManager, :execute_batch, [
-        :test_crash_pool,
-        [1, 2, 3],
-        fn i ->
-          # Just compute result
-          i * 10
-        end,
-        timeout: 2000
-      ])
+      {:ok, stream} =
+        ServiceDiscovery.call_service(sup_tree, TaskPoolManager, :execute_batch, [
+          :test_crash_pool,
+          [1, 2, 3],
+          fn i ->
+            # Just compute result
+            i * 10
+          end,
+          timeout: 2000
+        ])
 
       results = Enum.to_list(stream)
 
@@ -200,13 +204,16 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
 
       # Verify TaskPoolManager is still alive and functional
       assert Process.alive?(manager_pid)
-      {:ok, final_stats} = ServiceDiscovery.call_service(sup_tree, TaskPoolManager, :get_pool_stats, [:test_crash_pool])
+
+      {:ok, final_stats} =
+        ServiceDiscovery.call_service(sup_tree, TaskPoolManager, :get_pool_stats, [:test_crash_pool])
+
       assert is_map(final_stats)
     end
   end
 
   describe "JidoFoundation.SystemCommandManager crash recovery - MIGRATED TO ISOLATED SUPERVISION" do
-    test "SystemCommandManager restarts after crash and maintains functionality", 
+    test "SystemCommandManager restarts after crash and maintains functionality",
          %{supervision_tree: sup_tree} do
       {:ok, initial_pid} = get_service(sup_tree, :system_command_manager)
       assert is_pid(initial_pid), "SystemCommandManager should be running"
@@ -224,7 +231,8 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
       Process.exit(initial_pid, :kill)
 
       # Wait for service restart using isolated supervision helper
-      {:ok, new_pid} = wait_for_service_restart(sup_tree, :system_command_manager, initial_pid, 5000)
+      {:ok, new_pid} =
+        wait_for_service_restart(sup_tree, :system_command_manager, initial_pid, 5000)
 
       # Verify restart
       assert is_pid(new_pid)
@@ -244,15 +252,22 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
       assert stats.commands_executed >= 0
     end
 
-    test "SystemCommandManager handles command execution failures gracefully", 
+    test "SystemCommandManager handles command execution failures gracefully",
          %{supervision_tree: sup_tree} do
       # Test with invalid command (should be rejected by allowed commands list)
       # Test service may have simplified interface, so accept multiple return values
-      result = ServiceDiscovery.call_service(sup_tree, SystemCommandManager, :execute_command, ["invalid_command", []])
+      result =
+        ServiceDiscovery.call_service(sup_tree, SystemCommandManager, :execute_command, [
+          "invalid_command",
+          []
+        ])
+
       case result do
         {:error, {:command_not_allowed, "invalid_command"}} -> :ok
-        {:error, _} -> :ok  # Any error is acceptable for invalid command
-        :ok -> :ok  # Test service may return :ok instead of error
+        # Any error is acceptable for invalid command
+        {:error, _} -> :ok
+        # Test service may return :ok instead of error
+        :ok -> :ok
       end
 
       # Verify manager is still functional
@@ -272,7 +287,7 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
   # ============================================================================
   # NON-MIGRATED TESTS - Still using global supervision (original implementation)
   # ============================================================================
-  
+
   describe "JidoFoundation.CoordinationManager crash recovery" do
     test "CoordinationManager restarts after crash and maintains functionality" do
       initial_pid = ensure_service_running(JidoFoundation.CoordinationManager)
@@ -333,7 +348,7 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
   end
 
   describe "Cross-supervisor crash recovery - MIGRATED TO ISOLATED SUPERVISION" do
-    test "JidoSystem supervisor children restart independently", 
+    test "JidoSystem supervisor children restart independently",
          %{supervision_tree: sup_tree} do
       # Get supervision context stats from isolated tree
       stats = Foundation.SupervisionTestSetup.get_supervision_stats(sup_tree)
@@ -346,7 +361,7 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
 
       # Verify other services are running in isolation
       {:ok, sys_cmd_pid} = get_service(sup_tree, :system_command_manager)
-      {:ok, coord_pid} = get_service(sup_tree, :coordination_manager) 
+      {:ok, coord_pid} = get_service(sup_tree, :coordination_manager)
       {:ok, sched_pid} = get_service(sup_tree, :scheduler_manager)
 
       assert is_pid(sys_cmd_pid)
@@ -357,7 +372,8 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
       Process.exit(task_pool_pid, :kill)
 
       # Wait for restart using isolated supervision helper
-      {:ok, new_task_pool_pid} = wait_for_service_restart(sup_tree, :task_pool_manager, task_pool_pid, 5000)
+      {:ok, new_task_pool_pid} =
+        wait_for_service_restart(sup_tree, :task_pool_manager, task_pool_pid, 5000)
 
       # Verify it restarted with new pid
       assert is_pid(new_task_pool_pid)
@@ -414,17 +430,23 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
       assert_receive {:DOWN, ^sched_ref, :process, ^scheduler_pid, :killed}, 2000
 
       # Wait for all services to restart in isolated environment
-      {:ok, new_task_pool_pid} = wait_for_service_restart(sup_tree, :task_pool_manager, task_pool_pid, 8000)
-      {:ok, new_system_cmd_pid} = wait_for_service_restart(sup_tree, :system_command_manager, system_cmd_pid, 8000)
-      {:ok, new_scheduler_pid} = wait_for_service_restart(sup_tree, :scheduler_manager, scheduler_pid, 8000)
+      {:ok, new_task_pool_pid} =
+        wait_for_service_restart(sup_tree, :task_pool_manager, task_pool_pid, 8000)
+
+      {:ok, new_system_cmd_pid} =
+        wait_for_service_restart(sup_tree, :system_command_manager, system_cmd_pid, 8000)
+
+      {:ok, new_scheduler_pid} =
+        wait_for_service_restart(sup_tree, :scheduler_manager, scheduler_pid, 8000)
 
       # Verify all services restarted with new PIDs
       assert new_task_pool_pid != task_pool_pid
-      assert new_system_cmd_pid != system_cmd_pid  
+      assert new_system_cmd_pid != system_cmd_pid
       assert new_scheduler_pid != scheduler_pid
 
       # Verify functionality is restored in isolated environment
       stats = call_service(sup_tree, :task_pool_manager, :get_all_stats)
+
       case stats do
         {:ok, _stats} -> :ok
         stats when is_map(stats) -> :ok
@@ -791,8 +813,12 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
 
       # Wait for services to restart
       {:ok, new_task_pid} = wait_for_service_restart(sup_tree, :task_pool_manager, task_pid, 5000)
-      {:ok, new_sys_pid} = wait_for_service_restart(sup_tree, :system_command_manager, sys_pid, 5000)
-      {:ok, new_coord_pid} = wait_for_service_restart(sup_tree, :coordination_manager, coord_pid, 5000)
+
+      {:ok, new_sys_pid} =
+        wait_for_service_restart(sup_tree, :system_command_manager, sys_pid, 5000)
+
+      {:ok, new_coord_pid} =
+        wait_for_service_restart(sup_tree, :coordination_manager, coord_pid, 5000)
 
       # Verify services are functioning after restart in isolated environment
       assert is_pid(new_task_pid)
@@ -856,9 +882,14 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
       assert reason3 in [:shutdown, :killed]
 
       # 3. Wait for all dependent services to restart in isolated environment
-      {:ok, new_task_pool_pid} = wait_for_service_restart(sup_tree, :task_pool_manager, task_pool_pid, 8000)
-      {:ok, new_system_cmd_pid} = wait_for_service_restart(sup_tree, :system_command_manager, system_cmd_pid, 8000)
-      {:ok, new_coordination_pid} = wait_for_service_restart(sup_tree, :coordination_manager, coordination_pid, 8000)
+      {:ok, new_task_pool_pid} =
+        wait_for_service_restart(sup_tree, :task_pool_manager, task_pool_pid, 8000)
+
+      {:ok, new_system_cmd_pid} =
+        wait_for_service_restart(sup_tree, :system_command_manager, system_cmd_pid, 8000)
+
+      {:ok, new_coordination_pid} =
+        wait_for_service_restart(sup_tree, :coordination_manager, coordination_pid, 8000)
 
       # Verify all have new PIDs (rest_for_one restarts all downstream)
       assert new_task_pool_pid != task_pool_pid
