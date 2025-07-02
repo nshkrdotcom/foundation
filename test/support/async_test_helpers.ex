@@ -137,7 +137,7 @@ defmodule Foundation.AsyncTestHelpers do
   def wait_for_events(event_specs, timeout \\ 5000) do
     parent = self()
     collectors = start_event_collectors(event_specs, parent, timeout)
-    
+
     try do
       wait_for_all_events(collectors, timeout)
     after
@@ -147,28 +147,31 @@ defmodule Foundation.AsyncTestHelpers do
 
   defp start_event_collectors(event_specs, parent, timeout) do
     Enum.map(event_specs, fn {name, pattern} ->
-      collector_pid = spawn_link(fn ->
-        receive do
-          ^pattern -> send(parent, {:event_received, name})
-          msg when elem(msg, 0) == elem(pattern, 0) -> 
-            send(parent, {:event_received, name})
-        after
-          timeout -> send(parent, {:event_timeout, name})
-        end
-      end)
-      
+      collector_pid =
+        spawn_link(fn ->
+          receive do
+            ^pattern ->
+              send(parent, {:event_received, name})
+
+            msg when elem(msg, 0) == elem(pattern, 0) ->
+              send(parent, {:event_received, name})
+          after
+            timeout -> send(parent, {:event_timeout, name})
+          end
+        end)
+
       {name, collector_pid}
     end)
   end
 
   defp wait_for_all_events([], _timeout), do: :ok
-  
+
   defp wait_for_all_events(collectors, timeout) do
     receive do
       {:event_received, name} ->
         remaining = List.keydelete(collectors, name, 0)
         wait_for_all_events(remaining, timeout)
-        
+
       {:event_timeout, name} ->
         {:error, {:timeout, name}}
     after
@@ -232,7 +235,7 @@ defmodule Foundation.AsyncTestHelpers do
 
   @doc """
   Creates an async test context that uses message passing instead of Process dictionary.
-  
+
   ## Example
 
       with_async_context fn context ->
@@ -243,13 +246,13 @@ defmodule Foundation.AsyncTestHelpers do
   """
   def with_async_context(test_fun) when is_function(test_fun, 1) do
     parent = self()
-    
+
     context = %{
       send_event: fn event -> send(parent, {:test_event, event}) end,
       store_value: fn key, value -> send(parent, {:store, key, value}) end,
       notify_completion: fn result -> send(parent, {:test_complete, result}) end
     }
-    
+
     test_fun.(context)
   end
 
@@ -289,6 +292,7 @@ defmodule Foundation.AsyncTestHelpers do
 
   def store_test_value(storage_pid, key, value) do
     send(storage_pid, {:store, key, value, self()})
+
     receive do
       {:stored, ^key} -> :ok
     after
@@ -298,6 +302,7 @@ defmodule Foundation.AsyncTestHelpers do
 
   def get_test_value(storage_pid, key) do
     send(storage_pid, {:get, key, self()})
+
     receive do
       {:value, ^key, value} -> value
       {:not_found, ^key} -> nil
@@ -318,12 +323,13 @@ defmodule Foundation.AsyncTestHelpers do
         new_state = Map.put(state, key, value)
         send(from, {:stored, key})
         test_storage_loop(new_state)
-        
+
       {:get, key, from} ->
         case Map.get(state, key) do
           nil -> send(from, {:not_found, key})
           value -> send(from, {:value, key, value})
         end
+
         test_storage_loop(state)
     end
   end
