@@ -111,16 +111,16 @@ defmodule Foundation.Services.SupervisorTest do
     test "validates which_services returns current services", %{supervision_tree: sup_tree} do
       # Wait for services to be ready
       wait_for_services_ready(sup_tree)
-      
+
       # Get services from isolated supervision tree (JidoFoundation services)
       services = get_supported_services()
       assert is_list(services)
-      
+
       # Verify all expected services are available in the supervision tree
       for service <- services do
         assert {:ok, _pid} = get_service(sup_tree, service)
       end
-      
+
       # Should have exactly 4 JidoFoundation services in supervision testing
       assert length(services) == 4
       assert :task_pool_manager in services
@@ -132,19 +132,19 @@ defmodule Foundation.Services.SupervisorTest do
     test "validates service_running? checks service status", %{supervision_tree: sup_tree} do
       # Wait for services to be ready (from troubleshooting guide)
       wait_for_services_ready(sup_tree)
-      
+
       # Test using isolated supervision tree with available JidoFoundation services
       {:ok, task_pool_pid} = get_service(sup_tree, :task_pool_manager)
       {:ok, system_cmd_pid} = get_service(sup_tree, :system_command_manager)
       {:ok, coord_pid} = get_service(sup_tree, :coordination_manager)
       {:ok, scheduler_pid} = get_service(sup_tree, :scheduler_manager)
-      
+
       # Verify services are running
       assert is_pid(task_pool_pid) and Process.alive?(task_pool_pid)
       assert is_pid(system_cmd_pid) and Process.alive?(system_cmd_pid)
       assert is_pid(coord_pid) and Process.alive?(coord_pid)
       assert is_pid(scheduler_pid) and Process.alive?(scheduler_pid)
-      
+
       # Test that non-existent service returns error
       assert {:error, _} = get_service(sup_tree, :non_existent_service)
     end

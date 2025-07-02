@@ -236,7 +236,9 @@ defmodule JidoFoundation.TaskPoolManager do
         # Check if supervisor is still alive, restart if necessary
         case ensure_supervisor_alive(pool_name, pool_info, state) do
           {:ok, updated_pool_info, updated_state} ->
-            max_concurrency = Keyword.get(opts, :max_concurrency, updated_pool_info.config.max_concurrency)
+            max_concurrency =
+              Keyword.get(opts, :max_concurrency, updated_pool_info.config.max_concurrency)
+
             timeout = Keyword.get(opts, :timeout, updated_pool_info.config.timeout)
             on_timeout = Keyword.get(opts, :on_timeout, :kill_task)
             ordered = Keyword.get(opts, :ordered, true)
@@ -255,7 +257,10 @@ defmodule JidoFoundation.TaskPoolManager do
 
             # Update stats
             task_count = Enum.count(enumerable)
-            new_pool_info = update_pool_stats(updated_pool_info, :batch_started, %{task_count: task_count})
+
+            new_pool_info =
+              update_pool_stats(updated_pool_info, :batch_started, %{task_count: task_count})
+
             new_pools = Map.put(updated_state.pools, pool_name, new_pool_info)
             new_state = %{updated_state | pools: new_pools}
 
@@ -551,13 +556,13 @@ defmodule JidoFoundation.TaskPoolManager do
   # Returns {:error, reason} if supervisor cannot be started.
   defp ensure_supervisor_alive(pool_name, pool_info, state) do
     supervisor_pid = pool_info.supervisor_pid
-    
+
     if Process.alive?(supervisor_pid) do
       # Supervisor is alive, no action needed
       {:ok, pool_info, state}
     else
       Logger.warning("Task pool supervisor for #{pool_name} is dead, restarting...")
-      
+
       # Restart the supervisor
       case start_pool_supervisor(pool_name, pool_info.config) do
         {:ok, new_supervisor_pid} ->
@@ -565,12 +570,15 @@ defmodule JidoFoundation.TaskPoolManager do
           new_pool_info = %{pool_info | supervisor_pid: new_supervisor_pid}
           new_pools = Map.put(state.pools, pool_name, new_pool_info)
           new_state = %{state | pools: new_pools}
-          
+
           Logger.info("Successfully restarted task pool supervisor for #{pool_name}")
           {:ok, new_pool_info, new_state}
-          
+
         {:error, reason} ->
-          Logger.error("Failed to restart task pool supervisor for #{pool_name}: #{inspect(reason)}")
+          Logger.error(
+            "Failed to restart task pool supervisor for #{pool_name}: #{inspect(reason)}"
+          )
+
           {:error, {:supervisor_restart_failed, reason}}
       end
     end
