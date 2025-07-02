@@ -3,16 +3,20 @@ defmodule Foundation.Protocols.RegistryETSTest do
   alias Foundation.Protocols.RegistryETS
 
   setup do
-    # Ensure the GenServer is started
+    # Stop any existing GenServer
     case Process.whereis(RegistryETS) do
-      nil -> {:ok, _pid} = RegistryETS.start_link()
-      pid -> {:ok, pid}
+      nil -> :ok
+      pid -> 
+        GenServer.stop(pid, :normal)
+        # Wait for it to stop
+        Process.sleep(10)
     end
 
-    # Clean up any existing registrations
-    for {agent_id, _} <- RegistryETS.list_agents() do
-      RegistryETS.unregister_agent(agent_id)
-    end
+    # Start fresh GenServer
+    {:ok, _pid} = RegistryETS.start_link()
+    
+    # Give it time to initialize tables
+    Process.sleep(20)
 
     :ok
   end

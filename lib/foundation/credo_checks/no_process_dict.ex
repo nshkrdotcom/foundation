@@ -14,6 +14,9 @@ defmodule Foundation.CredoChecks.NoProcessDict do
   use Credo.Check,
     base_priority: :high,
     category: :warning,
+    param_defaults: [
+      allowed_modules: []
+    ],
     explanations: [
       check: """
       Process dictionary bypasses OTP supervision and makes testing difficult.
@@ -40,7 +43,10 @@ defmodule Foundation.CredoChecks.NoProcessDict do
 
       4. Logger metadata for error context:
           Logger.metadata(request_id: request_id)
-      """
+      """,
+      params: [
+        allowed_modules: "A list of module names (as strings) that are allowed to use Process dictionary during migration"
+      ]
     ]
 
   # Define empty module if Credo is not available
@@ -50,6 +56,7 @@ defmodule Foundation.CredoChecks.NoProcessDict do
     @doc false
     def run(%Credo.SourceFile{} = source_file, params) do
       issue_meta = IssueMeta.for(source_file, params)
+      # Get allowed_modules directly from params list with default fallback
       allowed_modules = params[:allowed_modules] || []
 
       if should_check_file?(source_file, allowed_modules) do
@@ -172,15 +179,17 @@ defmodule Foundation.CredoChecks.NoProcessDict do
     end
 
     defp format_issue(issue_meta, opts) do
+      # Extract source file from issue_meta tuple
+      {_meta_module, source_file, _params} = issue_meta
+      
       %Credo.Issue{
         category: :warning,
         check: __MODULE__,
+        filename: source_file.filename,
+        line_no: opts[:line_no],
         column: opts[:column],
-        filename: issue_meta.filename,
-        line_no: opts[:line_no] || 1,
         message: opts[:message],
         priority: :high,
-        scope: :process_dict,
         trigger: opts[:trigger] || "Process dictionary usage"
       }
     end
