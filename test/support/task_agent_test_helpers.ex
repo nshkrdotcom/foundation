@@ -226,9 +226,11 @@ defmodule Foundation.TaskAgentTestHelpers do
           {:ok, state}
         else
           if System.monotonic_time(:millisecond) < deadline do
-            # Minimal delay before checking again
-            :timer.sleep(10)
-            do_wait_for_status(agent_pid, expected_status, deadline)
+            # Minimal delay before checking again using receive timeout pattern
+            receive do
+            after
+              10 -> do_wait_for_status(agent_pid, expected_status, deadline)
+            end
           else
             {:error,
              {:timeout, "Expected status #{expected_status}, got #{state.agent.state.status}"}}

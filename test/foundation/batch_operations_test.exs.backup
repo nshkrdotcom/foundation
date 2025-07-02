@@ -2,20 +2,19 @@ defmodule Foundation.BatchOperationsTest do
   use Foundation.UnifiedTestFoundation, :registry
 
   alias Foundation.BatchOperations
-  alias Foundation.TestProcess
 
   describe "batch_register/2" do
     test "registers multiple agents successfully", %{registry: registry} do
       {agents, pids} =
         for i <- 1..10 do
-          {:ok, pid} = TestProcess.start_link()
+          pid = spawn(fn -> :timer.sleep(:infinity) end)
           {{"batch_agent_#{i}", pid, test_metadata()}, pid}
         end
         |> Enum.unzip()
 
       on_exit(fn ->
         Enum.each(pids, fn pid ->
-          if Process.alive?(pid), do: TestProcess.stop(pid)
+          if Process.alive?(pid), do: Process.exit(pid, :kill)
         end)
       end)
 
@@ -29,7 +28,7 @@ defmodule Foundation.BatchOperationsTest do
     end
 
     test "handles batch with errors when on_error is :continue", %{registry: registry} do
-      {:ok, pid1} = TestProcess.start_link()
+      pid1 = spawn(fn -> :timer.sleep(:infinity) end)
       # Spawn and monitor a process that will die immediately
       ref = Process.monitor(dead_pid = spawn(fn -> :ok end))
       # Wait for process to die
@@ -59,7 +58,7 @@ defmodule Foundation.BatchOperationsTest do
       # Wait for process to die
       assert_receive {:DOWN, ^ref, :process, ^dead_pid, :normal}, 1000
 
-      {:ok, pid2} = TestProcess.start_link()
+      pid2 = spawn(fn -> :timer.sleep(:infinity) end)
 
       on_exit(fn ->
         if Process.alive?(pid2), do: Process.exit(pid2, :kill)
@@ -79,14 +78,14 @@ defmodule Foundation.BatchOperationsTest do
       # This test mainly verifies the batching doesn't break functionality
       {agents, pids} =
         for i <- 1..25 do
-          {:ok, pid} = TestProcess.start_link()
+          pid = spawn(fn -> :timer.sleep(:infinity) end)
           {{"batch_size_#{i}", pid, test_metadata()}, pid}
         end
         |> Enum.unzip()
 
       on_exit(fn ->
         Enum.each(pids, fn pid ->
-          if Process.alive?(pid), do: TestProcess.stop(pid)
+          if Process.alive?(pid), do: Process.exit(pid, :kill)
         end)
       end)
 
@@ -102,14 +101,14 @@ defmodule Foundation.BatchOperationsTest do
       # Pre-register some agents
       pids =
         for i <- 1..5 do
-          {:ok, pid} = TestProcess.start_link()
+          pid = spawn(fn -> :timer.sleep(:infinity) end)
           :ok = GenServer.call(registry, {:register, "update_test_#{i}", pid, test_metadata()})
           {i, pid}
         end
 
       on_exit(fn ->
         Enum.each(pids, fn {_i, pid} ->
-          if Process.alive?(pid), do: TestProcess.stop(pid)
+          if Process.alive?(pid), do: Process.exit(pid, :kill)
         end)
       end)
 
@@ -154,7 +153,7 @@ defmodule Foundation.BatchOperationsTest do
       # Register diverse agents for querying
       pids =
         for i <- 1..20 do
-          {:ok, pid} = TestProcess.start_link()
+          pid = spawn(fn -> :timer.sleep(:infinity) end)
           capability = if rem(i, 2) == 0, do: :data, else: :compute
           status = if rem(i, 3) == 0, do: :degraded, else: :healthy
 
@@ -171,7 +170,7 @@ defmodule Foundation.BatchOperationsTest do
 
       on_exit(fn ->
         Enum.each(pids, fn pid ->
-          if Process.alive?(pid), do: TestProcess.stop(pid)
+          if Process.alive?(pid), do: Process.exit(pid, :kill)
         end)
       end)
 
@@ -227,7 +226,7 @@ defmodule Foundation.BatchOperationsTest do
       # Register many agents for streaming
       pids =
         for i <- 1..100 do
-          {:ok, pid} = TestProcess.start_link()
+          pid = spawn(fn -> :timer.sleep(:infinity) end)
 
           metadata = %{
             capability: :streaming,
@@ -243,7 +242,7 @@ defmodule Foundation.BatchOperationsTest do
 
       on_exit(fn ->
         Enum.each(pids, fn pid ->
-          if Process.alive?(pid), do: TestProcess.stop(pid)
+          if Process.alive?(pid), do: Process.exit(pid, :kill)
         end)
       end)
 
@@ -285,7 +284,7 @@ defmodule Foundation.BatchOperationsTest do
       # Pre-register agents
       {agent_ids, pids} =
         for i <- 1..10 do
-          {:ok, pid} = TestProcess.start_link()
+          pid = spawn(fn -> :timer.sleep(:infinity) end)
           id = "unregister_test_#{i}"
           :ok = GenServer.call(registry, {:register, id, pid, test_metadata()})
           {id, pid}
@@ -294,7 +293,7 @@ defmodule Foundation.BatchOperationsTest do
 
       on_exit(fn ->
         Enum.each(pids, fn pid ->
-          if Process.alive?(pid), do: TestProcess.stop(pid)
+          if Process.alive?(pid), do: Process.exit(pid, :kill)
         end)
       end)
 
@@ -328,7 +327,12 @@ defmodule Foundation.BatchOperationsTest do
         for i <- 1..10 do
           _test_pid = self()
 
-          {:ok, pid} = TestProcess.start_interactive(responses: %{:ping => {:pong, i}})
+          pid =
+            spawn(fn ->
+              receive do
+                {:ping, from} -> send(from, {:pong, i})
+              end
+            end)
 
           :ok = GenServer.call(registry, {:register, "parallel_#{i}", pid, test_metadata()})
           {i, pid}
@@ -336,7 +340,7 @@ defmodule Foundation.BatchOperationsTest do
 
       on_exit(fn ->
         Enum.each(agent_pids, fn {_i, pid} ->
-          if Process.alive?(pid), do: TestProcess.stop(pid)
+          if Process.alive?(pid), do: Process.exit(pid, :kill)
         end)
       end)
 
@@ -387,7 +391,7 @@ defmodule Foundation.BatchOperationsTest do
         nil
       )
 
-      {:ok, pid} = TestProcess.start_link()
+      pid = spawn(fn -> :timer.sleep(:infinity) end)
 
       on_exit(fn ->
         if Process.alive?(pid), do: Process.exit(pid, :kill)

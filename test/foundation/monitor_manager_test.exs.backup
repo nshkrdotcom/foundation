@@ -1,8 +1,7 @@
 defmodule Foundation.MonitorManagerTest do
-  use Foundation.UnifiedTestFoundation, :supervision_testing
+  use ExUnit.Case, async: false
 
   alias Foundation.MonitorManager
-  import Foundation.AsyncTestHelpers
 
   # Test helper modules
   defmodule TestServer do
@@ -287,13 +286,8 @@ defmodule Foundation.MonitorManagerTest do
 
       # Kill process but don't wait for cleanup
       GenServer.stop(target_pid)
-      # Wait for process to actually be dead
-      wait_for(
-        fn ->
-          not Process.alive?(target_pid)
-        end,
-        2000
-      )
+      # Small delay to ensure process is dead
+      Process.sleep(50)
 
       # Check again - should show as dead if checked before automatic cleanup
       monitors = MonitorManager.list_monitors()
@@ -594,21 +588,12 @@ defmodule Foundation.MonitorManagerTest do
     wait_for_condition(condition_fun, error_msg, 0)
   end
 
-  defp wait_for_condition(condition_fun, _error_msg, attempt) when attempt < 50 do
+  defp wait_for_condition(condition_fun, error_msg, attempt) when attempt < 50 do
     if condition_fun.() do
       :ok
     else
-      # Use minimal wait_for approach instead of Process.sleep
-      wait_for(
-        fn ->
-          if condition_fun.() do
-            true
-          else
-            nil
-          end
-        end,
-        100
-      )
+      Process.sleep(10)
+      wait_for_condition(condition_fun, error_msg, attempt + 1)
     end
   end
 
@@ -623,12 +608,7 @@ defmodule Foundation.MonitorManagerTest do
       spawn(fn ->
         {:ok, ref} = MonitorManager.monitor(target_pid, :caller_test)
         send(test_pid, {:monitor_created, ref})
-        # Use Foundation.TestProcess instead of infinity sleep
-        {:ok, _test_proc} = Foundation.TestProcess.start_link()
-
-        receive do
-          :never_sent -> :ok
-        end
+        Process.sleep(:infinity)
       end)
 
     ref =
@@ -653,12 +633,7 @@ defmodule Foundation.MonitorManagerTest do
           end)
 
         send(test_pid, {:monitors_created, refs})
-        # Use Foundation.TestProcess instead of infinity sleep
-        {:ok, _test_proc} = Foundation.TestProcess.start_link()
-
-        receive do
-          :never_sent -> :ok
-        end
+        Process.sleep(:infinity)
       end)
 
     receive do

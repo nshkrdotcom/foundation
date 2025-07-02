@@ -20,7 +20,6 @@ defmodule JidoSystem.Agents.TaskAgentTest do
 
   # Import proper test helpers
   import Foundation.TaskAgentTestHelpers
-  import Foundation.AsyncTestHelpers
 
   describe "task agent initialization" do
     test "successfully initializes with correct capabilities", %{registry: _registry} do
@@ -150,14 +149,8 @@ defmodule JidoSystem.Agents.TaskAgentTest do
 
       Jido.Agent.Server.cast(agent, process_instruction)
 
-      # Wait for cast to be processed using proper wait_for pattern
-      wait_for(
-        fn ->
-          {:ok, state} = Jido.Agent.Server.state(agent)
-          state.agent.state.status == :paused
-        end,
-        1000
-      )
+      # Wait a minimal amount for the cast to be processed
+      :timer.sleep(50)
 
       # Verify task was not processed (agent is paused)
       {:ok, final_state} = Jido.Agent.Server.state(agent)
@@ -190,16 +183,8 @@ defmodule JidoSystem.Agents.TaskAgentTest do
         Jido.Agent.Server.cast(agent, instruction)
       end
 
-      # Wait for all casts to be processed and queue to reach expected size
-      wait_for(
-        fn ->
-          case get_queue_size_sync(agent) do
-            {:ok, size} when size == 3 -> true
-            _ -> nil
-          end
-        end,
-        1000
-      )
+      # Wait a minimal amount for all casts to be processed
+      :timer.sleep(100)
 
       # Verify queue has all 3 tasks
       {:ok, queue_size} = get_queue_size_sync(agent)
@@ -228,16 +213,8 @@ defmodule JidoSystem.Agents.TaskAgentTest do
         Jido.Agent.Server.cast(agent, instruction)
       end
 
-      # Wait for all casts to be processed and queue to stabilize
-      wait_for(
-        fn ->
-          case get_queue_size_sync(agent) do
-            {:ok, size} when size <= max_size -> true
-            _ -> nil
-          end
-        end,
-        1000
-      )
+      # Wait for all casts to be processed
+      :timer.sleep(200)
 
       # Queue should not exceed max size
       {:ok, queue_size} = get_queue_size_sync(agent)
@@ -303,14 +280,8 @@ defmodule JidoSystem.Agents.TaskAgentTest do
 
       Jido.Agent.Server.cast(agent, instruction)
 
-      # Wait for cast to be processed using proper wait_for pattern
-      wait_for(
-        fn ->
-          {:ok, _state} = Jido.Agent.Server.state(agent)
-          true
-        end,
-        500
-      )
+      # Wait minimal time for cast to process
+      :timer.sleep(20)
 
       # Verify status
       {:ok, state} = Jido.Agent.Server.state(agent)
