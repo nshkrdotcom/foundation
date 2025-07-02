@@ -5,8 +5,10 @@ defmodule Foundation.Protocols.RegistryETSTest do
   setup do
     # Stop any existing GenServer
     case Process.whereis(RegistryETS) do
-      nil -> :ok
-      pid -> 
+      nil ->
+        :ok
+
+      pid ->
         GenServer.stop(pid, :normal)
         # Wait for it to stop
         Process.sleep(10)
@@ -14,7 +16,7 @@ defmodule Foundation.Protocols.RegistryETSTest do
 
     # Start fresh GenServer
     {:ok, _pid} = RegistryETS.start_link()
-    
+
     # Give it time to initialize tables
     Process.sleep(20)
 

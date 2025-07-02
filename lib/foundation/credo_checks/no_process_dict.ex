@@ -45,7 +45,8 @@ defmodule Foundation.CredoChecks.NoProcessDict do
           Logger.metadata(request_id: request_id)
       """,
       params: [
-        allowed_modules: "A list of module names (as strings) that are allowed to use Process dictionary during migration"
+        allowed_modules:
+          "A list of module names (as strings) that are allowed to use Process dictionary during migration"
       ]
     ]
 
@@ -181,7 +182,7 @@ defmodule Foundation.CredoChecks.NoProcessDict do
     defp format_issue(issue_meta, opts) do
       # Extract source file from issue_meta tuple
       {_meta_module, source_file, _params} = issue_meta
-      
+
       %Credo.Issue{
         category: :warning,
         check: __MODULE__,
