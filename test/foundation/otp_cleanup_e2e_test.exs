@@ -82,22 +82,23 @@ defmodule Foundation.OTPCleanupE2ETest do
         
         # Step 2: Perform operations on agents with error context and telemetry
         results = for {agent_id, agent_pid} <- agent_ids do
-          # Set operation-specific context
-          ErrorContext.set_context(%{
+          # Add operation-specific context while preserving existing context
+          ErrorContext.with_context(%{
             agent_id: agent_id,
             operation: "work_request"
-          })
+          }, fn ->
           
-          # Wrap operation in span
-          Span.with_span_fun("agent_work", %{agent_id: agent_id}, fn ->
-            send(agent_pid, {:work, self()})
-            
-            # Wait for response with timeout
-            receive do
-              {:work_done, ^agent_id} -> {:ok, agent_id}
-            after
-              2000 -> {:error, :timeout}
-            end
+            # Wrap operation in span
+            Span.with_span_fun("agent_work", %{agent_id: agent_id}, fn ->
+              send(agent_pid, {:work, self()})
+              
+              # Wait for response with timeout
+              receive do
+                {:work_done, ^agent_id} -> {:ok, agent_id}
+              after
+                2000 -> {:error, :timeout}
+              end
+            end)
           end)
         end
         
@@ -233,7 +234,7 @@ defmodule Foundation.OTPCleanupE2ETest do
         assert Enum.any?(event_types, &(&1 == [:foundation, :registry, :register]))
         assert Enum.any?(event_types, &(&1 == [:foundation, :registry, :lookup]))
         assert Enum.any?(event_types, &(&1 == [:foundation, :span, :start]))
-        assert Enum.any?(event_types, &(&1 == [:foundation, :span, :end]))
+        assert Enum.any?(event_types, &(&1 == [:foundation, :span, :stop]))
         
       after
         :telemetry.detach("e2e-telemetry-test")

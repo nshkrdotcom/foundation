@@ -23,10 +23,14 @@ defmodule Foundation.OTPCleanupPerformanceTest do
   
   describe "Registry Performance Tests" do
     setup do
-      FeatureFlags.reset_all()
+      if Process.whereis(Foundation.FeatureFlags) do
+        FeatureFlags.reset_all()
+      end
       
       on_exit(fn ->
-        FeatureFlags.reset_all()
+        if Process.whereis(Foundation.FeatureFlags) do
+          FeatureFlags.reset_all()
+        end
       end)
       
       :ok
@@ -568,7 +572,9 @@ defmodule Foundation.OTPCleanupPerformanceTest do
       
       results = for test_case <- test_cases do
         # Reset flags
-        FeatureFlags.reset_all()
+        if Process.whereis(Foundation.FeatureFlags) do
+          FeatureFlags.reset_all()
+        end
         
         # Enable specified flags
         Enum.each(test_case.flags, &FeatureFlags.enable/1)
