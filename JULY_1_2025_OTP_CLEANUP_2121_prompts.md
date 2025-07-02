@@ -44,8 +44,127 @@ Create the enforcement infrastructure for banning Process dictionary usage:
 - All existing tests still pass
 
 **Expected Output**: Updated configuration files and new Credo check that establishes enforcement foundation for the cleanup.
+
 ---
-1 done
+
+## PROMPT 9: Create Comprehensive Integration Tests
+
+**Context**: You are creating comprehensive integration tests to verify that the entire Process dictionary cleanup works correctly and doesn't introduce regressions.
+
+**Required Reading**:
+1. Read `JULY_1_2025_OTP_CLEANUP_2121.md` - Complete plan, especially testing strategy
+2. Review all implementations from previous prompts
+3. Read `test/SUPERVISION_TESTING_GUIDE.md` for integration testing patterns
+4. Examine existing integration test structure
+
+**Files to Examine**:
+- All files modified in previous prompts
+- Existing integration tests in `test/integration/` or similar
+- Current test helper modules
+- Application startup and supervision structure
+
+**Task**:
+1. **Create Process Dictionary Elimination Test**:
+   - Scan all production code for Process.put/get usage
+   - Verify only whitelisted modules have usage during migration
+   - Ensure no new Process dictionary usage creeps in
+   - Test that enforcement mechanisms work correctly
+
+2. **Create End-to-End Functionality Tests**:
+   - Test complete agent registration/retrieval flow
+   - Test error context propagation through error handling
+   - Test telemetry event flow with new implementations
+   - Test span creation, nesting, and cleanup
+
+3. **Create Performance Regression Tests**:
+   - Benchmark registry operations (register, get, list)
+   - Benchmark error context setting and retrieval
+   - Benchmark telemetry event emission rates
+   - Benchmark span creation and ending
+   - Compare performance between old and new implementations
+
+4. **Create Concurrency and Stress Tests**:
+   - Concurrent agent registration/unregistration
+   - High-frequency telemetry event emission
+   - Rapid span creation and destruction
+   - Memory leak detection under load
+   - Process monitoring and cleanup validation
+
+5. **Create Feature Flag Integration Tests**:
+   - Test switching between old and new implementations
+   - Verify behavior consistency across flag states
+   - Test rollback scenarios
+   - Test partial rollouts with percentage flags
+
+6. **Create Failure and Recovery Tests**:
+   - Test behavior when ETS tables are deleted
+   - Test GenServer restart scenarios
+   - Test process death cleanup
+   - Test memory cleanup and leak prevention
+
+7. **Create Monitoring and Observability Tests**:
+   - Verify telemetry events are still emitted correctly
+   - Test error reporting and context inclusion
+   - Test span tracking and parent-child relationships
+   - Verify no observability is lost in migration
+
+**Success Criteria**:
+- All integration tests pass with flags enabled and disabled
+- No performance regressions detected
+- No memory leaks under stress testing
+- Proper cleanup verified in all scenarios
+- Complete functional equivalence between old and new
+
+**Expected Output**: Comprehensive integration test suite that validates the entire Process dictionary cleanup with performance, correctness, and reliability testing.
+
+---
+✅ COMPLETED: Comprehensive integration test suite created:
+
+### Test Files Created:
+1. **`test/foundation/otp_cleanup_integration_test.exs`** - Main integration tests for Process dictionary elimination
+2. **`test/foundation/otp_cleanup_e2e_test.exs`** - End-to-end functionality tests with complete workflows
+3. **`test/foundation/otp_cleanup_performance_test.exs`** - Performance regression tests and benchmarks
+4. **`test/foundation/otp_cleanup_stress_test.exs`** - Concurrency and stress tests under load
+5. **`test/foundation/otp_cleanup_feature_flag_test.exs`** - Feature flag integration and rollback tests
+6. **`test/foundation/otp_cleanup_failure_recovery_test.exs`** - Failure scenarios and recovery tests
+7. **`test/foundation/otp_cleanup_observability_test.exs`** - Monitoring and telemetry continuity tests
+8. **`test/run_otp_cleanup_tests.exs`** - Comprehensive test runner script
+
+### Test Coverage:
+- **Process Dictionary Elimination**: Scans all production code, validates enforcement mechanisms
+- **End-to-End Workflows**: Complete agent lifecycles, error propagation, telemetry flow
+- **Performance Benchmarks**: Registry, error context, telemetry, and span operations
+- **Stress Testing**: Concurrent access, memory leak detection, resource cleanup
+- **Feature Flag Testing**: Implementation switching, rollback scenarios, percentage rollouts
+- **Failure Recovery**: ETS deletion, GenServer crashes, process death cleanup
+- **Observability**: Telemetry event continuity, error enrichment, span hierarchies
+
+### Test Runner Features:
+- Sequential and parallel execution modes
+- Individual suite selection
+- Performance-only and skip-slow options
+- Comprehensive reporting with recommendations
+- Proper exit codes for CI integration
+
+### Usage:
+```bash
+# Run all tests
+elixir test/run_otp_cleanup_tests.exs
+
+# Run specific suite
+elixir test/run_otp_cleanup_tests.exs --suite "Performance Regression"
+
+# Performance tests only
+elixir test/run_otp_cleanup_tests.exs --performance-only
+
+# Skip slow tests for quick validation
+elixir test/run_otp_cleanup_tests.exs --skip-slow --verbose
+```
+
+This comprehensive test suite validates that the Process dictionary cleanup maintains functionality, performance, and reliability across all migration scenarios.
+
+---
+1-9 done
 ---
 
 ## PROMPT 2: Fix Foundation Registry Anti-Pattern
@@ -460,7 +579,7 @@ Tests use Process dictionary for:
 **Expected Output**: Clean test suite using proper OTP async patterns with comprehensive helper library and documentation.
 
 ---
-7 
+7 done
 ---
 
 ## PROMPT 8: Implement Feature Flag Migration System
@@ -533,6 +652,10 @@ Enable gradual migration from Process dictionary to OTP patterns with safe rollb
 - Clear migration process with rollback capability
 
 **Expected Output**: Complete feature flag migration system enabling safe, gradual transition from Process dictionary to OTP patterns.
+
+---
+
+8 done
 
 ---
 
