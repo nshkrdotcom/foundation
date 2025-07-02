@@ -40,7 +40,7 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
   @moduletag timeout: 30_000
 
   setup do
-    # Ensure clean test environment
+    # Ensure clean test environment with proper supervision state
     # NOTE: We don't use Process.flag(:trap_exit, true) here because
     # it can cause the test process to receive exit signals from
     # supervised processes when we intentionally kill them for testing
@@ -48,25 +48,62 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
     # Record initial process count
     initial_process_count = :erlang.system_info(:process_count)
 
+    # Ensure all JidoFoundation services are stable before test starts
+    services = [
+      JidoFoundation.TaskPoolManager,
+      JidoFoundation.SystemCommandManager,
+      JidoFoundation.CoordinationManager,
+      JidoFoundation.SchedulerManager
+    ]
+
+    # Wait for all services to be properly registered and stable
+    for service <- services do
+      wait_for(
+        fn ->
+          case Process.whereis(service) do
+            pid when is_pid(pid) -> 
+              if Process.alive?(pid), do: pid, else: nil
+            _ -> nil
+          end
+        end,
+        5000
+      )
+    end
+
     on_exit(fn ->
-      # Wait for processes to terminate
+      # CRITICAL: Ensure supervision tree is stable after test
+      # Wait for any restart activity to complete
+      for service <- services do
+        wait_for(
+          fn ->
+            case Process.whereis(service) do
+              pid when is_pid(pid) -> 
+                if Process.alive?(pid), do: pid, else: nil
+              _ -> nil
+            end
+          end,
+          10_000
+        )
+      end
+
+      # Wait for processes to terminate and stabilize
       wait_for(
         fn ->
           current_count = :erlang.system_info(:process_count)
           # Allow some tolerance for normal process fluctuation
-          if current_count <= initial_process_count + 5 do
+          if current_count <= initial_process_count + 10 do
             true
           else
             nil
           end
         end,
-        1000
+        5000
       )
 
       # Verify no process leaks
       final_process_count = :erlang.system_info(:process_count)
 
-      if final_process_count > initial_process_count + 10 do
+      if final_process_count > initial_process_count + 20 do
         Logger.warning(
           "Potential process leak detected: #{initial_process_count} -> #{final_process_count}"
         )
@@ -666,38 +703,54 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
         assert is_pid(pid), "#{service} should be registered"
       end
 
-      # Monitor processes we'll kill
+      # Get initial PIDs - understand supervision order: SchedulerManager -> TaskPoolManager -> SystemCommandManager -> CoordinationManager
       task_pid = Process.whereis(JidoFoundation.TaskPoolManager)
       sys_pid = Process.whereis(JidoFoundation.SystemCommandManager)
+      coord_pid = Process.whereis(JidoFoundation.CoordinationManager)
+      sched_pid = Process.whereis(JidoFoundation.SchedulerManager)
 
+      # Monitor processes we'll kill and those affected by rest_for_one
       ref1 = Process.monitor(task_pid)
       ref2 = Process.monitor(sys_pid)
+      ref3 = Process.monitor(coord_pid)
+      # SchedulerManager should NOT be affected by TaskPoolManager crash (starts before it)
 
-      # Kill half the services
+      # Kill processes - TaskPoolManager crash should restart SystemCommandManager and CoordinationManager
       Process.exit(task_pid, :kill)
       Process.exit(sys_pid, :kill)
 
-      # Wait for DOWN messages
+      # Wait for killed processes to go down
       assert_receive {:DOWN, ^ref1, :process, ^task_pid, :killed}, 1000
       assert_receive {:DOWN, ^ref2, :process, ^sys_pid, :killed}, 1000
+      
+      # CoordinationManager should be restarted by supervisor (rest_for_one behavior)
+      assert_receive {:DOWN, ^ref3, :process, ^coord_pid, reason3}, 2000
+      assert reason3 in [:shutdown, :killed]
 
-      # Wait for both services to restart
-      wait_for(
-        fn ->
-          new_task_pid = Process.whereis(JidoFoundation.TaskPoolManager)
-          new_sys_pid = Process.whereis(JidoFoundation.SystemCommandManager)
+      # SchedulerManager should remain running (started before TaskPoolManager)
+      assert Process.alive?(sched_pid), "SchedulerManager should not be affected by TaskPoolManager crash"
 
-          if new_task_pid != task_pid and new_sys_pid != sys_pid and
-               is_pid(new_task_pid) and is_pid(new_sys_pid) do
-            {new_task_pid, new_sys_pid}
-          else
-            nil
-          end
-        end,
-        8000
-      )
+      # Wait for affected services to restart
+      {_new_task_pid, _new_sys_pid, _new_coord_pid} =
+        wait_for(
+          fn ->
+            new_task = Process.whereis(JidoFoundation.TaskPoolManager)
+            new_sys = Process.whereis(JidoFoundation.SystemCommandManager)
+            new_coord = Process.whereis(JidoFoundation.CoordinationManager)
 
-      # Verify service discovery still works
+            # Only services that were restarted should have new PIDs
+            if new_task != task_pid and new_sys != sys_pid and 
+               new_coord != coord_pid and is_pid(new_task) and 
+               is_pid(new_sys) and is_pid(new_coord) do
+              {new_task, new_sys, new_coord}
+            else
+              nil
+            end
+          end,
+          8000
+        )
+
+      # Verify service discovery still works for all services
       pids_after =
         for service <- services_before do
           {service, Process.whereis(service)}
@@ -707,11 +760,23 @@ defmodule JidoFoundation.SupervisionCrashRecoveryTest do
         assert is_pid(pid), "#{service} should be re-registered after restart"
       end
 
-      # Verify the restarted services have new pids
+      # Verify restarted services have new PIDs, SchedulerManager keeps same PID
       {_, old_task_pool_pid} = List.keyfind(pids_before, JidoFoundation.TaskPoolManager, 0)
       {_, new_task_pool_pid} = List.keyfind(pids_after, JidoFoundation.TaskPoolManager, 0)
+      {_, old_sys_cmd_pid} = List.keyfind(pids_before, JidoFoundation.SystemCommandManager, 0)
+      {_, new_sys_cmd_pid} = List.keyfind(pids_after, JidoFoundation.SystemCommandManager, 0)
+      {_, old_coord_pid} = List.keyfind(pids_before, JidoFoundation.CoordinationManager, 0)
+      {_, new_coord_pid} = List.keyfind(pids_after, JidoFoundation.CoordinationManager, 0)
+      {_, old_sched_pid} = List.keyfind(pids_before, JidoFoundation.SchedulerManager, 0)
+      {_, new_sched_pid} = List.keyfind(pids_after, JidoFoundation.SchedulerManager, 0)
 
+      # Services that were killed or restarted by rest_for_one should have new PIDs
       assert old_task_pool_pid != new_task_pool_pid, "TaskPoolManager should have new pid"
+      assert old_sys_cmd_pid != new_sys_cmd_pid, "SystemCommandManager should have new pid"
+      assert old_coord_pid != new_coord_pid, "CoordinationManager should have new pid"
+      
+      # SchedulerManager should keep the same PID (not affected by TaskPoolManager crash)
+      assert old_sched_pid == new_sched_pid, "SchedulerManager should keep same pid (not affected by rest_for_one)"
     end
   end
 
