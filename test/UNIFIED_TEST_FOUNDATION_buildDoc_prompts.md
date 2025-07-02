@@ -510,6 +510,9 @@ Migrate basic individual service crash recovery tests to use isolated supervisio
 - Clear separation between migrated and unmigrated tests
 
 ---
+6 done
+
+---
 
 ## PROMPT 7: Test Migration - Phase 2 (Supervision Strategy Tests)
 
