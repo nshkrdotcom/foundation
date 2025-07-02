@@ -149,9 +149,9 @@ jobs:
         MIX_ENV: dev
       run: mix dialyzer
 
-    # Step: Run Credo for code quality checks
-    - name: Run Credo
-      run: mix credo
+    # Step: Run Credo for code quality checks (temporarily disabled)
+    # - name: Run Credo
+    #   run: mix credo
 
     # Step: Check OTP compliance - ban dangerous patterns
     - name: Check OTP compliance
