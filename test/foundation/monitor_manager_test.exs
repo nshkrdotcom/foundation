@@ -55,7 +55,20 @@ defmodule Foundation.MonitorManagerTest do
 
       # Stop the manager if still running
       if Process.alive?(manager_pid) do
-        GenServer.stop(manager_pid)
+        try do
+          GenServer.stop(manager_pid, :normal, 5000)
+        catch
+          :exit, {:noproc, _} ->
+            # Process already gone, that's ok
+            :ok
+          :exit, {:shutdown, _} ->
+            # Process is already shutting down, that's ok
+            :ok
+          :exit, reason ->
+            # Log other exit reasons for debugging but don't fail
+            IO.puts("MonitorManager shutdown with reason: #{inspect(reason)}")
+            :ok
+        end
       end
     end)
 
