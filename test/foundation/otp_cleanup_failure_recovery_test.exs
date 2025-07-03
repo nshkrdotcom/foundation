@@ -41,13 +41,14 @@ defmodule Foundation.OTPCleanupFailureRecoveryTest do
     setup do
       # Ensure FeatureFlags is running
       ensure_service_started(Foundation.FeatureFlags)
-      
+
       FeatureFlags.reset_all()
 
       on_exit(fn ->
         if Process.whereis(Foundation.FeatureFlags) do
           FeatureFlags.reset_all()
         end
+
         ErrorContext.clear_context()
       end)
 
@@ -59,7 +60,7 @@ defmodule Foundation.OTPCleanupFailureRecoveryTest do
 
       if Code.ensure_loaded?(Foundation.Protocols.RegistryETS) do
         {:ok, _registry_pid} = ensure_service_started(Foundation.Protocols.RegistryETS)
-        
+
         # Wait for service to be ready
         Process.sleep(50)
 
@@ -209,7 +210,7 @@ defmodule Foundation.OTPCleanupFailureRecoveryTest do
         end,
         5000
       )
-      
+
       # Wait for FeatureFlags to recover before using Registry
       wait_until(
         fn ->
@@ -243,11 +244,11 @@ defmodule Foundation.OTPCleanupFailureRecoveryTest do
     setup do
       ensure_service_started(Foundation.FeatureFlags)
       Process.flag(:trap_exit, true)
-      
+
       on_exit(fn ->
         Process.flag(:trap_exit, false)
       end)
-      
+
       :ok
     end
 
@@ -275,6 +276,7 @@ defmodule Foundation.OTPCleanupFailureRecoveryTest do
           nil ->
             # Either restart the service or use fallback
             FeatureFlags.disable(:use_genserver_span_management)
+
           _pid ->
             :ok
         end
@@ -292,7 +294,8 @@ defmodule Foundation.OTPCleanupFailureRecoveryTest do
       FeatureFlags.enable(:use_ets_sampled_events)
 
       if Code.ensure_loaded?(Foundation.Telemetry.SampledEvents.Server) do
-        {:ok, sampled_events_pid} = ensure_service_started(Foundation.Telemetry.SampledEvents.Server)
+        {:ok, sampled_events_pid} =
+          ensure_service_started(Foundation.Telemetry.SampledEvents.Server)
 
         # Test functionality before crash
         Foundation.Telemetry.SampledEvents.TestAPI.emit_event(
@@ -343,6 +346,7 @@ defmodule Foundation.OTPCleanupFailureRecoveryTest do
         load_task =
           Task.async(fn ->
             registry = %{}
+
             for i <- 1..1000 do
               try do
                 agent_id = :"load_test_#{i}"
@@ -363,7 +367,7 @@ defmodule Foundation.OTPCleanupFailureRecoveryTest do
         Process.sleep(50)
         ref = Process.monitor(registry_pid)
         Process.exit(registry_pid, :kill)
-        
+
         # Wait for the process to die
         assert_receive {:DOWN, ^ref, :process, ^registry_pid, :killed}, 2000
 
@@ -478,7 +482,7 @@ defmodule Foundation.OTPCleanupFailureRecoveryTest do
 
             agent_id = :"massive_death_#{i}"
             Registry.register(registry, agent_id, agent_pid)
-            
+
             # Monitor the agent so we know when it dies
             ref = Process.monitor(agent_pid)
 
@@ -537,7 +541,7 @@ defmodule Foundation.OTPCleanupFailureRecoveryTest do
           # Die with context set
           :timer.sleep(50)
         end)
-      
+
       # Monitor the dying process
       ref = Process.monitor(dying_process)
 
@@ -559,48 +563,52 @@ defmodule Foundation.OTPCleanupFailureRecoveryTest do
   # Helper functions for service management
   defp start_all_services do
     services = []
-    
+
     # Start RegistryETS if available
-    services = if Code.ensure_loaded?(Foundation.Protocols.RegistryETS) do
-      case ensure_service_started(Foundation.Protocols.RegistryETS) do
-        {:ok, pid} -> [{:registry_ets, pid} | services]
-        _ -> services
+    services =
+      if Code.ensure_loaded?(Foundation.Protocols.RegistryETS) do
+        case ensure_service_started(Foundation.Protocols.RegistryETS) do
+          {:ok, pid} -> [{:registry_ets, pid} | services]
+          _ -> services
+        end
+      else
+        services
       end
-    else
-      services
-    end
-    
+
     # Start SpanManager if available
-    services = if Code.ensure_loaded?(Foundation.Telemetry.SpanManager) do
-      case ensure_service_started(Foundation.Telemetry.SpanManager) do
-        {:ok, pid} -> [{:span_manager, pid} | services]
-        _ -> services
+    services =
+      if Code.ensure_loaded?(Foundation.Telemetry.SpanManager) do
+        case ensure_service_started(Foundation.Telemetry.SpanManager) do
+          {:ok, pid} -> [{:span_manager, pid} | services]
+          _ -> services
+        end
+      else
+        services
       end
-    else
-      services
-    end
-    
+
     # Start SampledEvents if available
-    services = if Code.ensure_loaded?(Foundation.Telemetry.SampledEvents.Server) do
-      case ensure_service_started(Foundation.Telemetry.SampledEvents.Server) do
-        {:ok, pid} -> [{:sampled_events, pid} | services]
-        _ -> services
+    services =
+      if Code.ensure_loaded?(Foundation.Telemetry.SampledEvents.Server) do
+        case ensure_service_started(Foundation.Telemetry.SampledEvents.Server) do
+          {:ok, pid} -> [{:sampled_events, pid} | services]
+          _ -> services
+        end
+      else
+        services
       end
-    else
-      services
-    end
-    
+
     services
   end
-  
+
   defp crash_services(services) do
     # Monitor all services before killing them
-    monitors = for {name, pid} <- services, Process.alive?(pid) do
-      ref = Process.monitor(pid)
-      Process.exit(pid, :kill)
-      {name, pid, ref}
-    end
-    
+    monitors =
+      for {name, pid} <- services, Process.alive?(pid) do
+        ref = Process.monitor(pid)
+        Process.exit(pid, :kill)
+        {name, pid, ref}
+      end
+
     # Wait for all monitored processes to die
     for {_name, pid, ref} <- monitors do
       assert_receive {:DOWN, ^ref, :process, ^pid, :killed}, 2000
@@ -611,11 +619,11 @@ defmodule Foundation.OTPCleanupFailureRecoveryTest do
     setup do
       ensure_service_started(Foundation.FeatureFlags)
       Process.flag(:trap_exit, true)
-      
+
       on_exit(fn ->
         Process.flag(:trap_exit, false)
       end)
-      
+
       :ok
     end
 
@@ -722,20 +730,20 @@ defmodule Foundation.OTPCleanupFailureRecoveryTest do
     setup do
       ensure_service_started(Foundation.FeatureFlags)
       Process.flag(:trap_exit, true)
-      
+
       # Ensure telemetry services are available if the modules exist
       if Code.ensure_loaded?(Foundation.Telemetry.SpanManager) do
         ensure_service_started(Foundation.Telemetry.SpanManager)
       end
-      
+
       if Code.ensure_loaded?(Foundation.Telemetry.SampledEvents.Server) do
         ensure_service_started(Foundation.Telemetry.SampledEvents.Server)
       end
-      
+
       on_exit(fn ->
         Process.flag(:trap_exit, false)
       end)
-      
+
       :ok
     end
 
@@ -832,7 +840,7 @@ defmodule Foundation.OTPCleanupFailureRecoveryTest do
       # Basic error context should still work (Logger metadata fallback)
       # But first ensure FeatureFlags service is restarted after deletion
       ensure_service_started(Foundation.FeatureFlags)
-      
+
       # Wait for FeatureFlags to recover its ETS table
       wait_until(
         fn ->
@@ -846,7 +854,7 @@ defmodule Foundation.OTPCleanupFailureRecoveryTest do
         end,
         5000
       )
-      
+
       # ErrorContext should handle missing FeatureFlags gracefully
       # In extreme failure, it should fall back to process dictionary
       try do
@@ -881,11 +889,11 @@ defmodule Foundation.OTPCleanupFailureRecoveryTest do
     setup do
       ensure_service_started(Foundation.FeatureFlags)
       Process.flag(:trap_exit, true)
-      
+
       on_exit(fn ->
         Process.flag(:trap_exit, false)
       end)
-      
+
       :ok
     end
 
@@ -931,7 +939,7 @@ defmodule Foundation.OTPCleanupFailureRecoveryTest do
         # Monitor and kill service
         ref = Process.monitor(pid)
         Process.exit(pid, :kill)
-        
+
         # Wait for process to die
         assert_receive {:DOWN, ^ref, :process, ^pid, :killed}, 2000
 

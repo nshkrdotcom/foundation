@@ -228,7 +228,7 @@ defmodule Foundation.FeatureFlags do
   @impl true
   def handle_call({:enable_migration_stage, stage}, _from, state) do
     Logger.info("Enabling OTP cleanup migration stage #{stage}")
-    
+
     # Ensure table exists before inserting
     ensure_table_exists_in_server()
 
@@ -434,5 +434,4 @@ defmodule Foundation.FeatureFlags do
       end
     end)
   end
-  
 end

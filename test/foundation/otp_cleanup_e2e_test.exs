@@ -797,7 +797,7 @@ defmodule Foundation.OTPCleanupE2ETest do
             agent_pid = agent_task.pid
 
             registry = %{}
-          Registry.register(registry, agent_id, agent_pid)
+            Registry.register(registry, agent_id, agent_pid)
             {agent_id, agent_pid}
           end
 
@@ -807,7 +807,7 @@ defmodule Foundation.OTPCleanupE2ETest do
         # Stop all agents
         for {agent_id, agent_pid} <- agents do
           send(agent_pid, :stop)
-          
+
           # Manually unregister to ensure cleanup
           Registry.unregister(nil, agent_id)
 

@@ -368,6 +368,7 @@ defmodule Foundation.OTPCleanupFeatureFlagTest do
       case Process.whereis(Foundation.FeatureFlags) do
         nil ->
           {:ok, _} = Foundation.FeatureFlags.start_link()
+
         _pid ->
           :ok
       end

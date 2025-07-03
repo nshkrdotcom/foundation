@@ -220,7 +220,7 @@ defmodule Foundation.Telemetry.Span do
   """
   @spec add_attributes(map()) :: :ok
   def add_attributes(attributes) do
-    result = 
+    result =
       try do
         if FeatureFlags.enabled?(:use_genserver_span_management) do
           SpanManager.update_top_span(fn span ->
@@ -231,6 +231,7 @@ defmodule Foundation.Telemetry.Span do
           case get_stack_legacy() do
             [] ->
               :error
+
             [span | rest] ->
               updated_span = %{span | metadata: Map.merge(span.metadata, attributes)}
               set_stack_legacy([updated_span | rest])
@@ -243,13 +244,14 @@ defmodule Foundation.Telemetry.Span do
           case get_stack_legacy() do
             [] ->
               :error
+
             [span | rest] ->
               updated_span = %{span | metadata: Map.merge(span.metadata, attributes)}
               set_stack_legacy([updated_span | rest])
               :ok
           end
       end
-    
+
     case result do
       :error ->
         Logger.warning("No active span to add attributes to")
@@ -393,6 +395,7 @@ defmodule Foundation.Telemetry.Span do
           # If FeatureFlags is not available, fall back to legacy
           _ -> set_stack_legacy(stack)
         end
+
         fun.()
 
       _ ->

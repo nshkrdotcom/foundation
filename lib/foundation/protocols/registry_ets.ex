@@ -62,12 +62,12 @@ defmodule Foundation.Protocols.RegistryETS do
   """
   def list_agents do
     ensure_started()
-    
+
     case :ets.whereis(@table_name) do
       :undefined ->
         # Table doesn't exist yet, return empty list
         []
-      
+
       _tid ->
         :ets.select(@table_name, [
           {{:"$1", :"$2", :"$3", :"$4"}, [], [{{:"$1", :"$2", :"$3"}}]}
@@ -145,7 +145,7 @@ defmodule Foundation.Protocols.RegistryETS do
   def handle_call({:register_agent, agent_id, pid, metadata}, _from, state) do
     # Ensure tables exist - they might have been deleted
     ensure_tables_exist()
-    
+
     # Check if already registered
     case :ets.lookup(@table_name, agent_id) do
       [{^agent_id, _old_pid, _old_metadata, old_ref}] ->
@@ -172,6 +172,7 @@ defmodule Foundation.Protocols.RegistryETS do
   @impl true
   def handle_call({:unregister_agent, agent_id}, _from, state) do
     ensure_tables_exist()
+
     case :ets.lookup(@table_name, agent_id) do
       [{^agent_id, _pid, _metadata, ref}] ->
         # Demonitor the process
@@ -191,6 +192,7 @@ defmodule Foundation.Protocols.RegistryETS do
   @impl true
   def handle_call({:update_metadata, agent_id, new_metadata}, _from, state) do
     ensure_tables_exist()
+
     case :ets.lookup(@table_name, agent_id) do
       [{^agent_id, pid, _old_metadata, ref}] ->
         :ets.insert(@table_name, {agent_id, pid, new_metadata, ref})
@@ -219,7 +221,6 @@ defmodule Foundation.Protocols.RegistryETS do
 
     {:noreply, state}
   end
-
 
   @impl true
   def handle_info(_msg, state) do
@@ -251,22 +252,22 @@ defmodule Foundation.Protocols.RegistryETS do
         :ok
     end
   end
-  
+
   defp wait_for_table(table_name, attempts \\ 50) do
     case :ets.whereis(table_name) do
       :undefined when attempts > 0 ->
         # Use yield instead of sleep for better scheduling
         :erlang.yield()
         wait_for_table(table_name, attempts - 1)
-      
+
       :undefined ->
         raise "Table #{inspect(table_name)} not created after waiting"
-        
+
       _tid ->
         :ok
     end
   end
-  
+
   defp ensure_tables_exist do
     # Check main table
     case :ets.whereis(@table_name) do
@@ -278,10 +279,11 @@ defmodule Foundation.Protocols.RegistryETS do
           {:read_concurrency, true},
           {:write_concurrency, true}
         ])
+
       _ ->
         :ok
     end
-    
+
     # Check monitors table
     case :ets.whereis(@monitors_table) do
       :undefined ->
@@ -292,6 +294,7 @@ defmodule Foundation.Protocols.RegistryETS do
           {:read_concurrency, true},
           {:write_concurrency, true}
         ])
+
       _ ->
         :ok
     end

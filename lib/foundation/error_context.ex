@@ -102,12 +102,13 @@ defmodule Foundation.ErrorContext do
   """
   @spec get_context() :: t() | map()
   def get_context do
-    context = if use_logger_metadata?() do
-      Logger.metadata()[:error_context]
-    else
-      Process.get(:error_context)
-    end
-    
+    context =
+      if use_logger_metadata?() do
+        Logger.metadata()[:error_context]
+      else
+        Process.get(:error_context)
+      end
+
     # Return empty map if no context for backward compatibility
     context || %{}
   end
@@ -168,7 +169,7 @@ defmodule Foundation.ErrorContext do
     old_context = get_context()
 
     # Merge new context with existing
-    merged_context = 
+    merged_context =
       case old_context do
         nil -> context
         existing when is_map(existing) -> Map.merge(existing, context)
@@ -185,7 +186,6 @@ defmodule Foundation.ErrorContext do
       end
     end
   end
-
 
   @doc """
   Execute a function in a new task with inherited error context.

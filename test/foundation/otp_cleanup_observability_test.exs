@@ -588,53 +588,53 @@ defmodule Foundation.OTPCleanupObservabilityTest do
         {4, "full_migration", 1000}
       ]
 
-      performance_results = 
+      performance_results =
         for {stage, scenario_name, operations} <- test_scenarios do
-        if stage > 0 do
-          FeatureFlags.enable_otp_cleanup_stage(stage)
-          start_services_for_stage(stage)
-        else
-          FeatureFlags.reset_all()
+          if stage > 0 do
+            FeatureFlags.enable_otp_cleanup_stage(stage)
+            start_services_for_stage(stage)
+          else
+            FeatureFlags.reset_all()
+          end
+
+          # Warm up
+          for _i <- 1..10 do
+            basic_operations()
+          end
+
+          # Measure performance
+          {total_time, _} =
+            :timer.tc(fn ->
+              for i <- 1..operations do
+                # Registry operations
+                agent_id = :"perf_test_#{scenario_name}_#{i}"
+                Registry.register(nil, agent_id, self())
+                Registry.lookup(nil, agent_id)
+
+                # Error context operations
+                ErrorContext.set_context(%{
+                  scenario: scenario_name,
+                  operation: i,
+                  timestamp: System.system_time(:microsecond)
+                })
+
+                ErrorContext.get_context()
+
+                # Telemetry operations
+                span_id = Span.start_span("perf_test", %{scenario: scenario_name, op: i})
+                Span.end_span(span_id)
+              end
+            end)
+
+          ops_per_second = operations * 1_000_000 / total_time
+          avg_time_per_op = total_time / operations
+
+          IO.puts(
+            "#{scenario_name}: #{Float.round(ops_per_second, 2)} ops/sec, #{Float.round(avg_time_per_op, 2)}μs/op"
+          )
+
+          {scenario_name, stage, ops_per_second, avg_time_per_op, total_time}
         end
-
-        # Warm up
-        for _i <- 1..10 do
-          basic_operations()
-        end
-
-        # Measure performance
-        {total_time, _} =
-          :timer.tc(fn ->
-            for i <- 1..operations do
-              # Registry operations
-              agent_id = :"perf_test_#{scenario_name}_#{i}"
-              Registry.register(nil, agent_id, self())
-              Registry.lookup(nil, agent_id)
-
-              # Error context operations
-              ErrorContext.set_context(%{
-                scenario: scenario_name,
-                operation: i,
-                timestamp: System.system_time(:microsecond)
-              })
-
-              ErrorContext.get_context()
-
-              # Telemetry operations
-              span_id = Span.start_span("perf_test", %{scenario: scenario_name, op: i})
-              Span.end_span(span_id)
-            end
-          end)
-
-        ops_per_second = operations * 1_000_000 / total_time
-        avg_time_per_op = total_time / operations
-
-        IO.puts(
-          "#{scenario_name}: #{Float.round(ops_per_second, 2)} ops/sec, #{Float.round(avg_time_per_op, 2)}μs/op"
-        )
-
-        {scenario_name, stage, ops_per_second, avg_time_per_op, total_time}
-      end
 
       # Analyze performance across implementations
 
@@ -850,7 +850,7 @@ defmodule Foundation.OTPCleanupObservabilityTest do
         # Registry and error context don't emit telemetry events in current implementation
         # This is by design to avoid performance overhead
         # Skip these checks
-        
+
         # registry_events = filter_comprehensive_events(collected_events, [:foundation, :registry])
         # assert length(registry_events) >= 10,
         #        "Insufficient registry events: #{length(registry_events)}"

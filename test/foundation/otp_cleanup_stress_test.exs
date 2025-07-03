@@ -233,10 +233,11 @@ defmodule Foundation.OTPCleanupStressTest do
 
           # Kill all agents concurrently to test cleanup
           # First monitor all the pids before killing them
-          refs = for pid <- agent_pids, into: %{} do
-            ref = Process.monitor(pid)
-            {ref, pid}
-          end
+          refs =
+            for pid <- agent_pids, into: %{} do
+              ref = Process.monitor(pid)
+              {ref, pid}
+            end
 
           # Send stop signal to all tasks
           for pid <- agent_pids do
@@ -260,7 +261,8 @@ defmodule Foundation.OTPCleanupStressTest do
               Enum.all?(registered_agents, fn {agent_id, _} ->
                 case Foundation.Registry.lookup(registry, agent_id) do
                   {:error, :not_found} -> true
-                  :error -> true  # Also accept :error as "not found"
+                  # Also accept :error as "not found"
+                  :error -> true
                   _ -> false
                 end
               end)
@@ -422,7 +424,9 @@ defmodule Foundation.OTPCleanupStressTest do
       # Verify no context leakage
       ErrorContext.clear_context()
       final_context = ErrorContext.get_context()
-      assert final_context == nil || final_context == %{}, "Context not properly cleared: #{inspect(final_context)}"
+
+      assert final_context == nil || final_context == %{},
+             "Context not properly cleared: #{inspect(final_context)}"
     end
 
     test "error context with_context stress test" do
@@ -605,12 +609,14 @@ defmodule Foundation.OTPCleanupStressTest do
 
       if Code.ensure_loaded?(Foundation.Telemetry.SampledEvents.Server) do
         case Process.whereis(Foundation.Telemetry.SampledEvents.Server) do
-          nil -> 
+          nil ->
             case Foundation.Telemetry.SampledEvents.Server.start_link() do
               {:ok, _} -> :ok
               _ -> :ok
             end
-          _pid -> :ok
+
+          _pid ->
+            :ok
         end
 
         num_emitters = 20
@@ -682,7 +688,9 @@ defmodule Foundation.OTPCleanupStressTest do
                 {:ok, sampled_events_pid} -> [sampled_events_pid | services]
                 _ -> services
               end
-            sampled_events_pid -> [sampled_events_pid | services]
+
+            sampled_events_pid ->
+              [sampled_events_pid | services]
           end
         else
           services

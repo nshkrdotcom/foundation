@@ -9,6 +9,7 @@ defmodule Foundation.Telemetry.SpanTest do
     case Process.whereis(Foundation.FeatureFlags) do
       nil ->
         {:ok, _} = Foundation.FeatureFlags.start_link()
+
       _pid ->
         :ok
     end
@@ -30,7 +31,7 @@ defmodule Foundation.Telemetry.SpanTest do
 
     # Clean up any existing span stack
     Foundation.Telemetry.SpanManager.clear_stack()
-    
+
     on_exit(fn ->
       # Reset feature flag after test if FeatureFlags is still running
       # Use try/catch to handle process termination race conditions
@@ -42,7 +43,7 @@ defmodule Foundation.Telemetry.SpanTest do
         :exit, {:noproc, _} -> :ok
         :exit, {:normal, _} -> :ok
       end
-      
+
       # Also clean up SpanManager if it's still running
       try do
         if Process.whereis(Foundation.Telemetry.SpanManager) do
@@ -52,7 +53,7 @@ defmodule Foundation.Telemetry.SpanTest do
         :exit, _ -> :ok
       end
     end)
-    
+
     :ok
   end
 

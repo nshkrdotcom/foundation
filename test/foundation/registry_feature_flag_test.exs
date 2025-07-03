@@ -36,7 +36,7 @@ defmodule Foundation.RegistryFeatureFlagTest do
     on_exit(fn ->
       # Clean up process dictionary
       Process.delete(:registered_agents)
-      
+
       # Reset feature flags if service is still running
       # Use try/catch to handle race conditions during teardown
       try do
