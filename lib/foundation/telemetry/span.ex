@@ -133,10 +133,15 @@ defmodule Foundation.Telemetry.Span do
     }
 
     # Push onto span stack using either SpanManager or Process dictionary
-    if FeatureFlags.enabled?(:use_genserver_span_management) do
-      SpanManager.push_span(span)
-    else
-      push_span_legacy(span)
+    try do
+      if FeatureFlags.enabled?(:use_genserver_span_management) do
+        SpanManager.push_span(span)
+      else
+        push_span_legacy(span)
+      end
+    rescue
+      # If FeatureFlags is not available, fall back to legacy
+      _ -> push_span_legacy(span)
     end
 
     # Emit span started event
@@ -168,10 +173,15 @@ defmodule Foundation.Telemetry.Span do
   @spec end_span(atom(), map()) :: :ok
   def end_span(status \\ :ok, additional_metadata \\ %{}) do
     span =
-      if FeatureFlags.enabled?(:use_genserver_span_management) do
-        SpanManager.pop_span()
-      else
-        pop_span_legacy()
+      try do
+        if FeatureFlags.enabled?(:use_genserver_span_management) do
+          SpanManager.pop_span()
+        else
+          pop_span_legacy()
+        end
+      rescue
+        # If FeatureFlags is not available, fall back to legacy
+        _ -> pop_span_legacy()
       end
 
     case span do
@@ -211,20 +221,33 @@ defmodule Foundation.Telemetry.Span do
   @spec add_attributes(map()) :: :ok
   def add_attributes(attributes) do
     result = 
-      if FeatureFlags.enabled?(:use_genserver_span_management) do
-        SpanManager.update_top_span(fn span ->
-          %{span | metadata: Map.merge(span.metadata, attributes)}
-        end)
-      else
-        # Legacy implementation - update top span in Process dictionary
-        case get_stack_legacy() do
-          [] ->
-            :error
-          [span | rest] ->
-            updated_span = %{span | metadata: Map.merge(span.metadata, attributes)}
-            set_stack_legacy([updated_span | rest])
-            :ok
+      try do
+        if FeatureFlags.enabled?(:use_genserver_span_management) do
+          SpanManager.update_top_span(fn span ->
+            %{span | metadata: Map.merge(span.metadata, attributes)}
+          end)
+        else
+          # Legacy implementation - update top span in Process dictionary
+          case get_stack_legacy() do
+            [] ->
+              :error
+            [span | rest] ->
+              updated_span = %{span | metadata: Map.merge(span.metadata, attributes)}
+              set_stack_legacy([updated_span | rest])
+              :ok
+          end
         end
+      rescue
+        # If FeatureFlags is not available, fall back to legacy
+        _ ->
+          case get_stack_legacy() do
+            [] ->
+              :error
+            [span | rest] ->
+              updated_span = %{span | metadata: Map.merge(span.metadata, attributes)}
+              set_stack_legacy([updated_span | rest])
+              :ok
+          end
       end
     
     case result do
@@ -285,10 +308,15 @@ defmodule Foundation.Telemetry.Span do
   @spec current_span() :: map() | nil
   def current_span do
     stack =
-      if FeatureFlags.enabled?(:use_genserver_span_management) do
-        SpanManager.get_stack()
-      else
-        get_stack_legacy()
+      try do
+        if FeatureFlags.enabled?(:use_genserver_span_management) do
+          SpanManager.get_stack()
+        else
+          get_stack_legacy()
+        end
+      rescue
+        # If FeatureFlags is not available, fall back to legacy
+        _ -> get_stack_legacy()
       end
 
     case stack do
@@ -329,10 +357,15 @@ defmodule Foundation.Telemetry.Span do
 
       span ->
         stack =
-          if FeatureFlags.enabled?(:use_genserver_span_management) do
-            SpanManager.get_stack()
-          else
-            get_stack_legacy()
+          try do
+            if FeatureFlags.enabled?(:use_genserver_span_management) do
+              SpanManager.get_stack()
+            else
+              get_stack_legacy()
+            end
+          rescue
+            # If FeatureFlags is not available, fall back to legacy
+            _ -> get_stack_legacy()
           end
 
         %{
@@ -350,10 +383,15 @@ defmodule Foundation.Telemetry.Span do
   def with_propagated_context(context, fun) do
     case context do
       %{span_stack: stack} ->
-        if FeatureFlags.enabled?(:use_genserver_span_management) do
-          SpanManager.set_stack(stack)
-        else
-          set_stack_legacy(stack)
+        try do
+          if FeatureFlags.enabled?(:use_genserver_span_management) do
+            SpanManager.set_stack(stack)
+          else
+            set_stack_legacy(stack)
+          end
+        rescue
+          # If FeatureFlags is not available, fall back to legacy
+          _ -> set_stack_legacy(stack)
         end
         fun.()
 
