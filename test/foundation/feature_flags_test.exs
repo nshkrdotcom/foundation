@@ -6,9 +6,10 @@ defmodule Foundation.FeatureFlagsTest do
   setup do
     # Start FeatureFlags if not already started
     case Process.whereis(FeatureFlags) do
-      nil -> 
+      nil ->
         {:ok, _pid} = FeatureFlags.start_link()
-      _pid -> 
+
+      _pid ->
         :ok
     end
 
