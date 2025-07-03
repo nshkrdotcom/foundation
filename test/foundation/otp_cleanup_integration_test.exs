@@ -169,6 +169,30 @@ defmodule Foundation.OTPCleanupIntegrationTest do
   end
 
   describe "Feature Flag Integration Tests" do
+    setup do
+      # Ensure FeatureFlags is started
+      case Process.whereis(Foundation.FeatureFlags) do
+        nil ->
+          {:ok, _pid} = Foundation.FeatureFlags.start_link()
+        _pid ->
+          :ok
+      end
+      
+      # Reset all flags to defaults for clean test state
+      Foundation.FeatureFlags.reset_all()
+      
+      on_exit(fn ->
+        # Reset flags after test
+        try do
+          Foundation.FeatureFlags.reset_all()
+        catch
+          :exit, {:noproc, _} -> :ok
+        end
+      end)
+      
+      :ok
+    end
+    
     test "migration stages enable correct flags" do
       # Test each migration stage
       for stage <- 1..4 do
