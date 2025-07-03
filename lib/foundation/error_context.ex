@@ -98,14 +98,18 @@ defmodule Foundation.ErrorContext do
   @doc """
   Get current error context from the process.
   Retrieves from Logger metadata when feature flag is enabled, otherwise from process dictionary.
+  Returns empty map if no context is set for backward compatibility.
   """
-  @spec get_context() :: t() | map() | nil
+  @spec get_context() :: t() | map()
   def get_context do
-    if use_logger_metadata?() do
+    context = if use_logger_metadata?() do
       Logger.metadata()[:error_context]
     else
       Process.get(:error_context)
     end
+    
+    # Return empty map if no context for backward compatibility
+    context || %{}
   end
 
   @doc """

@@ -61,13 +61,20 @@ defmodule Foundation.Protocols.RegistryETS do
   Only returns agents with alive processes.
   """
   def list_agents do
-    ensure_table_exists()
-
-    :ets.select(@table_name, [
-      {{:"$1", :"$2", :"$3", :"$4"}, [], [{{:"$1", :"$2", :"$3"}}]}
-    ])
-    |> Enum.filter(fn {_id, pid, _metadata} -> Process.alive?(pid) end)
-    |> Enum.map(fn {id, pid, _metadata} -> {id, pid} end)
+    ensure_started()
+    
+    case :ets.whereis(@table_name) do
+      :undefined ->
+        # Table doesn't exist yet, return empty list
+        []
+      
+      _tid ->
+        :ets.select(@table_name, [
+          {{:"$1", :"$2", :"$3", :"$4"}, [], [{{:"$1", :"$2", :"$3"}}]}
+        ])
+        |> Enum.filter(fn {_id, pid, _metadata} -> Process.alive?(pid) end)
+        |> Enum.map(fn {id, pid, _metadata} -> {id, pid} end)
+    end
   end
 
   @doc """
@@ -213,6 +220,7 @@ defmodule Foundation.Protocols.RegistryETS do
     {:noreply, state}
   end
 
+
   @impl true
   def handle_info(_msg, state) do
     # Ignore other messages
@@ -236,10 +244,25 @@ defmodule Foundation.Protocols.RegistryETS do
     case :ets.whereis(@table_name) do
       :undefined ->
         ensure_started()
-        # Give the GenServer a moment to create tables
-        Process.sleep(10)
+        # Wait for table to be created using polling instead of sleep
+        wait_for_table(@table_name)
 
       _ ->
+        :ok
+    end
+  end
+  
+  defp wait_for_table(table_name, attempts \\ 50) do
+    case :ets.whereis(table_name) do
+      :undefined when attempts > 0 ->
+        # Use yield instead of sleep for better scheduling
+        :erlang.yield()
+        wait_for_table(table_name, attempts - 1)
+      
+      :undefined ->
+        raise "Table #{inspect(table_name)} not created after waiting"
+        
+      _tid ->
         :ok
     end
   end

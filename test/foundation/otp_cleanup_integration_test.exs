@@ -318,7 +318,7 @@ defmodule Foundation.OTPCleanupIntegrationTest do
       assert ErrorContext.get_context().temp == "data"
 
       ErrorContext.clear_context()
-      assert ErrorContext.get_context() == nil
+      assert ErrorContext.get_context() == %{}
 
       # Logger metadata should also be cleared
       assert Logger.metadata()[:error_context] == nil

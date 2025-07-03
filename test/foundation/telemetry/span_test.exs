@@ -19,7 +19,10 @@ defmodule Foundation.Telemetry.SpanTest do
     # Ensure SpanManager is started
     case Process.whereis(Foundation.Telemetry.SpanManager) do
       nil ->
-        {:ok, _pid} = Foundation.Telemetry.SpanManager.start_link()
+        case Foundation.Telemetry.SpanManager.start_link() do
+          {:ok, _pid} -> :ok
+          {:error, {:already_started, _pid}} -> :ok
+        end
 
       _pid ->
         :ok
@@ -30,8 +33,23 @@ defmodule Foundation.Telemetry.SpanTest do
     
     on_exit(fn ->
       # Reset feature flag after test if FeatureFlags is still running
-      if Process.whereis(Foundation.FeatureFlags) do
-        Foundation.FeatureFlags.disable(:use_genserver_span_management)
+      # Use try/catch to handle process termination race conditions
+      try do
+        if Process.whereis(Foundation.FeatureFlags) do
+          Foundation.FeatureFlags.disable(:use_genserver_span_management)
+        end
+      catch
+        :exit, {:noproc, _} -> :ok
+        :exit, {:normal, _} -> :ok
+      end
+      
+      # Also clean up SpanManager if it's still running
+      try do
+        if Process.whereis(Foundation.Telemetry.SpanManager) do
+          Foundation.Telemetry.SpanManager.clear_stack()
+        end
+      catch
+        :exit, _ -> :ok
       end
     end)
     

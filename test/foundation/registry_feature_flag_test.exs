@@ -22,9 +22,15 @@ defmodule Foundation.RegistryFeatureFlagTest do
     # Clean up any process dictionary state
     Process.delete(:registered_agents)
 
-    # Clean up any ETS state
-    for {agent_id, _} <- RegistryETS.list_agents() do
-      RegistryETS.unregister_agent(agent_id)
+    # Clean up any ETS state if the service is running
+    if Process.whereis(Foundation.Protocols.RegistryETS) do
+      try do
+        for {agent_id, _} <- RegistryETS.list_agents() do
+          RegistryETS.unregister_agent(agent_id)
+        end
+      catch
+        _ -> :ok
+      end
     end
 
     on_exit(fn ->
@@ -32,8 +38,14 @@ defmodule Foundation.RegistryFeatureFlagTest do
       Process.delete(:registered_agents)
       
       # Reset feature flags if service is still running
-      if Process.whereis(Foundation.FeatureFlags) do
-        FeatureFlags.reset_all()
+      # Use try/catch to handle race conditions during teardown
+      try do
+        if Process.whereis(Foundation.FeatureFlags) do
+          FeatureFlags.reset_all()
+        end
+      catch
+        :exit, {:noproc, _} -> :ok
+        :exit, {:normal, _} -> :ok
       end
     end)
 

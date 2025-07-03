@@ -66,7 +66,7 @@ defmodule Foundation.ErrorContextLoggerTest do
       ErrorContext.set_context(%{test: "data"})
       ErrorContext.clear_context()
 
-      assert ErrorContext.get_context() == nil
+      assert ErrorContext.get_context() == %{}
       assert Logger.metadata()[:error_context] == nil
     end
 
@@ -97,7 +97,7 @@ defmodule Foundation.ErrorContextLoggerTest do
       end)
 
       # Should be cleared after execution
-      assert ErrorContext.get_context() == nil
+      assert ErrorContext.get_context() == %{}
     end
 
     test "with_context/1 uses Logger metadata for storage" do
@@ -319,7 +319,7 @@ defmodule Foundation.ErrorContextLoggerTest do
 
     test "handles nil context gracefully" do
       ErrorContext.set_context(nil)
-      assert ErrorContext.get_context() == nil
+      assert ErrorContext.get_context() == %{}
     end
 
     test "handles complex nested contexts" do

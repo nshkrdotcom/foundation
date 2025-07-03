@@ -247,7 +247,10 @@ defmodule Foundation.FeatureFlagsTest do
 
       # Only test if RegistryETS is available
       if Code.ensure_loaded?(Foundation.Protocols.RegistryETS) do
-        {:ok, _} = Foundation.Protocols.RegistryETS.start_link()
+        case Foundation.Protocols.RegistryETS.start_link() do
+          {:ok, _} -> :ok
+          {:error, {:already_started, _}} -> :ok
+        end
 
         assert :ok = Foundation.Registry.register(nil, :test_agent2, self())
         assert {:ok, {pid, _metadata}} = Foundation.Registry.lookup(nil, :test_agent2)

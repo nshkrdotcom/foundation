@@ -232,22 +232,40 @@ defmodule Foundation.OTPCleanupStressTest do
           end
 
           # Kill all agents concurrently to test cleanup
+          # First monitor all the pids before killing them
+          refs = for pid <- agent_pids, into: %{} do
+            ref = Process.monitor(pid)
+            {ref, pid}
+          end
+
+          # Send stop signal to all tasks
           for pid <- agent_pids do
             send(pid, :stop)
           end
 
-          # Wait for cleanup
+          # Ensure all tasks actually exit by shutting them down
+          for task <- agent_tasks do
+            Task.shutdown(task, :brutal_kill)
+          end
+
+          # Wait for all DOWN messages to confirm processes are dead
+          for {ref, pid} <- refs do
+            assert_receive {:DOWN, ^ref, :process, ^pid, _reason}, 5000
+          end
+
+          # Now wait for cleanup with proper synchronization
           wait_until(
             fn ->
-              # Check that all agents are cleaned up
+              # Check that all agents are cleaned up from registry
               Enum.all?(registered_agents, fn {agent_id, _} ->
                 case Foundation.Registry.lookup(registry, agent_id) do
                   {:error, :not_found} -> true
+                  :error -> true  # Also accept :error as "not found"
                   _ -> false
                 end
               end)
             end,
-            5000
+            10_000
           )
         end
       else

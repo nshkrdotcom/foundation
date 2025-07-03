@@ -21,8 +21,14 @@ defmodule Foundation.MigrationControlTest do
 
     on_exit(fn ->
       # Reset feature flags if service is still running
-      if Process.whereis(Foundation.FeatureFlags) do
-        FeatureFlags.reset_all()
+      # Use try/catch to handle teardown race conditions
+      try do
+        if Process.whereis(Foundation.FeatureFlags) do
+          FeatureFlags.reset_all()
+        end
+      catch
+        :exit, {:noproc, _} -> :ok
+        :exit, {:normal, _} -> :ok
       end
     end)
 
