@@ -324,6 +324,7 @@ defmodule Foundation.ErrorContext do
           Error.t() | {:error, Error.t()}
   def enrich_error(%Error{} = error) do
     context = get_context()
+
     if context == %{} do
       error
     else
@@ -337,12 +338,10 @@ defmodule Foundation.ErrorContext do
 
   def enrich_error({:error, reason}) do
     context = get_context()
-    
+
     if context == %{} do
       {:error,
-       Error.new(:external_error, "External operation failed",
-         context: %{original_reason: reason}
-       )}
+       Error.new(:external_error, "External operation failed", context: %{original_reason: reason})}
     else
       if is_struct(context, __MODULE__) do
         enhance_error({:error, reason}, context)

@@ -5,13 +5,26 @@ defmodule Foundation.FeatureFlagsTest do
 
   setup do
     # Start FeatureFlags if not already started
-    case GenServer.whereis(FeatureFlags) do
-      nil -> FeatureFlags.start_link()
-      _ -> :ok
+    case Process.whereis(FeatureFlags) do
+      nil -> 
+        {:ok, _pid} = FeatureFlags.start_link()
+      _pid -> 
+        :ok
     end
 
     # Reset to clean state
     FeatureFlags.reset_all()
+
+    on_exit(fn ->
+      # Clean up after test
+      if Process.whereis(FeatureFlags) do
+        try do
+          FeatureFlags.reset_all()
+        catch
+          :exit, _ -> :ok
+        end
+      end
+    end)
 
     :ok
   end
