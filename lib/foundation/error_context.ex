@@ -125,11 +125,7 @@ defmodule Foundation.ErrorContext do
       set_context(context)
       fun.()
     after
-      if old_context do
-        set_context(old_context)
-      else
-        clear_context()
-      end
+      set_context(old_context)
     end
   end
 
@@ -169,21 +165,13 @@ defmodule Foundation.ErrorContext do
     old_context = get_context()
 
     # Merge new context with existing
-    merged_context =
-      case old_context do
-        nil -> context
-        existing when is_map(existing) -> Map.merge(existing, context)
-      end
+    merged_context = Map.merge(old_context, context)
 
     try do
       set_context(merged_context)
       fun.()
     after
-      if old_context do
-        set_context(old_context)
-      else
-        clear_context()
-      end
+      set_context(old_context)
     end
   end
 
@@ -196,10 +184,7 @@ defmodule Foundation.ErrorContext do
     context = get_context()
 
     Task.start(fn ->
-      if context do
-        set_context(context)
-      end
-
+      set_context(context)
       fun.()
     end)
   end
@@ -213,10 +198,7 @@ defmodule Foundation.ErrorContext do
     context = get_context()
 
     Task.start_link(fn ->
-      if context do
-        set_context(context)
-      end
-
+      set_context(context)
       fun.()
     end)
   end
@@ -341,9 +323,11 @@ defmodule Foundation.ErrorContext do
   @spec enrich_error(Error.t() | {:error, Error.t()} | {:error, term()}) ::
           Error.t() | {:error, Error.t()}
   def enrich_error(%Error{} = error) do
-    case get_context() do
-      nil -> error
-      context -> enhance_error(error, context)
+    context = get_context()
+    if context == %{} do
+      error
+    else
+      enhance_error(error, context)
     end
   end
 
@@ -352,21 +336,22 @@ defmodule Foundation.ErrorContext do
   end
 
   def enrich_error({:error, reason}) do
-    case get_context() do
-      nil ->
-        {:error,
-         Error.new(:external_error, "External operation failed",
-           context: %{original_reason: reason}
-         )}
-
-      context when is_struct(context, __MODULE__) ->
+    context = get_context()
+    
+    if context == %{} do
+      {:error,
+       Error.new(:external_error, "External operation failed",
+         context: %{original_reason: reason}
+       )}
+    else
+      if is_struct(context, __MODULE__) do
         enhance_error({:error, reason}, context)
-
-      context when is_map(context) ->
+      else
         {:error,
          Error.new(:external_error, "External operation failed",
            context: Map.merge(context, %{original_reason: reason})
          )}
+      end
     end
   end
 
@@ -444,7 +429,7 @@ defmodule Foundation.ErrorContext do
   This is an emergency recovery mechanism for debugging.
   Uses Logger metadata when feature flag is enabled, otherwise uses process dictionary.
   """
-  @spec get_current_context() :: t() | nil
+  @spec get_current_context() :: t() | map()
   def get_current_context do
     get_context()
   end
