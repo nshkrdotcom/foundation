@@ -789,9 +789,10 @@ Enable gradual migration from Process dictionary to OTP patterns with safe rollb
    - Code review checklist for OTP compliance
 
 7. **Update Architecture Documentation**:
-   - Update system architecture diagrams
+   - create dir `docsProcessRegistry/` and create the docs in here
+   - create system architecture diagrams
    - Document new OTP patterns used
-   - Update API documentation where changed
+   - create API documentation 
    - Create training materials for team
 
 **Success Criteria**:
