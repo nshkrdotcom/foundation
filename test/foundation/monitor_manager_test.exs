@@ -61,9 +61,11 @@ defmodule Foundation.MonitorManagerTest do
           :exit, {:noproc, _} ->
             # Process already gone, that's ok
             :ok
+
           :exit, {:shutdown, _} ->
             # Process is already shutting down, that's ok
             :ok
+
           :exit, reason ->
             # Log other exit reasons for debugging but don't fail
             IO.puts("MonitorManager shutdown with reason: #{inspect(reason)}")

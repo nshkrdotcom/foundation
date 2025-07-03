@@ -401,21 +401,24 @@ defmodule Foundation.MonitorManager do
   @impl true
   def terminate(reason, state) do
     # Clean up all monitors when shutting down
-    Logger.debug("MonitorManager terminating", reason: reason, monitor_count: map_size(state.monitors))
-    
+    Logger.debug("MonitorManager terminating",
+      reason: reason,
+      monitor_count: map_size(state.monitors)
+    )
+
     # Demonitor all tracked processes
     Enum.each(state.monitors, fn {ref, info} ->
       Process.demonitor(ref, [:flush])
       Process.demonitor(info.caller_ref, [:flush])
     end)
-    
+
     # Emit final telemetry
     :telemetry.execute(
       [:foundation, :monitor_manager, :terminated],
       %{monitor_count: map_size(state.monitors)},
       %{reason: reason}
     )
-    
+
     :ok
   end
 
