@@ -12,13 +12,18 @@ defmodule Foundation.Telemetry.SpanTest do
     case Process.whereis(Foundation.FeatureFlags) do
       nil ->
         case Foundation.FeatureFlags.start_link() do
-          {:ok, _} -> :ok
-          {:error, {:already_started, _}} -> :ok
-          {:error, reason} -> 
+          {:ok, _} ->
+            :ok
+
+          {:error, {:already_started, _}} ->
+            :ok
+
+          {:error, reason} ->
             # Continue without feature flags for tests
             IO.puts("Warning: Could not start FeatureFlags: #{inspect(reason)}")
             :ok
         end
+
       _pid ->
         :ok
     end
@@ -33,7 +38,7 @@ defmodule Foundation.Telemetry.SpanTest do
     end
 
     # Ensure SpanManager is started
-    span_manager_result = 
+    span_manager_result =
       case Process.whereis(Foundation.Telemetry.SpanManager) do
         nil ->
           case Foundation.Telemetry.SpanManager.start_link() do
@@ -41,6 +46,7 @@ defmodule Foundation.Telemetry.SpanTest do
             {:error, {:already_started, pid}} -> {:ok, pid}
             {:error, reason} -> {:error, reason}
           end
+
         pid ->
           {:ok, pid}
       end
@@ -58,7 +64,8 @@ defmodule Foundation.Telemetry.SpanTest do
           # Reset feature flag after test if FeatureFlags is still running
           # Use try/catch to handle process termination race conditions
           try do
-            if Process.whereis(Foundation.FeatureFlags) && Process.alive?(Process.whereis(Foundation.FeatureFlags)) do
+            if Process.whereis(Foundation.FeatureFlags) &&
+                 Process.alive?(Process.whereis(Foundation.FeatureFlags)) do
               Foundation.FeatureFlags.disable(:use_genserver_span_management)
             end
           catch
@@ -85,7 +92,6 @@ defmodule Foundation.Telemetry.SpanTest do
 
   describe "with_span/3" do
     test "executes block and emits start/stop events" do
-      
       test_pid = self()
       ref = make_ref()
 
@@ -263,7 +269,6 @@ defmodule Foundation.Telemetry.SpanTest do
     end
 
     test "returns current span when active" do
-      
       with_span :test_span, %{test: true} do
         span = current_span()
         assert span != nil
@@ -279,7 +284,6 @@ defmodule Foundation.Telemetry.SpanTest do
     end
 
     test "returns trace ID when span active" do
-      
       with_span :test_span do
         trace_id = current_trace_id()
         assert trace_id != nil
