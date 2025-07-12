@@ -110,16 +110,15 @@ defmodule JidoSystem.Agents.CoordinatorAgent do
   alias JidoSystem.Actions.DistributeTask
 
   @impl true
-  def mount(server_state, opts) do
-    case super(server_state, opts) do
-      {:ok, initialized_server_state} ->
-        agent = initialized_server_state.agent
-        Logger.info("CoordinatorAgent #{agent.id} mounted for multi-agent coordination")
+  def mount(agent, opts) do
+    case super(agent, opts) do
+      {:ok, initialized_agent} ->
+        Logger.info("CoordinatorAgent #{initialized_agent.id} mounted for multi-agent coordination")
 
         # Register with supervised scheduler instead of self-scheduling
         register_with_scheduler()
 
-        {:ok, initialized_server_state}
+        {:ok, initialized_agent}
     end
   end
 

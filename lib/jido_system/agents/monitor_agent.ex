@@ -103,11 +103,10 @@ defmodule JidoSystem.Agents.MonitorAgent do
   alias JidoSystem.Actions.{CollectMetrics, AnalyzeHealth}
 
   @impl true
-  def mount(server_state, opts) do
-    case super(server_state, opts) do
-      {:ok, initialized_server_state} ->
-        agent = initialized_server_state.agent
-        Logger.info("MonitorAgent #{agent.id} mounted and starting monitoring")
+  def mount(agent, opts) do
+    case super(agent, opts) do
+      {:ok, initialized_agent} ->
+        Logger.info("MonitorAgent #{initialized_agent.id} mounted and starting monitoring")
 
         # Register with supervised scheduler instead of self-scheduling
         register_with_scheduler()
@@ -115,7 +114,7 @@ defmodule JidoSystem.Agents.MonitorAgent do
         # Subscribe to Foundation telemetry events
         subscribe_to_telemetry_events()
 
-        {:ok, initialized_server_state}
+        {:ok, initialized_agent}
     end
   end
 

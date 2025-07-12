@@ -42,8 +42,8 @@ defmodule JidoSystem.Agents.FoundationAgent do
 
       # Override specs for Foundation-specific behavior modifications
       # These specs match the actual returns our implementations use
-      @spec mount(term(), keyword()) ::
-              {:ok, term()}
+      @spec mount(Jido.Agent.t(), keyword()) ::
+              {:ok, Jido.Agent.t()}
 
       @spec on_before_run(Jido.Agent.t()) ::
               {:ok, Jido.Agent.t()}
@@ -54,8 +54,8 @@ defmodule JidoSystem.Agents.FoundationAgent do
       @spec on_error(Jido.Agent.t(), term()) ::
               {:ok, Jido.Agent.t()}
 
-      @spec shutdown(term(), term()) ::
-              {:ok, term()}
+      @spec shutdown(Jido.Agent.t(), term()) ::
+              {:ok, Jido.Agent.t()}
 
       # Override Jido.Agent callback specs that cause Dialyzer warnings
       # Our implementations never return errors for these callbacks
@@ -66,11 +66,10 @@ defmodule JidoSystem.Agents.FoundationAgent do
       @spec transform_result(Jido.Signal.t(), term(), Jido.Agent.t()) :: {:ok, term()}
 
       @impl true
-      def mount(server_state, opts) do
-        Logger.info("FoundationAgent mount called for agent #{server_state.agent.id}")
+      def mount(agent, opts) do
+        Logger.info("FoundationAgent mount called for agent #{agent.id}")
 
         try do
-          agent = server_state.agent
 
           # Register with Foundation Registry
           # Get capabilities from agent metadata or defaults
@@ -128,7 +127,7 @@ defmodule JidoSystem.Agents.FoundationAgent do
                   capabilities: capabilities
                 })
 
-                {:ok, server_state}
+                {:ok, agent}
 
               {:error, reason} ->
                 Logger.error(
@@ -253,8 +252,7 @@ defmodule JidoSystem.Agents.FoundationAgent do
       end
 
       @impl true
-      def shutdown(server_state, reason) do
-        agent = server_state.agent
+      def shutdown(agent, reason) do
         Logger.info("Agent #{agent.id} shutting down: #{inspect(reason)}")
 
         # Deregister from Foundation
@@ -272,7 +270,7 @@ defmodule JidoSystem.Agents.FoundationAgent do
           reason: reason
         })
 
-        {:ok, server_state}
+        {:ok, agent}
       end
 
       # Helper function to emit custom events

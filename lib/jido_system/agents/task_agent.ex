@@ -82,17 +82,15 @@ defmodule JidoSystem.Agents.TaskAgent do
   alias JidoSystem.Actions.{ProcessTask, ValidateTask}
 
   @impl true
-  def mount(server_state, opts) do
-    case super(server_state, opts) do
-      {:ok, initialized_server_state} ->
-        agent = initialized_server_state.agent
-
-        Logger.info("TaskAgent #{agent.id} mounted successfully")
+  def mount(agent, opts) do
+    case super(agent, opts) do
+      {:ok, initialized_agent} ->
+        Logger.info("TaskAgent #{initialized_agent.id} mounted successfully")
 
         # Schedule periodic queue processing
         schedule_queue_processing()
 
-        {:ok, initialized_server_state}
+        {:ok, initialized_agent}
 
       error ->
         error

@@ -18,7 +18,7 @@ defmodule JidoSystem.Agents.FinalPersistenceDemoTest do
         ]
 
       @impl true
-      def mount(%{agent: agent} = server_state, _opts) do
+      def mount(agent, _opts) do
         # This is called when agent starts - restore state here
         storage = :persistent_term.get(:persistent_data_test, %{})
         IO.puts("Mount called! Storage: #{inspect(storage)}")
@@ -27,23 +27,23 @@ defmodule JidoSystem.Agents.FinalPersistenceDemoTest do
           nil ->
             IO.puts("No saved state found")
             # No saved state
-            {:ok, server_state}
+            {:ok, agent}
 
           saved_state ->
             # Restore the saved state
             IO.puts("Restoring state: #{inspect(saved_state)}")
             restored_agent = %{agent | state: saved_state}
-            {:ok, %{server_state | agent: restored_agent}}
+            {:ok, restored_agent}
         end
       end
 
       @impl true
-      def shutdown(%{agent: agent} = server_state, _reason) do
+      def shutdown(agent, _reason) do
         # This is called when agent stops - save state here
         storage = :persistent_term.get(:persistent_data_test, %{})
         new_storage = Map.put(storage, agent.id, agent.state)
         :persistent_term.put(:persistent_data_test, new_storage)
-        {:ok, server_state}
+        {:ok, agent}
       end
     end
 
@@ -120,12 +120,12 @@ defmodule JidoSystem.Agents.FinalPersistenceDemoTest do
       end
 
       @impl true
-      def mount(%{agent: agent} = server_state, _opts) do
+      def mount(agent, _opts) do
         storage = :persistent_term.get(:incremental_test, %{})
 
         case Map.get(storage, agent.id) do
-          nil -> {:ok, server_state}
-          saved -> {:ok, %{server_state | agent: %{agent | state: saved}}}
+          nil -> {:ok, agent}
+          saved -> {:ok, %{agent | state: saved}}
         end
       end
     end

@@ -35,12 +35,12 @@ defmodule JidoSystem.Agents.PersistentFoundationAgent do
       @persistent_fields unquote(persistent_fields)
 
       # Override mount to restore persisted state
-      def mount(server_state, opts) do
+      def mount(agent, opts) do
         # Call parent mount first
-        {:ok, server_state} = super(server_state, opts)
+        {:ok, agent} = super(agent, opts)
 
         if @persistent_fields != [] do
-          agent_id = server_state.agent.id
+          agent_id = agent.id
           Logger.info("Restoring persistent state for agent #{agent_id}")
 
           # StatePersistence already handles defaults!
@@ -49,7 +49,7 @@ defmodule JidoSystem.Agents.PersistentFoundationAgent do
           # Simple merge, no complex logic
           updated_agent =
             update_in(
-              server_state.agent.state,
+              agent.state,
               &Map.merge(&1, persisted_state)
             )
 
@@ -61,9 +61,9 @@ defmodule JidoSystem.Agents.PersistentFoundationAgent do
               updated_agent
             end
 
-          {:ok, %{server_state | agent: final_agent}}
+          {:ok, final_agent}
         else
-          {:ok, server_state}
+          {:ok, agent}
         end
       end
 
