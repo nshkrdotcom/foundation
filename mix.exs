@@ -175,6 +175,7 @@ defmodule Foundation.MixProject do
       # Core dependencies
       {:jason, "~> 1.4"},
       {:telemetry, "~> 1.2"},
+      {:uuid, "~> 1.1"},
       {:poolboy, "~>1.5.2"},
       {:hammer, "~>7.0.1"},
       {:fuse, "~>2.5.0"},
