@@ -38,7 +38,14 @@ config :foundation,
 # Configure test logging - suppress info logs to reduce noise
 config :logger,
   level: :warning,  # Only show warnings and errors during tests
-  backends: [:console]
+  backends: [:console],
+  compile_time_purge_matching: [
+    # Suppress Jido agent normal termination logs during tests
+    [application: :jido, level_lower_than: :error],
+    # Suppress Foundation agent normal terminations
+    [module: Foundation.Variables.CognitiveFloat, level_lower_than: :error],
+    [module: Foundation.Variables.CognitiveVariable, level_lower_than: :error]
+  ]
 
 config :logger, :console,
   format: "[$level] $message\n",
