@@ -177,7 +177,7 @@ defmodule Foundation.MixProject do
       {:telemetry, "~> 1.2"},
       {:uuid, "~> 1.1"},
       {:poolboy, "~>1.5.2"},
-      {:hammer, "~>7.0.1"},
+      {:hammer, "~> 7.1.0"},
       {:fuse, "~>2.5.0"},
       {:retry, "~> 0.18"},
       # Enhanced infrastructure services
@@ -185,7 +185,7 @@ defmodule Foundation.MixProject do
       {:nimble_pool, "~> 1.0"},
 
       # Optional integrations
-      {:gemini_ex, "~>0.0.2", optional: true},
+      {:gemini_ex, "~> 0.1.1", optional: true},
 
       ###################################################################################################
       # Jido agent framework integration
