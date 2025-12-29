@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800" height="800" viewBox="0 0 800 800" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="outer-fill" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0a1726"/>
+      <stop offset="45%" stop-color="#0f2b45"/>
+      <stop offset="100%" stop-color="#07121f"/>
+    </linearGradient>
+    <linearGradient id="outer-stroke" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#2edbff"/>
+      <stop offset="55%" stop-color="#4dffb6"/>
+      <stop offset="100%" stop-color="#9af6ff"/>
+    </linearGradient>
+    <linearGradient id="inner-fill" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0%" stop-color="#0b1e33"/>
+      <stop offset="55%" stop-color="#0d243c"/>
+      <stop offset="100%" stop-color="#0a1626"/>
+    </linearGradient>
+    <linearGradient id="inner-stroke" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#18d0ff"/>
+      <stop offset="100%" stop-color="#5bffbd"/>
+    </linearGradient>
+    <radialGradient id="core-glow" cx="0.5" cy="0.45" r="0.55">
+      <stop offset="0%" stop-color="#4fe5ff" stop-opacity="0.65"/>
+      <stop offset="45%" stop-color="#2a8cd3" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#0a1726" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ring-stroke" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#63f4ff"/>
+      <stop offset="50%" stop-color="#50ffc6"/>
+      <stop offset="100%" stop-color="#b8fff4"/>
+    </linearGradient>
+    <linearGradient id="core-fill" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0d233c"/>
+      <stop offset="50%" stop-color="#132c46"/>
+      <stop offset="100%" stop-color="#0a1726"/>
+    </linearGradient>
+    <linearGradient id="core-stroke" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0%" stop-color="#2bd3ff"/>
+      <stop offset="100%" stop-color="#60ffca"/>
+    </linearGradient>
+    <linearGradient id="beam" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#7cf7ff"/>
+      <stop offset="55%" stop-color="#6bffbf"/>
+      <stop offset="100%" stop-color="#f1ff8b"/>
+    </linearGradient>
+    <radialGradient id="node-fill" cx="0.5" cy="0.4" r="0.6">
+      <stop offset="0%" stop-color="#162d46"/>
+      <stop offset="100%" stop-color="#0b1a2c"/>
+    </radialGradient>
+    <linearGradient id="node-stroke" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#5de9ff"/>
+      <stop offset="100%" stop-color="#7dffbe"/>
+    </linearGradient>
+    <linearGradient id="circuit-stroke" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#214a68" stop-opacity="0.9"/>
+      <stop offset="50%" stop-color="#39b9d6" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#3fe7c0" stop-opacity="0.9"/>
+    </linearGradient>
+    <linearGradient id="highlight-stroke" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#c4fff6" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#5dd8ff" stop-opacity="0"/>
+    </linearGradient>
+
+    <filter id="hex-shadow" x="-25%" y="-25%" width="150%" height="150%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="22" stdDeviation="26" flood-color="#06101a" flood-opacity="0.75"/>
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2bd6ff" flood-opacity="0.3"/>
+    </filter>
+    <filter id="soft-glow" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="0" stdDeviation="10" flood-color="#3edbff" flood-opacity="0.45"/>
+    </filter>
+    <filter id="beam-glow" x="-60%" y="-60%" width="220%" height="220%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="0" stdDeviation="12" flood-color="#7fffe9" flood-opacity="0.8"/>
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#3ad3ff" flood-opacity="0.55"/>
+    </filter>
+    <filter id="noise" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="4" result="noise"/>
+      <feColorMatrix type="saturate" values="0"/>
+      <feComponentTransfer>
+        <feFuncA type="table" tableValues="0 0.18"/>
+      </feComponentTransfer>
+    </filter>
+
+    <clipPath id="hex-clip">
+      <polygon points="400,120 600,240 600,560 400,680 200,560 200,240"/>
+    </clipPath>
+    <clipPath id="beam-clip">
+      <path d="M400 290 L458 330 L458 470 L400 510 L342 470 L342 330 Z"/>
+    </clipPath>
+  </defs>
+
+  <g filter="url(#hex-shadow)">
+    <polygon points="400,70 650,210 650,590 400,730 150,590 150,210" fill="url(#outer-fill)" stroke="url(#outer-stroke)" stroke-width="10"/>
+  </g>
+
+  <polygon points="400,120 600,240 600,560 400,680 200,560 200,240" fill="url(#inner-fill)" stroke="url(#inner-stroke)" stroke-width="3" opacity="0.95"/>
+
+  <polyline points="400,70 650,210 650,300" fill="none" stroke="url(#highlight-stroke)" stroke-width="4" opacity="0.6"/>
+  <polyline points="400,70 150,210 150,300" fill="none" stroke="url(#highlight-stroke)" stroke-width="4" opacity="0.4"/>
+
+  <g clip-path="url(#hex-clip)" opacity="0.55">
+    <path d="M230 300 H570" stroke="url(#circuit-stroke)" stroke-width="2" stroke-dasharray="8 10"/>
+    <path d="M230 360 H570" stroke="url(#circuit-stroke)" stroke-width="1.5" stroke-dasharray="4 8"/>
+    <path d="M230 520 H570" stroke="url(#circuit-stroke)" stroke-width="2" stroke-dasharray="6 12"/>
+    <path d="M280 260 V560" stroke="url(#circuit-stroke)" stroke-width="1.5" stroke-dasharray="6 10"/>
+    <path d="M520 260 V560" stroke="url(#circuit-stroke)" stroke-width="1.5" stroke-dasharray="6 10"/>
+    <path d="M300 420 H500" stroke="url(#circuit-stroke)" stroke-width="1.5" stroke-dasharray="2 6"/>
+    <circle cx="280" cy="300" r="3" fill="#55e6ff" opacity="0.8"/>
+    <circle cx="520" cy="360" r="3" fill="#55e6ff" opacity="0.8"/>
+    <circle cx="520" cy="520" r="3" fill="#55e6ff" opacity="0.8"/>
+    <circle cx="300" cy="420" r="3" fill="#55e6ff" opacity="0.8"/>
+    <circle cx="500" cy="420" r="3" fill="#55e6ff" opacity="0.8"/>
+  </g>
+
+  <g clip-path="url(#hex-clip)">
+    <rect x="200" y="160" width="400" height="520" fill="url(#core-glow)"/>
+  </g>
+
+  <g filter="url(#soft-glow)">
+    <circle cx="400" cy="400" r="150" stroke="url(#ring-stroke)" stroke-width="4" fill="none"/>
+  </g>
+  <circle cx="400" cy="400" r="180" stroke="url(#ring-stroke)" stroke-width="2" fill="none" stroke-dasharray="6 12" opacity="0.45"/>
+  <circle cx="400" cy="400" r="110" stroke="url(#ring-stroke)" stroke-width="2" fill="none" opacity="0.85"/>
+
+  <polygon points="400,260 500,320 500,480 400,540 300,480 300,320" fill="url(#core-fill)" stroke="url(#core-stroke)" stroke-width="2.5"/>
+
+  <path d="M400 290 L458 330 L458 470 L400 510 L342 470 L342 330 Z" fill="url(#beam)" filter="url(#beam-glow)"/>
+
+  <g clip-path="url(#beam-clip)" opacity="0.75">
+    <path d="M350 350 H450" stroke="#f4ffb5" stroke-width="2"/>
+    <path d="M350 390 H450" stroke="#c9fff0" stroke-width="2"/>
+    <path d="M350 430 H450" stroke="#9ff2ff" stroke-width="2"/>
+  </g>
+
+  <g stroke="url(#node-stroke)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M400 260 L400 248"/>
+    <path d="M500 460 L532 470 L545 475"/>
+    <path d="M300 460 L268 470 L255 475"/>
+  </g>
+
+  <g>
+    <circle cx="400" cy="230" r="18" fill="url(#node-fill)" stroke="url(#node-stroke)" stroke-width="2"/>
+    <circle cx="545" cy="475" r="18" fill="url(#node-fill)" stroke="url(#node-stroke)" stroke-width="2"/>
+    <circle cx="255" cy="475" r="18" fill="url(#node-fill)" stroke="url(#node-stroke)" stroke-width="2"/>
+    <circle cx="400" cy="230" r="28" fill="none" stroke="url(#node-stroke)" stroke-width="1.5" stroke-dasharray="4 6" opacity="0.7"/>
+    <circle cx="545" cy="475" r="28" fill="none" stroke="url(#node-stroke)" stroke-width="1.5" stroke-dasharray="4 6" opacity="0.7"/>
+    <circle cx="255" cy="475" r="28" fill="none" stroke="url(#node-stroke)" stroke-width="1.5" stroke-dasharray="4 6" opacity="0.7"/>
+  </g>
+
+  <g clip-path="url(#hex-clip)" opacity="0.28" filter="url(#noise)">
+    <rect x="200" y="120" width="400" height="560" fill="#ffffff"/>
+  </g>
+</svg>
