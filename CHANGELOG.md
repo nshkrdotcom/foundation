@@ -6,3 +6,5 @@
 - Prepare for Backoff/Retry/RateLimit/CircuitBreaker/Semaphore primitives.
 - Add lightweight telemetry helpers with optional telemetry_reporter integration.
 - Remove outdated config/test scaffolding and the cloned semaphore reference.
+- Add retry configuration/handler helpers and HTTP retry utilities.
+- Add semaphore limiter and layered dispatch limiter primitives.

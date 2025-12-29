@@ -17,9 +17,11 @@ Version: 0.2.0
 
 ## Scope
 - Backoff policies and retry loops with deterministic testing hooks.
+- HTTP retry helpers (status classification, Retry-After parsing, delay calculation).
 - Shared backoff windows for rate-limited APIs.
 - Circuit breakers with optional registries.
 - Counting and weighted semaphores for concurrency and byte budgets.
+- Layered dispatch limiter for concurrency + byte budgets under backoff pressure.
 - Optional telemetry helpers with `telemetry_reporter` integration.
 
 ## Install
@@ -37,6 +39,7 @@ Backoff and retry:
 ```elixir
 alias Foundation.Backoff
 alias Foundation.Retry
+alias Foundation.Retry.{Config, Handler, HTTP}
 
 backoff = Backoff.Policy.new(strategy: :exponential, base_ms: 200, max_ms: 5_000)
 policy =
@@ -47,6 +50,13 @@ policy =
   )
 
 {result, _state} = Retry.run(fn -> {:ok, :done} end, policy)
+
+config = Config.new(max_retries: 5)
+handler = Handler.from_config(config)
+delay_ms = Handler.next_delay(handler)
+
+HTTP.retryable_status?(429)
+HTTP.retry_delay(0)
 ```
 
 Rate-limit backoff windows:
@@ -72,6 +82,7 @@ Registry.call("api", fn -> {:ok, :ok} end)
 Semaphores:
 ```elixir
 alias Foundation.Semaphore.Counting
+alias Foundation.Semaphore.Limiter
 alias Foundation.Semaphore.Weighted
 
 registry = Counting.default_registry()
@@ -79,6 +90,8 @@ Counting.with_acquire(registry, :requests, 5, fn -> :ok end)
 
 {:ok, sem} = Weighted.start_link(max_weight: 1_000)
 Weighted.with_acquire(sem, 250, fn -> :ok end)
+
+Limiter.with_semaphore(10, fn -> :ok end)
 ```
 
 Telemetry helpers:
@@ -102,4 +115,17 @@ end)
   )
 
 Foundation.Telemetry.detach_reporter(handler_id)
+```
+
+Layered dispatch limiter:
+```elixir
+alias Foundation.Dispatch
+alias Foundation.RateLimit.BackoffWindow
+
+limiter = BackoffWindow.for_key(:dispatch)
+{:ok, dispatch} = Dispatch.start_link(limiter: limiter, key: :dispatch)
+
+Dispatch.with_rate_limit(dispatch, 1_024, fn ->
+  :ok
+end)
 ```
