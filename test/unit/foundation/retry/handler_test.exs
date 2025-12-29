@@ -75,6 +75,40 @@ defmodule Foundation.Retry.HandlerTest do
     assert Handler.progress_timeout?(handler)
   end
 
+  test "progress_timeout?/1 ignores nil timeout" do
+    now = System.monotonic_time(:millisecond)
+
+    handler = %Handler{
+      max_retries: 5,
+      base_delay_ms: 10,
+      max_delay_ms: 100,
+      jitter_pct: 0.0,
+      progress_timeout_ms: nil,
+      attempt: 1,
+      last_progress_at: now - 100,
+      start_time: now
+    }
+
+    refute Handler.progress_timeout?(handler)
+  end
+
+  test "progress_timeout?/1 ignores :infinity timeout" do
+    now = System.monotonic_time(:millisecond)
+
+    handler = %Handler{
+      max_retries: 5,
+      base_delay_ms: 10,
+      max_delay_ms: 100,
+      jitter_pct: 0.0,
+      progress_timeout_ms: :infinity,
+      attempt: 1,
+      last_progress_at: now - 100,
+      start_time: now
+    }
+
+    refute Handler.progress_timeout?(handler)
+  end
+
   test "record_progress/1 updates last_progress_at" do
     handler = Handler.new()
     updated = Handler.record_progress(handler)

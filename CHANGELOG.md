@@ -8,3 +8,4 @@
 - Remove outdated config/test scaffolding and the cloned semaphore reference.
 - Add retry configuration/handler helpers and HTTP retry utilities.
 - Add semaphore limiter and layered dispatch limiter primitives.
+- Add generic retry runner and polling helper for long-running workflows.

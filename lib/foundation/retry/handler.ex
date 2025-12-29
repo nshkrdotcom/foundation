@@ -25,7 +25,7 @@ defmodule Foundation.Retry.Handler do
           base_delay_ms: non_neg_integer(),
           max_delay_ms: non_neg_integer(),
           jitter_pct: float(),
-          progress_timeout_ms: non_neg_integer(),
+          progress_timeout_ms: timeout() | nil,
           attempt: non_neg_integer(),
           last_progress_at: integer() | nil,
           start_time: integer()
@@ -108,6 +108,10 @@ defmodule Foundation.Retry.Handler do
   @spec progress_timeout?(t()) :: boolean()
   def progress_timeout?(%__MODULE__{attempt: 0}), do: false
   def progress_timeout?(%__MODULE__{last_progress_at: nil}), do: false
+
+  def progress_timeout?(%__MODULE__{progress_timeout_ms: timeout})
+      when timeout in [nil, :infinity],
+      do: false
 
   def progress_timeout?(%__MODULE__{} = handler) do
     elapsed = System.monotonic_time(:millisecond) - handler.last_progress_at

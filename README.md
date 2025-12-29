@@ -17,6 +17,7 @@ Version: 0.2.0
 
 ## Scope
 - Backoff policies and retry loops with deterministic testing hooks.
+- Generic retry runner and polling helper for long-running workflows.
 - HTTP retry helpers (status classification, Retry-After parsing, delay calculation).
 - Shared backoff windows for rate-limited APIs.
 - Circuit breakers with optional registries.
@@ -39,7 +40,8 @@ Backoff and retry:
 ```elixir
 alias Foundation.Backoff
 alias Foundation.Retry
-alias Foundation.Retry.{Config, Handler, HTTP}
+alias Foundation.Retry.{Config, Handler, HTTP, Runner}
+alias Foundation.Poller
 
 backoff = Backoff.Policy.new(strategy: :exponential, base_ms: 200, max_ms: 5_000)
 policy =
@@ -54,9 +56,17 @@ policy =
 config = Config.new(max_retries: 5)
 handler = Handler.from_config(config)
 delay_ms = Handler.next_delay(handler)
+{:ok, :done} = Runner.run(fn -> {:ok, :done} end, handler: handler)
 
 HTTP.retryable_status?(429)
 HTTP.retry_delay(0)
+
+{:ok, :done} =
+  Poller.run(fn attempt ->
+    if attempt < 2, do: {:retry, :pending}, else: {:ok, :done}
+  end,
+    backoff: Backoff.Policy.new(strategy: :constant, base_ms: 50, max_ms: 50)
+  )
 ```
 
 Rate-limit backoff windows:
