@@ -1,141 +1,257 @@
 # Foundation
 
 <p align="center">
-  <img src="assets/foundation.svg" alt="Foundation logo" width="240" height="240">
+  <img src="assets/foundation.svg" alt="Foundation logo" width="200" height="200">
 </p>
 
-**Lightweight resilience primitives for backoff, retry, rate-limit windows, circuit breakers,
-semaphores, and optional telemetry helpers.**
+<p align="center">
+  <strong>Lightweight resilience primitives for Elixir</strong>
+</p>
 
-Version: 0.2.0
+<p align="center">
+  <a href="https://hex.pm/packages/foundation"><img src="https://img.shields.io/hexpm/v/foundation.svg" alt="Hex version"></a>
+  <a href="https://hexdocs.pm/foundation"><img src="https://img.shields.io/badge/hex-docs-blue.svg" alt="Hex Docs"></a>
+  <a href="https://github.com/nshkrdotcom/foundation/blob/main/LICENSE"><img src="https://img.shields.io/hexpm/l/foundation.svg" alt="License"></a>
+</p>
 
-[![CI](https://github.com/nshkrdotcom/foundation/actions/workflows/elixir.yaml/badge.svg)](https://github.com/nshkrdotcom/foundation/actions/workflows/elixir.yaml)
-[![Elixir](https://img.shields.io/badge/elixir-1.18.3-purple.svg)](https://elixir-lang.org)
-[![OTP](https://img.shields.io/badge/otp-27.3.3-blue.svg)](https://www.erlang.org)
-[![Hex version badge](https://img.shields.io/hexpm/v/foundation.svg)](https://hex.pm/packages/foundation)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+---
 
-## Scope
-- Backoff policies and retry loops with deterministic testing hooks.
-- Generic retry runner and polling helper for long-running workflows.
-- HTTP retry helpers (status classification, Retry-After parsing, delay calculation).
-- Shared backoff windows for rate-limited APIs.
-- Circuit breakers with optional registries.
-- Counting and weighted semaphores for concurrency and byte budgets.
-- Layered dispatch limiter for concurrency + byte budgets under backoff pressure.
-- Optional telemetry helpers with `telemetry_reporter` integration.
+Foundation provides composable building blocks for resilient Elixir applications:
+backoff policies, retry loops, rate-limit windows, circuit breakers, semaphores,
+and telemetry helpers.
 
-## Install
+## Features
+
+- **Backoff** - Exponential, linear, and constant strategies with jitter
+- **Retry** - Configurable retry loops with timeout and progress tracking
+- **Polling** - Long-running workflow polling with backoff and cancellation
+- **Rate Limiting** - Shared backoff windows for API rate limits
+- **Circuit Breaker** - Protect downstream services with automatic recovery
+- **Semaphores** - Counting and weighted semaphores for concurrency control
+- **Dispatch** - Layered limiter combining concurrency, throttling, and byte budgets
+- **Telemetry** - Lightweight helpers with optional reporter integration
+
+## Requirements
+
+- Elixir 1.15+
+- OTP 26+
+
+## Installation
+
+Add `foundation` to your dependencies in `mix.exs`:
+
 ```elixir
 def deps do
   [
-    {:foundation, "~> 0.2"},
-    {:telemetry_reporter, "~> 0.1", optional: true}
+    {:foundation, "~> 0.2"}
   ]
 end
 ```
 
 ## Usage
-Backoff and retry:
+
+### Backoff and Retry
+
 ```elixir
 alias Foundation.Backoff
 alias Foundation.Retry
-alias Foundation.Retry.{Config, Handler, HTTP, Runner}
-alias Foundation.Poller
 
-backoff = Backoff.Policy.new(strategy: :exponential, base_ms: 200, max_ms: 5_000)
-policy =
-  Retry.Policy.new(
-    max_attempts: 3,
-    backoff: backoff,
-    retry_on: fn result -> match?({:error, _}, result) end
-  )
+# Create a backoff policy
+backoff = Backoff.Policy.new(
+  strategy: :exponential,
+  base_ms: 100,
+  max_ms: 5_000,
+  jitter_strategy: :factor,
+  jitter: 0.1
+)
 
-{result, _state} = Retry.run(fn -> {:ok, :done} end, policy)
+# Create a retry policy
+policy = Retry.Policy.new(
+  max_attempts: 5,
+  backoff: backoff,
+  retry_on: fn
+    {:error, :timeout} -> true
+    {:error, :rate_limited} -> true
+    _ -> false
+  end
+)
 
-config = Config.new(max_retries: 5)
-handler = Handler.from_config(config)
-delay_ms = Handler.next_delay(handler)
-{:ok, :done} = Runner.run(fn -> {:ok, :done} end, handler: handler)
-
-HTTP.retryable_status?(429)
-HTTP.retry_delay(0)
-
-{:ok, :done} =
-  Poller.run(fn attempt ->
-    if attempt < 2, do: {:retry, :pending}, else: {:ok, :done}
-  end,
-    backoff: Backoff.Policy.new(strategy: :constant, base_ms: 50, max_ms: 50)
-  )
+# Run with retry
+{result, _state} = Retry.run(fn -> fetch_data() end, policy)
 ```
 
-Rate-limit backoff windows:
+### Retry Runner with Telemetry
+
+```elixir
+alias Foundation.Retry.{Config, Handler, Runner}
+
+config = Config.new(max_retries: 3, base_delay_ms: 100)
+handler = Handler.from_config(config)
+
+{:ok, result} = Runner.run(
+  fn -> call_api() end,
+  handler: handler,
+  telemetry_events: %{
+    start: [:my_app, :api, :start],
+    stop: [:my_app, :api, :stop],
+    retry: [:my_app, :api, :retry]
+  }
+)
+```
+
+### HTTP Retry Helpers
+
+```elixir
+alias Foundation.Retry.HTTP
+
+HTTP.retryable_status?(429)  # true
+HTTP.retryable_status?(500)  # true
+HTTP.retryable_status?(400)  # false
+
+# Parse Retry-After header
+HTTP.parse_retry_after("120")  # {:ok, 120}
+HTTP.parse_retry_after("Wed, 08 Jan 2026 12:00:00 GMT")  # {:ok, seconds_until}
+```
+
+### Polling
+
+```elixir
+alias Foundation.Poller
+alias Foundation.Backoff
+
+{:ok, result} = Poller.run(
+  fn attempt ->
+    case check_job_status(job_id) do
+      {:ok, :completed, data} -> {:ok, data}
+      {:ok, :pending} -> {:retry, :pending}
+      {:ok, :failed, reason} -> {:error, reason}
+    end
+  end,
+  backoff: Backoff.Policy.new(strategy: :exponential, base_ms: 500, max_ms: 10_000),
+  timeout_ms: 60_000,
+  max_attempts: 20
+)
+```
+
+### Rate Limit Backoff Windows
+
 ```elixir
 alias Foundation.RateLimit.BackoffWindow
 
-limiter = BackoffWindow.for_key(:api_key)
-BackoffWindow.set(limiter, 1_000)
+# Get or create a limiter for a key
+limiter = BackoffWindow.for_key(:openai_api)
+
+# Set backoff after receiving 429
+BackoffWindow.set(limiter, 30_000)
+
+# Wait for backoff to clear before next request
 BackoffWindow.wait(limiter)
 ```
 
-Circuit breaker (in-memory or registry):
+### Circuit Breaker
+
 ```elixir
 alias Foundation.CircuitBreaker
-alias Foundation.CircuitBreaker.Registry
 
-cb = CircuitBreaker.new("api", failure_threshold: 3)
-{result, cb} = CircuitBreaker.call(cb, fn -> {:ok, :ok} end)
+# Functional API (stateless)
+cb = CircuitBreaker.new("payment_service", failure_threshold: 3, reset_timeout_ms: 30_000)
 
-Registry.call("api", fn -> {:ok, :ok} end)
-```
-
-Semaphores:
-```elixir
-alias Foundation.Semaphore.Counting
-alias Foundation.Semaphore.Limiter
-alias Foundation.Semaphore.Weighted
-
-registry = Counting.default_registry()
-Counting.with_acquire(registry, :requests, 5, fn -> :ok end)
-
-{:ok, sem} = Weighted.start_link(max_weight: 1_000)
-Weighted.with_acquire(sem, 250, fn -> :ok end)
-
-Limiter.with_semaphore(10, fn -> :ok end)
-```
-
-Telemetry helpers:
-```elixir
-Foundation.Telemetry.execute([:app, :event], %{count: 1}, %{tag: :ok})
-
-Foundation.Telemetry.measure([:app, :work], %{op: :fetch}, fn ->
-  :ok
+{result, cb} = CircuitBreaker.call(cb, fn ->
+  PaymentService.charge(amount)
 end)
 
-{:ok, _pid} =
-  Foundation.Telemetry.start_reporter(
-    name: :reporter,
-    transport: MyTransport
-  )
+# Registry API (stateful, for shared circuit breakers)
+alias Foundation.CircuitBreaker.Registry
 
-{:ok, handler_id} =
-  Foundation.Telemetry.attach_reporter(
-    reporter: :reporter,
-    events: [[:app, :event]]
-  )
+{:ok, _pid} = Registry.start_link(name: MyApp.CircuitBreakers)
 
-Foundation.Telemetry.detach_reporter(handler_id)
+result = Registry.call(MyApp.CircuitBreakers, "payment_service", fn ->
+  PaymentService.charge(amount)
+end)
 ```
 
-Layered dispatch limiter:
+### Semaphores
+
+```elixir
+# Counting semaphore (limit concurrent operations)
+alias Foundation.Semaphore.Counting
+
+registry = Counting.default_registry()
+
+{:ok, result} = Counting.with_acquire(registry, :db_connections, 10, fn ->
+  execute_query()
+end)
+
+# Weighted semaphore (byte budgets)
+alias Foundation.Semaphore.Weighted
+
+{:ok, sem} = Weighted.start_link(max_weight: 10_000_000)
+
+Weighted.with_acquire(sem, byte_size(payload), fn ->
+  upload_data(payload)
+end)
+
+# Simple limiter
+alias Foundation.Semaphore.Limiter
+
+Limiter.with_semaphore(5, fn ->
+  process_item()
+end)
+```
+
+### Layered Dispatch
+
 ```elixir
 alias Foundation.Dispatch
 alias Foundation.RateLimit.BackoffWindow
 
-limiter = BackoffWindow.for_key(:dispatch)
-{:ok, dispatch} = Dispatch.start_link(limiter: limiter, key: :dispatch)
+# Create a rate limiter
+limiter = BackoffWindow.for_key(:api_dispatch)
 
-Dispatch.with_rate_limit(dispatch, 1_024, fn ->
-  :ok
+# Start dispatch with concurrency, throttling, and byte limits
+{:ok, dispatch} = Dispatch.start_link(
+  limiter: limiter,
+  key: :api,
+  concurrency: 100,
+  throttled_concurrency: 5,
+  byte_budget: 5_000_000
+)
+
+# Execute with rate limiting
+result = Dispatch.with_rate_limit(dispatch, byte_size(request), fn ->
+  send_request(request)
 end)
+
+# Signal backoff (e.g., after 429 response)
+Dispatch.set_backoff(dispatch, 30_000)
 ```
+
+### Telemetry
+
+```elixir
+alias Foundation.Telemetry
+
+# Emit events
+Telemetry.execute([:my_app, :request, :complete], %{count: 1}, %{status: 200})
+
+# Measure function duration
+{:ok, result} = Telemetry.measure([:my_app, :db, :query], %{table: :users}, fn ->
+  Repo.all(User)
+end)
+
+# Optional: Start a reporter (requires telemetry_reporter dependency)
+{:ok, _pid} = Telemetry.start_reporter(name: :my_reporter, transport: MyTransport)
+
+{:ok, handler_id} = Telemetry.attach_reporter(
+  reporter: :my_reporter,
+  events: [[:my_app, :request, :complete]]
+)
+```
+
+## Documentation
+
+Full documentation is available at [HexDocs](https://hexdocs.pm/foundation).
+
+## License
+
+Foundation is released under the MIT License. See [LICENSE](LICENSE) for details.
