@@ -15,12 +15,15 @@ defmodule Foundation.RateLimit.BackoffWindow do
   def default_registry do
     case :persistent_term.get(@default_registry_key, nil) do
       nil ->
+        heir = heir_pid()
+
         table =
           :ets.new(__MODULE__, [
             :set,
             :public,
             {:read_concurrency, true},
-            {:write_concurrency, true}
+            {:write_concurrency, true},
+            {:heir, heir, :none}
           ])
 
         :persistent_term.put(@default_registry_key, table)
@@ -36,13 +39,16 @@ defmodule Foundation.RateLimit.BackoffWindow do
   """
   @spec new_registry(keyword()) :: registry()
   def new_registry(opts \\ []) do
+    heir = heir_pid()
+
     case Keyword.get(opts, :name) do
       nil ->
         :ets.new(__MODULE__, [
           :set,
           :public,
           {:read_concurrency, true},
-          {:write_concurrency, true}
+          {:write_concurrency, true},
+          {:heir, heir, :none}
         ])
 
       name when is_atom(name) ->
@@ -53,7 +59,8 @@ defmodule Foundation.RateLimit.BackoffWindow do
               :public,
               :named_table,
               {:read_concurrency, true},
-              {:write_concurrency, true}
+              {:write_concurrency, true},
+              {:heir, heir, :none}
             ])
 
           _tid ->
@@ -156,4 +163,8 @@ defmodule Foundation.RateLimit.BackoffWindow do
   end
 
   defp resolve_registry(registry), do: registry
+
+  defp heir_pid do
+    Process.whereis(:init) || self()
+  end
 end

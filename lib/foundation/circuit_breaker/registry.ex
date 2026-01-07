@@ -16,12 +16,14 @@ defmodule Foundation.CircuitBreaker.Registry do
   def default_registry do
     case :persistent_term.get(@default_registry_key, nil) do
       nil ->
-        table = new_registry()
-        :persistent_term.put(@default_registry_key, table)
-        table
+        create_default_registry()
 
       table ->
-        table
+        if registry_valid?(table) do
+          table
+        else
+          create_default_registry()
+        end
     end
   end
 
@@ -30,13 +32,16 @@ defmodule Foundation.CircuitBreaker.Registry do
   """
   @spec new_registry(keyword()) :: registry()
   def new_registry(opts \\ []) do
+    heir = heir_pid()
+
     case Keyword.get(opts, :name) do
       nil ->
         :ets.new(__MODULE__, [
           :set,
           :public,
           {:read_concurrency, true},
-          {:write_concurrency, true}
+          {:write_concurrency, true},
+          {:heir, heir, :none}
         ])
 
       name when is_atom(name) ->
@@ -47,7 +52,8 @@ defmodule Foundation.CircuitBreaker.Registry do
               :public,
               :named_table,
               {:read_concurrency, true},
-              {:write_concurrency, true}
+              {:write_concurrency, true},
+              {:heir, heir, :none}
             ])
 
           _tid ->
@@ -268,4 +274,47 @@ defmodule Foundation.CircuitBreaker.Registry do
   end
 
   defp resolve_registry(registry), do: registry
+
+  defp create_default_registry do
+    table = new_registry()
+    :persistent_term.put(@default_registry_key, table)
+    table
+  end
+
+  defp registry_valid?(registry) when is_reference(registry) do
+    case :lists.search(fn tid -> tid == registry end, :ets.all()) do
+      {:value, tid} -> registry_info_valid?(tid)
+      false -> false
+    end
+  end
+
+  defp registry_valid?(registry) when is_atom(registry) do
+    case :ets.whereis(registry) do
+      :undefined -> false
+      _ -> true
+    end
+  end
+
+  defp registry_valid?(_registry), do: false
+
+  defp registry_info_valid?(registry) do
+    case :ets.info(registry) do
+      :undefined ->
+        false
+
+      info ->
+        case Keyword.get(info, :heir, :none) do
+          :none -> false
+          {heir_pid, _} -> Process.alive?(heir_pid)
+          heir_pid when is_pid(heir_pid) -> Process.alive?(heir_pid)
+          _ -> false
+        end
+    end
+  rescue
+    ArgumentError -> false
+  end
+
+  defp heir_pid do
+    Process.whereis(:init) || self()
+  end
 end
