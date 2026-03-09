@@ -28,10 +28,22 @@ defmodule Foundation.Backoff do
               jitter: 0.0,
               rand_fun: &:rand.uniform/0
 
+    @strategy_aliases %{
+      "constant" => :constant,
+      "exponential" => :exponential,
+      "linear" => :linear
+    }
+    @jitter_strategy_aliases %{
+      "additive" => :additive,
+      "factor" => :factor,
+      "none" => :none,
+      "range" => :range
+    }
+
     @spec new(keyword()) :: t()
     def new(opts \\ []) do
-      base_ms = positive_int!(Keyword.get(opts, :base_ms, 1_000), :base_ms)
-      max_ms = Keyword.get(opts, :max_ms, 10_000)
+      base_ms = positive_int!(option_value(opts, :base_ms, :base_delay_ms, 1_000), :base_ms)
+      max_ms = option_value(opts, :max_ms, :max_delay_ms, 10_000)
       max_ms = normalize_max_ms(max_ms, base_ms)
       strategy = normalize_strategy(Keyword.get(opts, :strategy, :exponential))
       jitter_strategy = normalize_jitter_strategy(Keyword.get(opts, :jitter_strategy, :none))
@@ -54,6 +66,10 @@ defmodule Foundation.Backoff do
       raise ArgumentError, "#{field} must be a positive integer, got: #{inspect(value)}"
     end
 
+    defp option_value(opts, key, alias_key, default) do
+      Keyword.get(opts, key, Keyword.get(opts, alias_key, default))
+    end
+
     defp normalize_max_ms(nil, _base_ms), do: nil
     defp normalize_max_ms(:infinity, _base_ms), do: nil
 
@@ -69,6 +85,9 @@ defmodule Foundation.Backoff do
     defp normalize_strategy(:linear), do: :linear
     defp normalize_strategy(:constant), do: :constant
 
+    defp normalize_strategy(value) when is_binary(value),
+      do: normalize_named_option(@strategy_aliases, value, "strategy")
+
     defp normalize_strategy(value) do
       raise ArgumentError, "invalid strategy: #{inspect(value)}"
     end
@@ -78,8 +97,18 @@ defmodule Foundation.Backoff do
     defp normalize_jitter_strategy(:additive), do: :additive
     defp normalize_jitter_strategy(:range), do: :range
 
+    defp normalize_jitter_strategy(value) when is_binary(value),
+      do: normalize_named_option(@jitter_strategy_aliases, value, "jitter_strategy")
+
     defp normalize_jitter_strategy(value) do
       raise ArgumentError, "invalid jitter_strategy: #{inspect(value)}"
+    end
+
+    defp normalize_named_option(aliases, value, label) do
+      case Map.get(aliases, value) do
+        nil -> raise ArgumentError, "invalid #{label}: #{inspect(value)}"
+        normalized -> normalized
+      end
     end
 
     defp normalize_jitter(:none, _value), do: 0.0

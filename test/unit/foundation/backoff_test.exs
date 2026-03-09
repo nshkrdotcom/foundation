@@ -45,6 +45,24 @@ defmodule Foundation.BackoffTest do
       assert Backoff.delay(policy, 0) == 250
       assert Backoff.delay(policy, 10) == 250
     end
+
+    test "accepts retry-style delay aliases and string strategies" do
+      policy =
+        Policy.new(
+          strategy: "linear",
+          base_delay_ms: 100,
+          max_delay_ms: 500,
+          jitter_strategy: "factor",
+          jitter: 0.25,
+          rand_fun: fn -> 0.0 end
+        )
+
+      assert policy.strategy == :linear
+      assert policy.base_ms == 100
+      assert policy.max_ms == 500
+      assert policy.jitter_strategy == :factor
+      assert Backoff.delay(policy, 1) == 150
+    end
   end
 
   describe "jitter strategies" do
