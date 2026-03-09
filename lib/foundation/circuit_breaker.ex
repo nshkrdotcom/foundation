@@ -52,6 +52,27 @@ defmodule Foundation.CircuitBreaker do
     end
   end
 
+  @doc false
+  @spec before_call(t()) :: {:allow, t()} | {:deny, :circuit_open, t()}
+  def before_call(%__MODULE__{} = cb) do
+    case state(cb) do
+      :closed ->
+        {:allow, %{cb | state: :closed}}
+
+      :open ->
+        {:deny, :circuit_open, %{cb | state: :open}}
+
+      :half_open ->
+        half_open_cb = %{cb | state: :half_open}
+
+        if half_open_cb.half_open_calls < half_open_cb.half_open_max_calls do
+          {:allow, %{half_open_cb | half_open_calls: half_open_cb.half_open_calls + 1}}
+        else
+          {:deny, :circuit_open, half_open_cb}
+        end
+    end
+  end
+
   @doc """
   Get the current circuit breaker state.
   """
@@ -121,24 +142,17 @@ defmodule Foundation.CircuitBreaker do
   def call(%__MODULE__{} = cb, fun, opts \\ []) when is_function(fun, 0) do
     success_fn = Keyword.get(opts, :success?, &default_success?/1)
 
-    case state(cb) do
-      :open ->
-        {{:error, :circuit_open}, cb}
+    case before_call(cb) do
+      {:deny, :circuit_open, denied_cb} ->
+        {{:error, :circuit_open}, denied_cb}
 
-      current_state ->
-        cb =
-          if current_state == :half_open do
-            %{cb | half_open_calls: cb.half_open_calls + 1}
-          else
-            cb
-          end
-
+      {:allow, reserved_cb} ->
         result = fun.()
 
         if success_fn.(result) do
-          {result, record_success(cb)}
+          {result, record_success(reserved_cb)}
         else
-          {result, record_failure(cb)}
+          {result, record_failure(reserved_cb)}
         end
     end
   end

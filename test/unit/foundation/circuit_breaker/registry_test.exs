@@ -22,6 +22,56 @@ defmodule Foundation.CircuitBreaker.RegistryTest do
       assert {:error, :circuit_open} =
                Registry.call(registry, "endpoint", fn -> {:ok, :ok} end, failure_opts)
     end
+
+    test "enforces half-open probe limits before executing concurrent calls" do
+      registry = Registry.new_registry()
+
+      opts = [failure_threshold: 1, reset_timeout_ms: 0, half_open_max_calls: 1]
+
+      assert {:error, :failed} =
+               Registry.call(registry, "endpoint", fn -> {:error, :failed} end, opts)
+
+      parent = self()
+      release_ref = make_ref()
+
+      runner = fn ->
+        send(parent, {:ready, self()})
+
+        receive do
+          :go -> :ok
+        end
+
+        Registry.call(
+          registry,
+          "endpoint",
+          fn ->
+            send(parent, {:entered, self()})
+
+            receive do
+              ^release_ref -> {:ok, :ok}
+            end
+          end,
+          opts
+        )
+      end
+
+      task_one = Task.async(runner)
+      task_two = Task.async(runner)
+
+      assert_receive {:ready, first_pid}
+      assert_receive {:ready, second_pid}
+
+      send(first_pid, :go)
+      send(second_pid, :go)
+
+      assert_receive {:entered, entered_pid}
+      refute_receive {:entered, _other_pid}, 50
+
+      send(entered_pid, release_ref)
+
+      assert Enum.sort([Task.await(task_one), Task.await(task_two)]) ==
+               Enum.sort([{:ok, :ok}, {:error, :circuit_open}])
+    end
   end
 
   describe "state/2" do

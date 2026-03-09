@@ -4,6 +4,7 @@ defmodule Foundation.Semaphore.Counting do
   """
 
   alias Foundation.Backoff
+  alias Foundation.Internal.ETSRegistry
   alias :ets, as: ETS
 
   @default_registry_key {__MODULE__, :default_registry}
@@ -16,36 +17,14 @@ defmodule Foundation.Semaphore.Counting do
   """
   @spec default_registry() :: registry()
   def default_registry do
-    case :persistent_term.get(@default_registry_key, nil) do
-      nil ->
-        table = new_registry()
-        :persistent_term.put(@default_registry_key, table)
-        table
-
-      table ->
-        table
-    end
+    ETSRegistry.default_registry(@default_registry_key, __MODULE__)
   end
 
   @doc """
   Create a new registry. Use `name: :my_table` for a named ETS table.
   """
   @spec new_registry(keyword()) :: registry()
-  def new_registry(opts \\ []) do
-    case Keyword.get(opts, :name) do
-      nil ->
-        ETS.new(__MODULE__, [:set, :public, {:write_concurrency, true}])
-
-      name when is_atom(name) ->
-        case ETS.whereis(name) do
-          :undefined ->
-            ETS.new(name, [:set, :public, :named_table, {:write_concurrency, true}])
-
-          _tid ->
-            name
-        end
-    end
-  end
+  def new_registry(opts \\ []), do: ETSRegistry.new_registry(__MODULE__, opts)
 
   @doc """
   Acquire a semaphore in the default registry.
@@ -140,14 +119,7 @@ defmodule Foundation.Semaphore.Counting do
   end
 
   defp resolve_registry(registry) when is_atom(registry) do
-    case ETS.whereis(registry) do
-      :undefined ->
-        _ = new_registry(name: registry)
-        registry
-
-      _tid ->
-        registry
-    end
+    ETSRegistry.resolve_registry(registry, __MODULE__)
   end
 
   defp resolve_registry(registry), do: registry

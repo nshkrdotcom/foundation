@@ -128,7 +128,9 @@ defmodule Foundation.Dispatch do
       concurrency: state.concurrency,
       throttled: state.throttled,
       bytes: state.bytes,
-      backoff_active?: recent_backoff?(state.last_backoff_until, state.backoff_window_ms),
+      backoff_active?:
+        BackoffWindow.should_backoff?(state.limiter) or
+          recent_backoff?(state.last_backoff_until, state.backoff_window_ms),
       acquire_backoff: state.acquire_backoff,
       registry: state.registry,
       sleep_fun: state.sleep_fun,

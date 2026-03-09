@@ -78,4 +78,27 @@ defmodule Foundation.DispatchTest do
     assert result == :ok
     assert_received {:counts, 1, 1, 50}
   end
+
+  test "snapshot/1 reflects backoff applied directly to the shared limiter" do
+    registry = Counting.new_registry()
+    rate_registry = BackoffWindow.new_registry()
+    limiter = BackoffWindow.for_key(rate_registry, :shared_key)
+
+    {:ok, pid} =
+      Dispatch.start_link(
+        key: :shared_key,
+        registry: registry,
+        limiter: limiter,
+        concurrency: 2,
+        throttled_concurrency: 1,
+        byte_budget: 100,
+        byte_penalty_multiplier: 10,
+        acquire_backoff: [base_ms: 1, max_ms: 1, jitter: 0]
+      )
+
+    refute Dispatch.snapshot(pid).backoff_active?
+
+    assert :ok = BackoffWindow.set(limiter, 100)
+    assert Dispatch.snapshot(pid).backoff_active?
+  end
 end

@@ -4,6 +4,7 @@ defmodule Foundation.CircuitBreaker.Registry do
   """
 
   alias Foundation.CircuitBreaker
+  alias Foundation.Internal.ETSRegistry
 
   @default_registry_key {__MODULE__, :default_registry}
 
@@ -14,53 +15,14 @@ defmodule Foundation.CircuitBreaker.Registry do
   """
   @spec default_registry() :: registry()
   def default_registry do
-    case :persistent_term.get(@default_registry_key, nil) do
-      nil ->
-        create_default_registry()
-
-      table ->
-        if registry_valid?(table) do
-          table
-        else
-          create_default_registry()
-        end
-    end
+    ETSRegistry.default_registry(@default_registry_key, __MODULE__)
   end
 
   @doc """
   Create a new registry. Use `name: :my_table` for a named ETS table.
   """
   @spec new_registry(keyword()) :: registry()
-  def new_registry(opts \\ []) do
-    heir = heir_pid()
-
-    case Keyword.get(opts, :name) do
-      nil ->
-        :ets.new(__MODULE__, [
-          :set,
-          :public,
-          {:read_concurrency, true},
-          {:write_concurrency, true},
-          {:heir, heir, :none}
-        ])
-
-      name when is_atom(name) ->
-        case :ets.whereis(name) do
-          :undefined ->
-            :ets.new(name, [
-              :set,
-              :public,
-              :named_table,
-              {:read_concurrency, true},
-              {:write_concurrency, true},
-              {:heir, heir, :none}
-            ])
-
-          _tid ->
-            name
-        end
-    end
-  end
+  def new_registry(opts \\ []), do: ETSRegistry.new_registry(__MODULE__, opts)
 
   @doc """
   Execute a function through a named circuit breaker using the default registry.
@@ -93,18 +55,14 @@ defmodule Foundation.CircuitBreaker.Registry do
   @spec call(registry(), String.t(), (-> result), keyword()) :: result | {:error, :circuit_open}
         when result: term()
   def call(registry, name, fun, opts) do
-    {version, cb} = get_or_create(registry, name, opts)
     success_fn = Keyword.get(opts, :success?, &default_success?/1)
-    current_state = CircuitBreaker.state(cb)
 
-    if allow_request?(cb, current_state) do
-      result = fun.()
-      success? = success_fn.(result)
-      updated_cb = apply_result(cb, success?)
-      update_with_retry(registry, name, version, updated_cb, success?, opts)
-      result
-    else
-      {:error, :circuit_open}
+    case reserve_call(registry, name, opts) do
+      {:ok, version, reserved_cb} ->
+        execute_reserved_call(registry, name, version, reserved_cb, fun, success_fn, opts)
+
+      {:error, :circuit_open} ->
+        {:error, :circuit_open}
     end
   end
 
@@ -197,44 +155,45 @@ defmodule Foundation.CircuitBreaker.Registry do
     end
   end
 
-  defp allow_request?(cb, current_state) do
-    case current_state do
-      :closed -> true
-      :open -> false
-      :half_open -> cb.half_open_calls < cb.half_open_max_calls
+  defp reserve_call(registry, name, opts) do
+    {version, cb} = get_or_create(registry, name, opts)
+
+    case CircuitBreaker.before_call(cb) do
+      {:deny, :circuit_open, _cb} ->
+        {:error, :circuit_open}
+
+      {:allow, reserved_cb} ->
+        if cas_update(registry, name, version, reserved_cb) do
+          {:ok, version + 1, reserved_cb}
+        else
+          reserve_call(registry, name, opts)
+        end
     end
   end
 
-  defp apply_result(cb, success?) do
-    current_state = CircuitBreaker.state(cb)
-
-    cb =
-      if current_state == :half_open do
-        %{cb | half_open_calls: cb.half_open_calls + 1}
-      else
-        cb
-      end
-
-    if success? do
-      CircuitBreaker.record_success(cb)
-    else
-      CircuitBreaker.record_failure(cb)
-    end
+  defp execute_reserved_call(registry, name, version, reserved_cb, fun, success_fn, opts) do
+    result = fun.()
+    persist_result(registry, name, version, reserved_cb, success_fn.(result), opts)
+    result
+  rescue
+    exception ->
+      persist_result(registry, name, version, reserved_cb, false, opts)
+      reraise exception, __STACKTRACE__
   end
 
-  defp update_with_retry(registry, name, version, updated_cb, success?, opts) do
+  defp persist_result(registry, name, version, cb, success?, opts) do
+    updated_cb = record_result(cb, success?)
+
     if cas_update(registry, name, version, updated_cb) do
       :ok
     else
       case get_entry(registry, name) do
         {next_version, cb} ->
-          next_cb = apply_result(cb, success?)
-          update_with_retry(registry, name, next_version, next_cb, success?, opts)
+          persist_result(registry, name, next_version, cb, success?, opts)
 
         nil ->
-          {next_version, cb} = get_or_create(registry, name, opts)
-          next_cb = apply_result(cb, success?)
-          update_with_retry(registry, name, next_version, next_cb, success?, opts)
+          {next_version, next_cb} = get_or_create(registry, name, opts)
+          persist_result(registry, name, next_version, next_cb, success?, opts)
       end
     end
   end
@@ -263,58 +222,11 @@ defmodule Foundation.CircuitBreaker.Registry do
   defp default_success?(_), do: false
 
   defp resolve_registry(registry) when is_atom(registry) do
-    case :ets.whereis(registry) do
-      :undefined ->
-        _ = new_registry(name: registry)
-        registry
-
-      _tid ->
-        registry
-    end
+    ETSRegistry.resolve_registry(registry, __MODULE__)
   end
 
   defp resolve_registry(registry), do: registry
 
-  defp create_default_registry do
-    table = new_registry()
-    :persistent_term.put(@default_registry_key, table)
-    table
-  end
-
-  defp registry_valid?(registry) when is_reference(registry) do
-    case :lists.search(fn tid -> tid == registry end, :ets.all()) do
-      {:value, tid} -> registry_info_valid?(tid)
-      false -> false
-    end
-  end
-
-  defp registry_valid?(registry) when is_atom(registry) do
-    case :ets.whereis(registry) do
-      :undefined -> false
-      _ -> true
-    end
-  end
-
-  defp registry_valid?(_registry), do: false
-
-  defp registry_info_valid?(registry) do
-    case :ets.info(registry) do
-      :undefined ->
-        false
-
-      info ->
-        case Keyword.get(info, :heir, :none) do
-          :none -> false
-          {heir_pid, _} -> Process.alive?(heir_pid)
-          heir_pid when is_pid(heir_pid) -> Process.alive?(heir_pid)
-          _ -> false
-        end
-    end
-  rescue
-    ArgumentError -> false
-  end
-
-  defp heir_pid do
-    Process.whereis(:init) || self()
-  end
+  defp record_result(cb, true), do: CircuitBreaker.record_success(cb)
+  defp record_result(cb, false), do: CircuitBreaker.record_failure(cb)
 end
