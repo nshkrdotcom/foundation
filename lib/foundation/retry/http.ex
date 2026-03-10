@@ -177,7 +177,7 @@ defmodule Foundation.Retry.HTTP do
   defp convert_retry_after(value, :seconds), do: value * 1_000
 
   defp parse_http_date(value) do
-    case :httpd_util.convert_request_date(String.to_charlist(value)) do
+    case convert_request_date(value) do
       {{_, _, _}, {_, _, _}} = datetime ->
         retry_after_ms =
           (:calendar.datetime_to_gregorian_seconds(datetime) -
@@ -187,6 +187,15 @@ defmodule Foundation.Retry.HTTP do
 
       _ ->
         nil
+    end
+  end
+
+  defp convert_request_date(value) when is_binary(value) do
+    with {:module, :httpd_util} <- Code.ensure_loaded(:httpd_util),
+         true <- function_exported?(:httpd_util, :convert_request_date, 1) do
+      apply(:httpd_util, :convert_request_date, [String.to_charlist(value)])
+    else
+      _ -> nil
     end
   end
 
