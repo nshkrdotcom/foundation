@@ -50,10 +50,57 @@ defmodule Foundation.Retry.HTTPTest do
       assert HTTP.parse_retry_after(headers) == 2_000
     end
 
+    test "uses retry-after HTTP-date when present" do
+      future =
+        DateTime.utc_now()
+        |> DateTime.add(10, :second)
+        |> Calendar.strftime("%a, %d %b %Y %H:%M:%S GMT")
+
+      headers = [{"Retry-After", future}]
+      delay = HTTP.parse_retry_after(headers)
+
+      assert delay > 1_000
+      assert delay <= 10_000
+    end
+
     test "defaults when header is missing or invalid" do
       headers = [{"retry-after", "not-a-number"}]
       assert HTTP.parse_retry_after(headers) == 1_000
       assert HTTP.parse_retry_after([]) == 1_000
+    end
+  end
+
+  describe "retryable_status_for_method?/3" do
+    test "matches caller-provided status rules by method" do
+      rules = [all: [429], get: [500, 503], delete: [500, 503]]
+
+      assert HTTP.retryable_status_for_method?(429, :patch, rules)
+      assert HTTP.retryable_status_for_method?(500, :get, rules)
+      assert HTTP.retryable_status_for_method?(503, "DELETE", rules)
+
+      refute HTTP.retryable_status_for_method?(500, :post, rules)
+      refute HTTP.retryable_status_for_method?(408, :get, rules)
+    end
+  end
+
+  describe "should_retry_for_method?/3" do
+    test "honors x-should-retry overrides before method-aware rules" do
+      rules = [all: [429], get: [500, 503], delete: [500, 503]]
+
+      response = %{status: 500, headers: [{"x-should-retry", "false"}]}
+      refute HTTP.should_retry_for_method?(:get, response, rules)
+
+      response = %{status: 200, headers: [{"x-should-retry", "true"}]}
+      assert HTTP.should_retry_for_method?(:post, response, rules)
+    end
+
+    test "uses method-aware rules when no override is present" do
+      rules = [all: [429], get: [500, 503], delete: [500, 503]]
+
+      assert HTTP.should_retry_for_method?(:delete, %{status: 503, headers: []}, rules)
+      assert HTTP.should_retry_for_method?(:post, %{status: 429, headers: []}, rules)
+
+      refute HTTP.should_retry_for_method?(:post, %{status: 500, headers: []}, rules)
     end
   end
 
@@ -68,6 +115,9 @@ defmodule Foundation.Retry.HTTPTest do
 
     test "falls back to retryable status codes" do
       response = %{status: 429, headers: []}
+      assert HTTP.should_retry?(response)
+
+      response = %{status: 500, headers: []}
       assert HTTP.should_retry?(response)
 
       response = %{status: 200, headers: []}

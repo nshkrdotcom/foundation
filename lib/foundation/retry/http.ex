@@ -1,6 +1,6 @@
 defmodule Foundation.Retry.HTTP do
   @moduledoc """
-  HTTP retry helpers with Python SDK parity defaults.
+  HTTP retry helpers with generic status, method, and Retry-After parsing helpers.
 
   Provides retry delay calculation, status classification, and Retry-After parsing.
   """
@@ -12,6 +12,9 @@ defmodule Foundation.Retry.HTTP do
   @default_retry_after_ms 1_000
 
   @type headers :: [{String.t(), String.t()}] | map()
+  @type method :: atom() | String.t()
+  @type retryable_statuses_by_method ::
+          keyword([integer()]) | %{optional(method() | :all) => [integer()]}
 
   @doc """
   Calculate the retry delay for the given attempt.
@@ -47,15 +50,36 @@ defmodule Foundation.Retry.HTTP do
   def retryable_status?(_status), do: false
 
   @doc """
+  Determine whether a status code is retryable for the given method under
+  caller-provided method rules.
+
+  Rules may be provided as a map or keyword list keyed by HTTP method or `:all`.
+  """
+  @spec retryable_status_for_method?(integer(), method(), retryable_statuses_by_method()) ::
+          boolean()
+  def retryable_status_for_method?(status, method, rules) when is_integer(status) do
+    normalized_method = normalize_method(method)
+
+    rules
+    |> normalize_retryable_status_rules()
+    |> Enum.any?(fn {rule_method, statuses} ->
+      (rule_method == :all or rule_method == normalized_method) and status in statuses
+    end)
+  end
+
+  def retryable_status_for_method?(_status, _method, _rules), do: false
+
+  @doc """
   Parse Retry-After headers into milliseconds.
 
   Supports:
     * `retry-after-ms` - milliseconds
-    * `retry-after` - seconds
+    * `retry-after` - delta-seconds
+    * `retry-after` - HTTP-date
   """
   @spec parse_retry_after(headers(), non_neg_integer()) :: non_neg_integer()
   def parse_retry_after(headers, default_ms \\ @default_retry_after_ms) do
-    parse_retry_after_ms(headers) || parse_retry_after_seconds(headers) || default_ms
+    parse_retry_after_ms(headers) || parse_retry_after_value(headers) || default_ms
   end
 
   @doc """
@@ -63,30 +87,63 @@ defmodule Foundation.Retry.HTTP do
   """
   @spec should_retry?(map() | {integer(), headers()} | integer()) :: boolean()
   def should_retry?(%{status: status} = response) do
-    should_retry_status(status, Map.get(response, :headers, []))
+    should_retry_status(status, Map.get(response, :headers, []), &retryable_status?/1)
   end
 
   def should_retry?(%{"status" => status} = response) do
-    should_retry_status(status, Map.get(response, "headers", []))
+    should_retry_status(status, Map.get(response, "headers", []), &retryable_status?/1)
   end
 
   def should_retry?({status, headers}) when is_integer(status) do
-    should_retry_status(status, headers)
+    should_retry_status(status, headers, &retryable_status?/1)
   end
 
   def should_retry?(status) when is_integer(status), do: retryable_status?(status)
   def should_retry?(_), do: false
 
-  defp should_retry_status(status, headers) do
+  @doc """
+  Decide whether a response should be retried based on the given method, headers,
+  and caller-provided method rules.
+  """
+  @spec should_retry_for_method?(
+          method(),
+          map() | {integer(), headers()} | integer(),
+          retryable_statuses_by_method()
+        ) :: boolean()
+  def should_retry_for_method?(method, %{status: status} = response, rules) do
+    should_retry_status(status, Map.get(response, :headers, []), fn status ->
+      retryable_status_for_method?(status, method, rules)
+    end)
+  end
+
+  def should_retry_for_method?(method, %{"status" => status} = response, rules) do
+    should_retry_status(status, Map.get(response, "headers", []), fn status ->
+      retryable_status_for_method?(status, method, rules)
+    end)
+  end
+
+  def should_retry_for_method?(method, {status, headers}, rules) when is_integer(status) do
+    should_retry_status(status, headers, fn status ->
+      retryable_status_for_method?(status, method, rules)
+    end)
+  end
+
+  def should_retry_for_method?(method, status, rules) when is_integer(status) do
+    retryable_status_for_method?(status, method, rules)
+  end
+
+  def should_retry_for_method?(_method, _response, _rules), do: false
+
+  defp should_retry_status(status, headers, retryable_status?) do
     case header_value(headers, "x-should-retry") do
       nil ->
-        retryable_status?(status)
+        retryable_status?.(status)
 
       value ->
         case String.downcase(value) do
           "false" -> false
           "true" -> true
-          _ -> retryable_status?(status)
+          _ -> retryable_status?.(status)
         end
     end
   end
@@ -97,10 +154,14 @@ defmodule Foundation.Retry.HTTP do
     |> parse_integer(:ms)
   end
 
-  defp parse_retry_after_seconds(headers) do
-    headers
-    |> header_value("retry-after")
-    |> parse_integer(:seconds)
+  defp parse_retry_after_value(headers) do
+    case header_value(headers, "retry-after") do
+      nil ->
+        nil
+
+      value ->
+        parse_integer(value, :seconds) || parse_http_date(value)
+    end
   end
 
   defp parse_integer(nil, _unit), do: nil
@@ -114,6 +175,55 @@ defmodule Foundation.Retry.HTTP do
 
   defp convert_retry_after(value, :ms), do: value
   defp convert_retry_after(value, :seconds), do: value * 1_000
+
+  defp parse_http_date(value) do
+    case :httpd_util.convert_request_date(String.to_charlist(value)) do
+      {{_, _, _}, {_, _, _}} = datetime ->
+        retry_after_ms =
+          (:calendar.datetime_to_gregorian_seconds(datetime) -
+             :calendar.datetime_to_gregorian_seconds(:calendar.universal_time())) * 1_000
+
+        max(retry_after_ms, 0)
+
+      _ ->
+        nil
+    end
+  end
+
+  defp normalize_retryable_status_rules(rules) when is_list(rules) or is_map(rules) do
+    Enum.flat_map(rules, fn
+      {method, statuses} when is_list(statuses) ->
+        case normalize_rule_method(method) do
+          nil -> []
+          normalized_method -> [{normalized_method, Enum.filter(statuses, &is_integer/1)}]
+        end
+
+      _ ->
+        []
+    end)
+  end
+
+  defp normalize_retryable_status_rules(_rules), do: []
+
+  defp normalize_rule_method(:all), do: :all
+  defp normalize_rule_method(method), do: normalize_method(method)
+
+  defp normalize_method(method) when is_atom(method), do: method
+
+  defp normalize_method(method) when is_binary(method) do
+    case String.downcase(String.trim(method)) do
+      "delete" -> :delete
+      "get" -> :get
+      "head" -> :head
+      "options" -> :options
+      "patch" -> :patch
+      "post" -> :post
+      "put" -> :put
+      _ -> nil
+    end
+  end
+
+  defp normalize_method(_method), do: nil
 
   defp header_value(headers, target) when is_list(headers) do
     target = String.downcase(target)
