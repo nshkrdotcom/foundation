@@ -34,7 +34,7 @@ defmodule Foundation.MixProject do
       licenses: ["MIT"],
       links: %{"GitHub" => "https://github.com/nshkrdotcom/foundation"},
       maintainers: ["NSHkr"],
-      files: ~w(lib mix.exs README.md LICENSE CHANGELOG.md)
+      files: ~w(lib guides assets mix.exs README.md LICENSE CHANGELOG.md)
     ]
   end
 
@@ -54,8 +54,41 @@ defmodule Foundation.MixProject do
       source_ref: "v#{@version}",
       assets: %{"assets" => "assets"},
       logo: "assets/foundation.svg",
-      extras: ["README.md", "CHANGELOG.md", "LICENSE"],
+      extras: [
+        "README.md",
+        "guides/getting-started.md",
+        "guides/backoff-and-retry.md",
+        "guides/http-retry.md",
+        "guides/polling.md",
+        "guides/rate-limiting.md",
+        "guides/circuit-breakers.md",
+        "guides/semaphores.md",
+        "guides/dispatch.md",
+        "guides/telemetry.md",
+        "guides/migrating-from-01x.md",
+        "CHANGELOG.md",
+        "LICENSE"
+      ],
+      groups_for_extras: [
+        Guides: [
+          "guides/getting-started.md",
+          "guides/backoff-and-retry.md",
+          "guides/http-retry.md",
+          "guides/polling.md",
+          "guides/rate-limiting.md",
+          "guides/circuit-breakers.md",
+          "guides/semaphores.md",
+          "guides/dispatch.md",
+          "guides/telemetry.md"
+        ],
+        Migration: [
+          "guides/migrating-from-01x.md"
+        ]
+      ],
       groups_for_modules: [
+        Core: [
+          Foundation
+        ],
         "Backoff & Retry": [
           Foundation.Backoff,
           Foundation.Backoff.Policy,
