@@ -2,7 +2,7 @@ defmodule Foundation.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/nshkrdotcom/foundation"
-  @version "0.2.0"
+  @version "0.2.1"
 
   def project do
     [
@@ -25,7 +25,7 @@ defmodule Foundation.MixProject do
   end
 
   defp description do
-    "Lightweight resilience primitives for backoff, retry, rate-limit windows, circuit breakers, semaphores, and telemetry helpers."
+    "Foundation 0.2.x is a complete rewrite (not compatible with 0.1.x): lightweight resilience primitives for backoff, retry, rate-limit windows, circuit breakers, semaphores, and telemetry."
   end
 
   defp package do
@@ -34,7 +34,7 @@ defmodule Foundation.MixProject do
       licenses: ["MIT"],
       links: %{"GitHub" => "https://github.com/nshkrdotcom/foundation"},
       maintainers: ["NSHkr"],
-      files: ~w(lib mix.exs README.md LICENSE CHANGELOG.md assets)
+      files: ~w(lib mix.exs README.md LICENSE CHANGELOG.md)
     ]
   end
 

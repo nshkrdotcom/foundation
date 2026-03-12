@@ -1,8 +1,37 @@
 # Changelog
 
+## [0.2.1] - 2026-03-11
+
+Patch release focused on HTTP retry semantics, registry durability, and
+concurrency safety across shared limiters.
+
+### Added
+
+- Method-aware HTTP retry classification via `Foundation.Retry.HTTP.retryable_status_for_method?/3`
+- Method-aware retry decisions via `Foundation.Retry.HTTP.should_retry_for_method?/3`
+- Support for `Retry-After` HTTP-date values in `Foundation.Retry.HTTP.parse_retry_after/2`
+- Backoff policy aliases (`:base_delay_ms`, `:max_delay_ms`) and string strategy names
+- Shared internal ETS registry helpers used by circuit breakers, rate-limit windows, and counting semaphores
+
+### Changed
+
+- Circuit breaker registry calls now reserve half-open probes with CAS updates to enforce concurrency limits
+- Dispatch snapshots now reflect backoff applied directly to the shared limiter
+- Backoff windows now extend active deadlines instead of shortening them, and `wait/2` re-checks after wakeups
+- Default ETS registries are reused or recreated more safely across owner exits
+- ExDoc was updated to `0.40.0`
+
+### Fixed
+
+- HTTP-date parsing now degrades gracefully when `:httpd_util` is unavailable at runtime
+- Release docs and package metadata now explicitly clarify the 0.2.x rewrite and 0.1.x incompatibility
+
 ## [0.2.0] - 2026-01-08
 
 Complete rewrite focusing on lightweight, composable resilience primitives.
+
+This release is not compatible with the 0.1.x series, and there is no direct
+upgrade path.
 
 ### Added
 
@@ -29,12 +58,12 @@ Complete rewrite focusing on lightweight, composable resilience primitives.
 
 #### Rate Limiting (`Foundation.RateLimit.BackoffWindow`)
 - Shared backoff windows for rate-limited APIs
-- ETS-backed per-key state with expiration
+- ETS-backed per-key limiter registry using atomic backoff deadlines
 
 #### Circuit Breaker (`Foundation.CircuitBreaker`)
 - Pure functional circuit breaker state machine (closed/open/half-open)
 - Configurable failure threshold, reset timeout, and half-open call limits
-- `Foundation.CircuitBreaker.Registry` - GenServer-backed registry with ETS heir support
+- `Foundation.CircuitBreaker.Registry` - ETS-backed registry with heir support
 
 #### Semaphores (`Foundation.Semaphore.*`)
 - `Counting` - ETS-backed counting semaphore with blocking acquire

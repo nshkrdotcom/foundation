@@ -63,6 +63,37 @@ defmodule Foundation.Retry.HTTPTest do
       assert delay <= 10_000
     end
 
+    test "uses retry-after obsolete RFC 850 HTTP-date when present" do
+      future =
+        DateTime.utc_now()
+        |> DateTime.add(10, :second)
+        |> Calendar.strftime("%A, %d-%b-%y %H:%M:%S GMT")
+
+      headers = [{"Retry-After", future}]
+      delay = HTTP.parse_retry_after(headers)
+
+      assert delay > 1_000
+      assert delay <= 10_000
+    end
+
+    test "uses retry-after asctime HTTP-date when present" do
+      future =
+        DateTime.utc_now()
+        |> DateTime.add(10, :second)
+
+      future =
+        Calendar.strftime(future, "%a %b") <>
+          " " <>
+          String.pad_leading(Integer.to_string(future.day), 2, " ") <>
+          Calendar.strftime(future, " %H:%M:%S %Y")
+
+      headers = [{"Retry-After", future}]
+      delay = HTTP.parse_retry_after(headers)
+
+      assert delay > 1_000
+      assert delay <= 10_000
+    end
+
     test "defaults when header is missing or invalid" do
       headers = [{"retry-after", "not-a-number"}]
       assert HTTP.parse_retry_after(headers) == 1_000

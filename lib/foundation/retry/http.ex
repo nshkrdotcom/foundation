@@ -10,6 +10,39 @@ defmodule Foundation.Retry.HTTP do
   @jitter_min 0.75
   @jitter_max 1.0
   @default_retry_after_ms 1_000
+  @http_date_imf_fixdate_regex ~r/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), (\d{2}) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{4}) (\d{2}):(\d{2}):(\d{2}) GMT$/i
+  @http_date_rfc850_regex ~r/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday), (\d{2})-(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-(\d{2}) (\d{2}):(\d{2}):(\d{2}) GMT$/i
+  @http_date_asctime_regex ~r/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2}) (\d{2}):(\d{2}):(\d{2}) (\d{4})$/i
+  @month_numbers %{
+    "jan" => 1,
+    "feb" => 2,
+    "mar" => 3,
+    "apr" => 4,
+    "may" => 5,
+    "jun" => 6,
+    "jul" => 7,
+    "aug" => 8,
+    "sep" => 9,
+    "oct" => 10,
+    "nov" => 11,
+    "dec" => 12
+  }
+  @weekday_numbers %{
+    "monday" => 1,
+    "mon" => 1,
+    "tuesday" => 2,
+    "tue" => 2,
+    "wednesday" => 3,
+    "wed" => 3,
+    "thursday" => 4,
+    "thu" => 4,
+    "friday" => 5,
+    "fri" => 5,
+    "saturday" => 6,
+    "sat" => 6,
+    "sunday" => 7,
+    "sun" => 7
+  }
 
   @type headers :: [{String.t(), String.t()}] | map()
   @type method :: atom() | String.t()
@@ -191,12 +224,100 @@ defmodule Foundation.Retry.HTTP do
   end
 
   defp convert_request_date(value) when is_binary(value) do
-    with {:module, :httpd_util} <- Code.ensure_loaded(:httpd_util),
-         true <- function_exported?(:httpd_util, :convert_request_date, 1) do
-      apply(:httpd_util, :convert_request_date, [String.to_charlist(value)])
+    value = String.trim(value)
+
+    parse_imf_fixdate(value) ||
+      parse_rfc850_date(value) ||
+      parse_asctime_date(value)
+  end
+
+  # HTTP-date allows three wire formats. Parse them locally so Retry-After
+  # handling does not depend on the optional :inets/:httpd_util surface.
+  defp parse_imf_fixdate(value) do
+    case Regex.run(@http_date_imf_fixdate_regex, value, capture: :all_but_first) do
+      [weekday, day, month, year, hour, minute, second] ->
+        build_datetime(weekday, day, month, year, hour, minute, second)
+
+      _ ->
+        nil
+    end
+  end
+
+  defp parse_rfc850_date(value) do
+    case Regex.run(@http_date_rfc850_regex, value, capture: :all_but_first) do
+      [weekday, day, month, year, hour, minute, second] ->
+        build_datetime(
+          weekday,
+          day,
+          month,
+          normalize_obsolete_year(year),
+          hour,
+          minute,
+          second
+        )
+
+      _ ->
+        nil
+    end
+  end
+
+  defp parse_asctime_date(value) do
+    case Regex.run(@http_date_asctime_regex, value, capture: :all_but_first) do
+      [weekday, month, day, hour, minute, second, year] ->
+        build_datetime(weekday, day, month, year, hour, minute, second)
+
+      _ ->
+        nil
+    end
+  end
+
+  defp build_datetime(weekday, day, month_name, year, hour, minute, second) do
+    with {:ok, day} <- parse_integer_component(day),
+         {:ok, year} <- parse_integer_component(year),
+         {:ok, hour} <- parse_integer_component(hour),
+         {:ok, minute} <- parse_integer_component(minute),
+         {:ok, second} <- parse_integer_component(second),
+         month when not is_nil(month) <- month_number(month_name),
+         true <- :calendar.valid_date({year, month, day}),
+         true <- valid_time?(hour, minute, second),
+         true <- weekday_matches?(weekday, {year, month, day}) do
+      {{year, month, day}, {hour, minute, second}}
     else
       _ -> nil
     end
+  end
+
+  defp normalize_obsolete_year(year) do
+    {two_digit_year, ""} = Integer.parse(year)
+    current_year = Date.utc_today().year
+    year = div(current_year, 100) * 100 + two_digit_year
+
+    if year > current_year + 50 do
+      year - 100
+    else
+      year
+    end
+  end
+
+  defp month_number(month_name) do
+    Map.get(@month_numbers, String.downcase(month_name))
+  end
+
+  defp parse_integer_component(value) when is_integer(value), do: {:ok, value}
+
+  defp parse_integer_component(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {number, ""} -> {:ok, number}
+      _ -> :error
+    end
+  end
+
+  defp valid_time?(hour, minute, second) do
+    hour in 0..23 and minute in 0..59 and second in 0..59
+  end
+
+  defp weekday_matches?(weekday, date) do
+    Map.get(@weekday_numbers, String.downcase(weekday)) == :calendar.day_of_the_week(date)
   end
 
   defp normalize_retryable_status_rules(rules) when is_list(rules) or is_map(rules) do

@@ -20,6 +20,21 @@ Foundation provides composable building blocks for resilient Elixir applications
 backoff policies, retry loops, rate-limit windows, circuit breakers, semaphores,
 and telemetry helpers.
 
+## Important
+
+Foundation 0.2+ is a complete rewrite of the package.
+
+It is not compatible with the 0.1.x series, and there is no direct upgrade path.
+If you are using 0.1.x, treat 0.2+ as a new library with a different API surface
+and runtime model.
+
+## New in 0.2.1
+
+- Method-aware HTTP retry helpers for caller-defined status rules
+- `Retry-After` parsing for both delta-seconds and HTTP-date values
+- Backoff policy aliases (`:base_delay_ms`, `:max_delay_ms`) and string strategy names
+- Safer shared ETS registry handling for circuit breakers, rate-limit windows, and semaphores
+
 ## Features
 
 - **Backoff** - Exponential, linear, and constant strategies with jitter
@@ -43,10 +58,16 @@ Add `foundation` to your dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:foundation, "~> 0.2"}
+    {:foundation, "~> 0.2.1"}
   ]
 end
 ```
+
+If you are currently on `0.1.x`, do not upgrade by only changing the version
+constraint. Review the new API and plan the migration as a rewrite.
+
+Because Foundation is still pre-1.0, prefer a patch-level requirement for
+production dependencies.
 
 ## Usage
 
@@ -108,9 +129,14 @@ HTTP.retryable_status?(429)  # true
 HTTP.retryable_status?(500)  # true
 HTTP.retryable_status?(400)  # false
 
-# Parse Retry-After header
-HTTP.parse_retry_after("120")  # {:ok, 120}
-HTTP.parse_retry_after("Wed, 08 Jan 2026 12:00:00 GMT")  # {:ok, seconds_until}
+# Parse Retry-After headers into milliseconds
+HTTP.parse_retry_after([{"Retry-After", "120"}])  # 120_000
+HTTP.parse_retry_after([{"Retry-After", "Wed, 31 Dec 2099 23:59:59 GMT"}])  # ms until then
+
+rules = [all: [429], get: [500, 503], delete: [500, 503]]
+
+HTTP.should_retry_for_method?(:get, %{status: 503, headers: []}, rules)   # true
+HTTP.should_retry_for_method?(:post, %{status: 500, headers: []}, rules)  # false
 ```
 
 ### Polling
@@ -163,9 +189,9 @@ end)
 # Registry API (stateful, for shared circuit breakers)
 alias Foundation.CircuitBreaker.Registry
 
-{:ok, _pid} = Registry.start_link(name: MyApp.CircuitBreakers)
+registry = Registry.new_registry(name: MyApp.CircuitBreakers)
 
-result = Registry.call(MyApp.CircuitBreakers, "payment_service", fn ->
+result = Registry.call(registry, "payment_service", fn ->
   PaymentService.charge(amount)
 end)
 ```
@@ -235,7 +261,7 @@ alias Foundation.Telemetry
 Telemetry.execute([:my_app, :request, :complete], %{count: 1}, %{status: 200})
 
 # Measure function duration
-{:ok, result} = Telemetry.measure([:my_app, :db, :query], %{table: :users}, fn ->
+result = Telemetry.measure([:my_app, :db, :query], %{table: :users}, fn ->
   Repo.all(User)
 end)
 
