@@ -78,5 +78,22 @@ defmodule Foundation.CircuitBreakerTest do
 
       assert updated_cb.failure_count == 0
     end
+
+    test "supports ignored outcomes without resetting or incrementing failures" do
+      cb =
+        CircuitBreaker.new("test", failure_threshold: 5)
+        |> CircuitBreaker.record_failure()
+
+      {result, updated_cb} =
+        CircuitBreaker.call(
+          cb,
+          fn -> {:ok, %{status: 429}} end,
+          success?: fn _result -> :ignore end
+        )
+
+      assert result == {:ok, %{status: 429}}
+      assert updated_cb.failure_count == 1
+      assert CircuitBreaker.state(updated_cb) == :closed
+    end
   end
 end

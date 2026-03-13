@@ -20,6 +20,10 @@ Foundation provides composable building blocks for resilient Elixir applications
 backoff policies, retry loops, rate-limit windows, circuit breakers, semaphores,
 and telemetry helpers.
 
+The primitives stay generic: for example, circuit breakers support
+success/failure/ignore outcomes, and Dispatch reacts to externally supplied
+backoff without assuming any HTTP provider semantics.
+
 ## Installation
 
 Add `foundation` to your dependencies in `mix.exs`:

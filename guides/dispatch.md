@@ -69,6 +69,11 @@ end
 This triggers the throttled concurrency limit and byte penalty multiplier
 for subsequent requests.
 
+`Dispatch.set_backoff/2` does not sleep every future request by itself. It marks
+the dispatch as backoff-active so subsequent callers run under the tighter
+throttled-concurrency and byte-budget rules. Any observable sleeping comes from
+contention on those semaphores and the configured `:acquire_backoff` policy.
+
 ## Options
 
 | Option | Default | Description |

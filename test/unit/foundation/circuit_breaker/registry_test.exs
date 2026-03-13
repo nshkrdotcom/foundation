@@ -72,6 +72,32 @@ defmodule Foundation.CircuitBreaker.RegistryTest do
       assert Enum.sort([Task.await(task_one), Task.await(task_two)]) ==
                Enum.sort([{:ok, :ok}, {:error, :circuit_open}])
     end
+
+    test "ignored outcomes do not consume half-open probe capacity" do
+      registry = Registry.new_registry()
+      opts = [failure_threshold: 1, reset_timeout_ms: 0, half_open_max_calls: 1]
+
+      assert {:error, :failed} =
+               Registry.call(registry, "endpoint", fn -> {:error, :failed} end, opts)
+
+      assert {:error, :rate_limited} =
+               Registry.call(
+                 registry,
+                 "endpoint",
+                 fn -> {:error, :rate_limited} end,
+                 Keyword.put(opts, :success?, fn _result -> :ignore end)
+               )
+
+      assert {:ok, :recovered} =
+               Registry.call(
+                 registry,
+                 "endpoint",
+                 fn -> {:ok, :recovered} end,
+                 Keyword.put(opts, :success?, fn _result -> true end)
+               )
+
+      assert Registry.state(registry, "endpoint") == :closed
+    end
   end
 
   describe "state/2" do

@@ -173,11 +173,20 @@ defmodule Foundation.CircuitBreaker.Registry do
 
   defp execute_reserved_call(registry, name, version, reserved_cb, fun, success_fn, opts) do
     result = fun.()
-    persist_result(registry, name, version, reserved_cb, success_fn.(result), opts)
+
+    persist_result(
+      registry,
+      name,
+      version,
+      reserved_cb,
+      normalize_outcome(success_fn.(result)),
+      opts
+    )
+
     result
   rescue
     exception ->
-      persist_result(registry, name, version, reserved_cb, false, opts)
+      persist_result(registry, name, version, reserved_cb, :failure, opts)
       reraise exception, __STACKTRACE__
   end
 
@@ -218,15 +227,23 @@ defmodule Foundation.CircuitBreaker.Registry do
     :ets.select_replace(table, match_spec) == 1
   end
 
-  defp default_success?({:ok, _}), do: true
-  defp default_success?(_), do: false
-
   defp resolve_registry(registry) when is_atom(registry) do
     ETSRegistry.resolve_registry(registry, __MODULE__)
   end
 
   defp resolve_registry(registry), do: registry
 
-  defp record_result(cb, true), do: CircuitBreaker.record_success(cb)
-  defp record_result(cb, false), do: CircuitBreaker.record_failure(cb)
+  defp record_result(cb, :success), do: CircuitBreaker.record_success(cb)
+  defp record_result(cb, :failure), do: CircuitBreaker.record_failure(cb)
+  defp record_result(cb, :ignore), do: CircuitBreaker.record_ignored(cb)
+
+  defp normalize_outcome(true), do: :success
+  defp normalize_outcome(:success), do: :success
+  defp normalize_outcome(false), do: :failure
+  defp normalize_outcome(:failure), do: :failure
+  defp normalize_outcome(:ignore), do: :ignore
+  defp normalize_outcome(_other), do: :failure
+
+  defp default_success?({:ok, _}), do: true
+  defp default_success?(_), do: false
 end

@@ -16,7 +16,8 @@ A circuit breaker has three states:
 
 The circuit opens when failures reach `failure_threshold`. After
 `reset_timeout_ms`, it transitions to half-open. A success in half-open
-closes the circuit; a failure re-opens it.
+closes the circuit; a failure re-opens it. Ignored outcomes leave breaker
+health unchanged and release any half-open probe capacity.
 
 ## Functional API
 
@@ -54,6 +55,15 @@ end, success?: fn
 end)
 ```
 
+The callback may return:
+
+- `true` or `:success` to record success
+- `false` or `:failure` to record failure
+- `:ignore` to skip breaker accounting for that outcome
+
+`:ignore` is useful when an HTTP client wants `429` to drive shared backoff
+without counting it as a downstream health failure.
+
 ### Manual State Management
 
 ```elixir
@@ -66,6 +76,7 @@ CircuitBreaker.state(cb)  # :closed | :open | :half_open
 # Record outcomes manually
 cb = CircuitBreaker.record_success(cb)
 cb = CircuitBreaker.record_failure(cb)
+cb = CircuitBreaker.record_ignored(cb)
 
 # Force reset
 cb = CircuitBreaker.reset(cb)

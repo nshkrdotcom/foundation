@@ -135,6 +135,27 @@ defmodule Foundation.CircuitBreaker do
   end
 
   @doc """
+  Ignore a call result without changing breaker health.
+
+  This is useful for outcomes such as rate-limits where callers want shared
+  coordination, but do not want the circuit breaker to count the result as a
+  success or a failure.
+  """
+  @spec record_ignored(t()) :: t()
+  def record_ignored(%__MODULE__{} = cb) do
+    case state(cb) do
+      :closed ->
+        cb
+
+      :half_open ->
+        %{cb | state: :half_open, half_open_calls: max(cb.half_open_calls - 1, 0)}
+
+      :open ->
+        cb
+    end
+  end
+
+  @doc """
   Execute a function through the circuit breaker.
   """
   @spec call(t(), (-> result), keyword()) :: {result | {:error, :circuit_open}, t()}
@@ -149,10 +170,10 @@ defmodule Foundation.CircuitBreaker do
       {:allow, reserved_cb} ->
         result = fun.()
 
-        if success_fn.(result) do
-          {result, record_success(reserved_cb)}
-        else
-          {result, record_failure(reserved_cb)}
+        case normalize_outcome(success_fn.(result)) do
+          :success -> {result, record_success(reserved_cb)}
+          :failure -> {result, record_failure(reserved_cb)}
+          :ignore -> {result, record_ignored(reserved_cb)}
         end
     end
   end
@@ -164,6 +185,13 @@ defmodule Foundation.CircuitBreaker do
   def reset(%__MODULE__{} = cb) do
     %{cb | state: :closed, failure_count: 0, half_open_calls: 0, opened_at: nil}
   end
+
+  defp normalize_outcome(true), do: :success
+  defp normalize_outcome(:success), do: :success
+  defp normalize_outcome(false), do: :failure
+  defp normalize_outcome(:failure), do: :failure
+  defp normalize_outcome(:ignore), do: :ignore
+  defp normalize_outcome(_other), do: :failure
 
   defp default_success?({:ok, _}), do: true
   defp default_success?(_), do: false
