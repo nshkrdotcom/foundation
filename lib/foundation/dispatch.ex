@@ -31,7 +31,8 @@ defmodule Foundation.Dispatch do
         }
 
   @type option ::
-          {:key, term()}
+          {:name, GenServer.name()}
+          | {:key, term()}
           | {:registry, Counting.registry()}
           | {:limiter, BackoffWindow.limiter()}
           | {:concurrency, pos_integer()}
@@ -50,7 +51,8 @@ defmodule Foundation.Dispatch do
   @doc """
   Execute `fun` while holding the layered dispatch semaphores.
   """
-  @spec with_rate_limit(pid(), non_neg_integer(), (-> result)) :: result when result: any()
+  @spec with_rate_limit(GenServer.server(), non_neg_integer(), (-> result)) :: result
+        when result: any()
   def with_rate_limit(dispatch, estimated_bytes, fun) when is_function(fun, 0) do
     snapshot = snapshot(dispatch)
     execute_with_limits(snapshot, max(estimated_bytes, 0), fun)
@@ -59,7 +61,7 @@ defmodule Foundation.Dispatch do
   @doc """
   Set a backoff window (in milliseconds) and mark the dispatch as recently throttled.
   """
-  @spec set_backoff(pid(), non_neg_integer()) :: :ok
+  @spec set_backoff(GenServer.server(), non_neg_integer()) :: :ok
   def set_backoff(dispatch, duration_ms) when is_integer(duration_ms) and duration_ms >= 0 do
     GenServer.call(dispatch, {:set_backoff, duration_ms})
   end
@@ -67,7 +69,7 @@ defmodule Foundation.Dispatch do
   @doc """
   Return a snapshot of the dispatch state.
   """
-  @spec snapshot(pid()) :: snapshot()
+  @spec snapshot(GenServer.server()) :: snapshot()
   def snapshot(dispatch) do
     GenServer.call(dispatch, :snapshot, :infinity)
   end

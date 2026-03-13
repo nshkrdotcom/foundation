@@ -101,4 +101,38 @@ defmodule Foundation.DispatchTest do
     assert :ok = BackoffWindow.set(limiter, 100)
     assert Dispatch.snapshot(pid).backoff_active?
   end
+
+  test "supports registered server names for public dispatch operations" do
+    registry = Counting.new_registry()
+    rate_registry = BackoffWindow.new_registry()
+    limiter = BackoffWindow.for_key(rate_registry, :named_key)
+    name = {:global, {__MODULE__, make_ref()}}
+
+    {:ok, _pid} =
+      Dispatch.start_link(
+        name: name,
+        key: :named_key,
+        registry: registry,
+        limiter: limiter,
+        concurrency: 2,
+        throttled_concurrency: 1,
+        byte_budget: 100,
+        byte_penalty_multiplier: 10,
+        acquire_backoff: [base_ms: 1, max_ms: 1, jitter: 0]
+      )
+
+    snapshot = Dispatch.snapshot(name)
+    parent = self()
+
+    assert :ok =
+             Dispatch.with_rate_limit(name, 10, fn ->
+               send(parent, {:named_counts, Counting.count(registry, snapshot.concurrency.name)})
+               :ok
+             end)
+
+    assert_received {:named_counts, 1}
+
+    assert :ok = Dispatch.set_backoff(name, 100)
+    assert Dispatch.snapshot(name).backoff_active?
+  end
 end

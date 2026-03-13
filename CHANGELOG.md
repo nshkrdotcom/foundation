@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.2.1] - 2026-03-11
+## [0.2.1] - 2026-03-12
 
 Patch release focused on HTTP retry semantics, registry durability, and
 concurrency safety across shared limiters.

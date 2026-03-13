@@ -37,12 +37,33 @@ limiter = BackoffWindow.for_key(:my_api)
 )
 ```
 
+If you want to supervise Dispatch under a registered name, pass `name:` and use
+that same server handle for later calls:
+
+```elixir
+{:ok, _pid} =
+  Dispatch.start_link(
+    name: MyApp.ApiDispatch,
+    limiter: limiter,
+    key: :my_api,
+    concurrency: 4,
+    throttled_concurrency: 1
+  )
+```
+
+All public APIs accept `GenServer.server()` handles, so `dispatch` can be:
+
+- a pid
+- a locally registered name
+- a `{:global, term}` name
+- a `{:via, module, term}` name
+
 ## Executing Requests
 
 ```elixir
 body = Jason.encode!(payload)
 
-result = Dispatch.with_rate_limit(dispatch, byte_size(body), fn ->
+result = Dispatch.with_rate_limit(MyApp.ApiDispatch, byte_size(body), fn ->
   HTTPClient.post(url, body)
 end)
 ```
@@ -59,7 +80,7 @@ When you receive a rate-limit response, signal backoff:
 case result do
   {:ok, %{status: 429, headers: headers}} ->
     retry_after = Foundation.Retry.HTTP.parse_retry_after(headers)
-    Dispatch.set_backoff(dispatch, retry_after)
+    Dispatch.set_backoff(MyApp.ApiDispatch, retry_after)
 
   _ ->
     :ok
