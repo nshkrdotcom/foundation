@@ -34,7 +34,7 @@ defmodule Foundation.MixProject do
       licenses: ["MIT"],
       links: %{"GitHub" => "https://github.com/nshkrdotcom/foundation"},
       maintainers: ["NSHkr"],
-      files: ~w(lib assets mix.exs README.md LICENSE CHANGELOG.md)
+      files: ~w(lib assets mix.exs README.md LICENSE CHANGELOG.md guides)
     ]
   end
 
