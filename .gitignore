@@ -12,3 +12,6 @@ erl_crash.dump
 /config/*.secret.exs
 .elixir_ls/
 repomix-output.xml
+
+# Unpacked release packages
+/foundation-*/

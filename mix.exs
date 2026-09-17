@@ -2,7 +2,7 @@ defmodule Foundation.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/nshkrdotcom/foundation"
-  @version "0.2.1"
+  @version "0.2.2"
 
   def project do
     [
@@ -21,7 +21,7 @@ defmodule Foundation.MixProject do
   end
 
   def application do
-    []
+    [mod: {Foundation.Application, []}]
   end
 
   defp description do

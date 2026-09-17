@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.2] - 2026-09-17
+
+### Fixed
+
+- Default ETS registries now have one supervised Foundation owner, serializing
+  first creation and preserving shared limiter/breaker state after callers exit.
+- Explicit registries are owned by their creating process and are deleted when
+  it exits. No registry designates Erlang `:init` as heir, eliminating unexpected
+  `ETS-TRANSFER` logs and orphaned tables.
+- Stale default caches recover after the supervised registry owner restarts.
+
 ## [0.2.1] - 2026-03-12
 
 Patch release focused on HTTP retry semantics, registry durability, and

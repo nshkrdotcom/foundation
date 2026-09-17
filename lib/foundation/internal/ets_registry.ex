@@ -1,20 +1,19 @@
 defmodule Foundation.Internal.ETSRegistry do
   @moduledoc false
 
+  alias Foundation.Internal.RegistryOwner
+
   @type registry :: :ets.tid() | atom()
 
   @spec default_registry(term(), atom(), keyword()) :: registry()
   def default_registry(persistent_key, table_name, opts \\ []) do
-    case :persistent_term.get(persistent_key, nil) do
-      nil ->
-        create_default_registry(persistent_key, table_name, opts)
+    registry = :persistent_term.get(persistent_key, nil)
+    owner = Process.whereis(RegistryOwner)
 
-      registry ->
-        if valid?(registry) do
-          registry
-        else
-          create_default_registry(persistent_key, table_name, opts)
-        end
+    if is_pid(owner) and valid?(registry) and :ets.info(registry, :owner) == owner do
+      registry
+    else
+      RegistryOwner.fetch(persistent_key, table_name, opts)
     end
   end
 
@@ -57,23 +56,12 @@ defmodule Foundation.Internal.ETSRegistry do
   def valid?(registry) when is_atom(registry), do: :ets.whereis(registry) != :undefined
   def valid?(_registry), do: false
 
-  defp create_default_registry(persistent_key, table_name, opts) do
-    registry = new_registry(table_name, opts)
-    :persistent_term.put(persistent_key, registry)
-    registry
-  end
-
   defp table_options do
     [
       :set,
       :public,
       {:read_concurrency, true},
-      {:write_concurrency, true},
-      {:heir, heir_pid(), :none}
+      {:write_concurrency, true}
     ]
-  end
-
-  defp heir_pid do
-    Process.whereis(:init) || self()
   end
 end

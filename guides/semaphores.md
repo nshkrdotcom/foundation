@@ -101,3 +101,17 @@ API without managing registry names yourself.
 | `Counting` | ETS | Shared limits across processes, high throughput |
 | `Weighted` | GenServer | Byte budgets, variable-cost resources |
 | `Limiter` | ETS via `Counting` | Simple call-site level concurrency limits |
+
+## Registry ownership
+
+Since 0.2.2, default registries belong to Foundation's supervised registry owner,
+not the first requesting worker. Concurrent first callers share the same table;
+worker exit preserves state. Ensure the `:foundation` application is started
+(normally automatic for a runtime dependency).
+
+`new_registry/1` creates a caller-owned table, with no heir. Its state disappears
+when that owner exits. Create explicit shared registries in a long-lived process
+in your supervision tree, and pass them to workers. Foundation does not transfer
+these tables to Erlang `:init`. Application stop or registry-owner restart clears
+default state; the next call recreates a default table. Previously returned raw
+table references are invalid after owner restart and must be reacquired.
