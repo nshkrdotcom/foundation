@@ -2,7 +2,7 @@ defmodule Foundation.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/nshkrdotcom/foundation"
-  @version "0.2.2"
+  @version "0.2.3"
 
   def project do
     [
@@ -40,10 +40,10 @@ defmodule Foundation.MixProject do
 
   defp deps do
     [
-      {:telemetry, "~> 1.2"},
-      {:ex_doc, "~> 0.40.0", only: :dev, runtime: false},
-      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
+      {:telemetry, "~> 1.4.3"},
+      {:ex_doc, "~> 0.40.5", only: :dev, runtime: false},
+      {:credo, "~> 1.7.19", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4.9", only: [:dev, :test], runtime: false}
     ]
   end
 

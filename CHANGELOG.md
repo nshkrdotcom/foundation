@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.3] - 2026-11-25
+
+### Fixed
+
+- Resolve optional TelemetryReporter calls at runtime so consumers can compile
+  Foundation without TelemetryReporter installed. Reporter calls retain the
+  existing missing-dependency result and delegation behavior.
+
 ## [0.2.2] - 2026-09-17
 
 ### Fixed

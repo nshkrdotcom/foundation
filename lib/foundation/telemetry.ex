@@ -58,8 +58,8 @@ defmodule Foundation.Telemetry do
   """
   @spec start_reporter(keyword()) :: GenServer.on_start() | {:error, :missing_dependency}
   def start_reporter(opts) when is_list(opts) do
-    with {:ok, reporter} <- telemetry_reporter() do
-      reporter.start_link(opts)
+    with {:ok, start_link} <- optional_callback(TelemetryReporter, :start_link, 1) do
+      start_link.(opts)
     end
   end
 
@@ -69,8 +69,8 @@ defmodule Foundation.Telemetry do
   @spec log(reporter(), String.t() | [atom()], map(), atom()) ::
           :ok | {:error, :overloaded} | {:error, :not_running} | {:error, :missing_dependency}
   def log(reporter, name, data \\ %{}, severity \\ :info) do
-    with {:ok, reporter_mod} <- telemetry_reporter() do
-      reporter_mod.log(reporter, name, data, severity)
+    with {:ok, log} <- optional_callback(TelemetryReporter, :log, 4) do
+      log.(reporter, name, data, severity)
     end
   end
 
@@ -81,8 +81,8 @@ defmodule Foundation.Telemetry do
   """
   @spec attach_reporter(keyword()) :: {:ok, term()} | {:error, :missing_dependency}
   def attach_reporter(opts) when is_list(opts) do
-    with {:ok, adapter} <- telemetry_adapter() do
-      {:ok, adapter.attach_many(opts)}
+    with {:ok, attach} <- optional_callback(TelemetryReporter.TelemetryAdapter, :attach_many, 1) do
+      {:ok, attach.(opts)}
     end
   end
 
@@ -91,22 +91,14 @@ defmodule Foundation.Telemetry do
   """
   @spec detach_reporter(term()) :: :ok | {:error, :not_found} | {:error, :missing_dependency}
   def detach_reporter(handler_id) do
-    with {:ok, adapter} <- telemetry_adapter() do
-      adapter.detach(handler_id)
+    with {:ok, detach} <- optional_callback(TelemetryReporter.TelemetryAdapter, :detach, 1) do
+      detach.(handler_id)
     end
   end
 
-  defp telemetry_reporter do
-    if Code.ensure_loaded?(TelemetryReporter) do
-      {:ok, TelemetryReporter}
-    else
-      {:error, :missing_dependency}
-    end
-  end
-
-  defp telemetry_adapter do
-    if Code.ensure_loaded?(TelemetryReporter.TelemetryAdapter) do
-      {:ok, TelemetryReporter.TelemetryAdapter}
+  defp optional_callback(module, callback, arity) do
+    if Code.ensure_loaded?(module) and function_exported?(module, callback, arity) do
+      {:ok, Function.capture(module, callback, arity)}
     else
       {:error, :missing_dependency}
     end
